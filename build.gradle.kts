@@ -1,11 +1,8 @@
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "7.0.0" apply false
-    id("io.papermc.paperweight.patcher") version "1.0.0-LOCAL-SNAPSHOT"
+    id("io.papermc.paperweight.patcher") version "1.0.0-SNAPSHOT"
 }
-
-group = "io.papermc.paper"
-version = providers.gradleProperty("projectVersion").forUseAtConfigurationTime().get()
 
 allprojects {
     apply(plugin = "java")
@@ -23,10 +20,6 @@ subprojects {
         options.release.set(16)
     }
 
-    if (name == "Paper-MojangAPI") {
-        return@subprojects
-    }
-
     repositories {
         mavenCentral()
         maven("https://repo1.maven.org/maven2/")
@@ -37,10 +30,6 @@ subprojects {
         maven("https://repo.md-5.net/content/repositories/releases/")
         maven("https://hub.spigotmc.org/nexus/content/groups/public/")
     }
-}
-
-dependencies {
-    implementation(gradleApi())
 }
 
 paperweight {
