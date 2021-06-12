@@ -44,6 +44,8 @@ dependencies {
 }
 
 paperweight {
+    serverProject.set(project(":ForkTest-Server"))
+
     usePaperUpstream(providers.gradleProperty("paperRef")) {
         withPaperPatcher {
             apiPatchDir.set(layout.projectDirectory.dir("patches/api"))

@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: MiniDigger <admin@minidigger.me>
+Date: Sat, 12 Jun 2021 16:40:34 +0200
+Subject: [PATCH] Build changes
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index ac607a3be84bc02dedb95cab9a5eace40e33b511..a2bacf289fd19c6118faecdcc0297e19b1571707 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -20,7 +20,7 @@ repositories {
+ }
+ 
+ dependencies {
+-    implementation(project(":Paper-API"))
++    implementation(project(":ForkTest-API"))
+     // Paper start
+     implementation("org.jline:jline-terminal-jansi:3.12.1")
+     implementation("net.minecrell:terminalconsoleappender:1.2.0")
+@@ -99,7 +99,7 @@ tasks.test {
+ 
+ fun TaskContainer.registerRunTask(name: String, block: JavaExec.() -> Unit): TaskProvider<JavaExec> =
+     register<JavaExec>(name) {
+-        group = "Paper"
++        group = "paperweight"
+         workingDir = rootProject.projectDir.resolve("run")
+         doFirst {
+             if (!workingDir.exists()) workingDir.mkdir()
+@@ -115,10 +115,10 @@ tasks.registerRunTask("runShadow") {
+     classpath(tasks.shadowJar.flatMap { it.archiveFile })
+ }
+ 
+-tasks.registerRunTask("runReobf") {
+-    description = "Spin up a test server from the reobfJar output jar"
+-    classpath(tasks.reobfJar.flatMap { it.outputJar })
+-}
++//tasks.registerRunTask("runReobf") {
++//    description = "Spin up a test server from the reobfJar output jar"
++//    classpath(tasks.reobfJar.flatMap { it.outputJar })
++//}
+ 
+ tasks.registerRunTask("runDev") {
+     description = "Spin up a non-shaded non-remapped test server"
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index a0c436fd5e7e03a0a01e59c046e65ebdcd88021a..fd8b4e9466c9cd97878fe00bf18d397121473edd 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -459,7 +459,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+                 DedicatedServerProperties dedicatedserverproperties = ((DedicatedServer) this).getProperties();
+ 
+                 worldsettings = new LevelSettings(dedicatedserverproperties.levelName, dedicatedserverproperties.gamemode, dedicatedserverproperties.hardcore, dedicatedserverproperties.difficulty, false, new GameRules(), this.datapackconfiguration);
+-                generatorsettings = this.options.has("bonusChest") ? dedicatedserverproperties.worldGenSettings.withBonusChest() : dedicatedserverproperties.worldGenSettings;
++                generatorsettings = this.options.has("bonusChest") ? dedicatedserverproperties.getWorldGenSettings(iregistrycustom_dimension).withBonusChest() : dedicatedserverproperties.getWorldGenSettings(iregistrycustom_dimension);
+             }
+ 
+             overworldData = new PrimaryLevelData(worldsettings, generatorsettings, Lifecycle.stable());
+@@ -548,7 +548,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+                     DedicatedServerProperties dedicatedserverproperties = ((DedicatedServer) this).getProperties();
+ 
+                     worldsettings = new LevelSettings(dedicatedserverproperties.levelName, dedicatedserverproperties.gamemode, dedicatedserverproperties.hardcore, dedicatedserverproperties.difficulty, false, new GameRules(), this.datapackconfiguration);
+-                    generatorsettings = this.options.has("bonusChest") ? dedicatedserverproperties.worldGenSettings.withBonusChest() : dedicatedserverproperties.worldGenSettings;
++                    generatorsettings = this.options.has("bonusChest") ? dedicatedserverproperties.getWorldGenSettings(iregistrycustom_dimension).withBonusChest() : dedicatedserverproperties.getWorldGenSettings(iregistrycustom_dimension);
+                 }
+ 
+                 worlddata = new PrimaryLevelData(worldsettings, generatorsettings, Lifecycle.stable());
+@@ -1510,7 +1510,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+ 
+     @DontObfuscate
+     public String getServerModName() {
+-        return "Paper"; //Paper - Paper > // Spigot - Spigot > // CraftBukkit - cb > vanilla!
++        return "ForkTest"; //Paper - Paper > // Spigot - Spigot > // CraftBukkit - cb > vanilla!
+     }
+ 
+     public SystemReport fillSystemReport(SystemReport systemreport) {
+diff --git a/src/main/java/net/minecraft/world/entity/monster/piglin/PiglinAI.java b/src/main/java/net/minecraft/world/entity/monster/piglin/PiglinAi.java
+similarity index 100%
+rename from src/main/java/net/minecraft/world/entity/monster/piglin/PiglinAI.java
+rename to src/main/java/net/minecraft/world/entity/monster/piglin/PiglinAi.java
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index cb09b6170a74984628f2c3dbacad2ddc9fe56faf..9f231e772195d5c3af7f478e4c8b8075b9fb029b 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -230,7 +230,7 @@ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+ 
+ public final class CraftServer implements Server {
+-    private final String serverName = "Paper"; // Paper
++    private final String serverName = "ForkTest"; // Paper
+     private final String serverVersion;
+     private final String bukkitVersion = Versioning.getBukkitVersion();
+     private final Logger logger = Logger.getLogger("Minecraft");
