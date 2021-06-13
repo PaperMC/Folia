@@ -4,7 +4,26 @@ plugins {
     id("io.papermc.paperweight.patcher") version "1.0.0-SNAPSHOT"
 }
 
-allprojects {
+repositories {
+    mavenCentral()
+    maven("https://wav.jfrog.io/artifactory/repo/") {
+        content {
+            onlyForConfigurations("paperclip")
+        }
+    }
+    maven("https://maven.quiltmc.org/repository/release/") {
+        content {
+            onlyForConfigurations("remapper")
+        }
+    }
+}
+
+dependencies {
+    remapper("org.quiltmc:tiny-remapper:0.4.1")
+    paperclip("io.papermc:paperclip:2.0.0-SNAPSHOT@jar")
+}
+
+subprojects {
     apply(plugin = "java")
 
     java {
@@ -12,9 +31,7 @@ allprojects {
             languageVersion.set(JavaLanguageVersion.of(16))
         }
     }
-}
 
-subprojects {
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
         options.release.set(16)
@@ -22,7 +39,6 @@ subprojects {
 
     repositories {
         mavenCentral()
-        maven("https://repo1.maven.org/maven2/")
         maven("https://oss.sonatype.org/content/groups/public/")
         maven("https://papermc.io/repo/repository/maven-public/")
         maven("https://ci.emc.gs/nexus/content/groups/aikar/")
