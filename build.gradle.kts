@@ -1,12 +1,12 @@
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "7.0.0" apply false
-    id("io.papermc.paperweight.patcher") version "1.0.0-SNAPSHOT"
+    id("io.papermc.paperweight.patcher") version "1.0.3"
 }
 
 repositories {
     mavenCentral()
-    maven("https://wav.jfrog.io/artifactory/repo/") {
+    maven("https://papermc.io/repo/repository/maven-public/") {
         content {
             onlyForConfigurations("paperclip")
         }
