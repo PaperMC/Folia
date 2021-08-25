@@ -1,40 +1,46 @@
+import io.papermc.paperweight.util.constants.*
+
 plugins {
     java
+    `maven-publish`
     id("com.github.johnrengelman.shadow") version "7.0.0" apply false
-    id("io.papermc.paperweight.patcher") version "1.1.5"
+    id("io.papermc.paperweight.patcher") version "1.1.11"
 }
 
 repositories {
     mavenCentral()
     maven("https://papermc.io/repo/repository/maven-public/") {
-        content {
-            onlyForConfigurations("paperclip")
-        }
-    }
-    maven("https://maven.quiltmc.org/repository/release/") {
-        content {
-            onlyForConfigurations("remapper")
-        }
+        content { onlyForConfigurations(PAPERCLIP_CONFIG) }
     }
 }
 
 dependencies {
-    remapper("org.quiltmc:tiny-remapper:0.4.1")
+    remapper("org.quiltmc:tiny-remapper:0.4.3")
+    decompiler("net.minecraftforge:forgeflower:1.5.498.12")
     paperclip("io.papermc:paperclip:2.0.1")
 }
 
-subprojects {
+allprojects {
     apply(plugin = "java")
+    apply(plugin = "maven-publish")
 
     java {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(16))
         }
     }
+}
 
-    tasks.withType<JavaCompile>().configureEach {
-        options.encoding = "UTF-8"
+subprojects {
+    tasks.withType<JavaCompile> {
+        options.encoding = Charsets.UTF_8.name()
         options.release.set(16)
+    }
+    tasks.withType<Javadoc> {
+        options.encoding = Charsets.UTF_8.name()
+    }
+    tasks.withType<ProcessResources> {
+        filteringCharset = Charsets.UTF_8.name()
     }
 
     repositories {
@@ -51,6 +57,9 @@ subprojects {
 paperweight {
     serverProject.set(project(":ForkTest-Server"))
 
+    remapRepo.set("https://maven.quiltmc.org/repository/release/")
+    decompileRepo.set("https://files.minecraftforge.net/maven/")
+
     usePaperUpstream(providers.gradleProperty("paperRef")) {
         withPaperPatcher {
             apiPatchDir.set(layout.projectDirectory.dir("patches/api"))
@@ -58,6 +67,53 @@ paperweight {
 
             serverPatchDir.set(layout.projectDirectory.dir("patches/server"))
             serverOutputDir.set(layout.projectDirectory.dir("ForkTest-Server"))
+        }
+    }
+}
+
+//
+// Everything below here is optional if you don't care about publishing API or dev bundles to your repository
+//
+
+tasks.generateDevelopmentBundle {
+    apiCoordinates.set("com.example.paperfork:forktest-api")
+    mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
+    libraryRepositories.set(
+        listOf(
+            "https://libraries.minecraft.net/",
+            "https://maven.quiltmc.org/repository/release/",
+            "https://repo.aikar.co/content/groups/aikar",
+            "https://ci.emc.gs/nexus/content/groups/aikar/",
+            "https://papermc.io/repo/repository/maven-public/", // for paper-mojangapi
+            // "https://my.repo/" // This should be a repo hosting your API (in this example, 'com.example.paperfork:forktest-api')
+        )
+    )
+}
+
+allprojects {
+    // Publishing API:
+    // ./gradlew :ForkTest-API:publish[ToMavenLocal]
+    publishing {
+        repositories {
+            maven {
+                name = "myRepoSnapshots"
+                url = uri("https://my.repo/")
+                // See Gradle docs for how to provide credentials to PasswordCredentials
+                // https://docs.gradle.org/current/samples/sample_publishing_credentials.html
+                credentials(PasswordCredentials::class)
+            }
+        }
+    }
+}
+
+publishing {
+    // Publishing dev bundle:
+    // ./gradlew publishDevBundlePublicationTo(MavenLocal|MyRepoSnapshotsRepository) -PpublishDevBundle
+    if (project.hasProperty("publishDevBundle")) {
+        publications.create<MavenPublication>("devBundle") {
+            artifact(tasks.generateDevelopmentBundle) {
+                artifactId = "dev-bundle"
+            }
         }
     }
 }
