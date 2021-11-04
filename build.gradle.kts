@@ -4,7 +4,7 @@ plugins {
     java
     `maven-publish`
     id("com.github.johnrengelman.shadow") version "7.1.0" apply false
-    id("io.papermc.paperweight.patcher") version "1.1.12"
+    id("io.papermc.paperweight.patcher") version "1.1.13"
 }
 
 repositories {
@@ -45,12 +45,7 @@ subprojects {
 
     repositories {
         mavenCentral()
-        maven("https://oss.sonatype.org/content/groups/public/")
         maven("https://papermc.io/repo/repository/maven-public/")
-        maven("https://ci.emc.gs/nexus/content/groups/aikar/")
-        maven("https://repo.aikar.co/content/groups/aikar")
-        maven("https://repo.md-5.net/content/repositories/releases/")
-        maven("https://hub.spigotmc.org/nexus/content/groups/public/")
     }
 }
 
@@ -80,12 +75,10 @@ tasks.generateDevelopmentBundle {
     mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
     libraryRepositories.set(
         listOf(
+            "https://repo.maven.apache.org/maven2/",
             "https://libraries.minecraft.net/",
-            "https://maven.quiltmc.org/repository/release/",
-            "https://repo.aikar.co/content/groups/aikar",
-            "https://ci.emc.gs/nexus/content/groups/aikar/",
             "https://papermc.io/repo/repository/maven-public/",
-            "https://repo.velocitypowered.com/snapshots/",
+            "https://maven.quiltmc.org/repository/release/",
             // "https://my.repo/", // This should be a repo hosting your API (in this example, 'com.example.paperfork:forktest-api')
         )
     )
