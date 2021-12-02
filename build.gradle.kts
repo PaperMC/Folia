@@ -4,7 +4,7 @@ plugins {
     java
     `maven-publish`
     id("com.github.johnrengelman.shadow") version "7.1.0" apply false
-    id("io.papermc.paperweight.patcher") version "1.2.0"
+    id("io.papermc.paperweight.patcher") version "1.3.1"
 }
 
 repositories {
@@ -15,9 +15,9 @@ repositories {
 }
 
 dependencies {
-    remapper("net.fabricmc:tiny-remapper:0.6.0:fat")
-    decompiler("net.minecraftforge:forgeflower:1.5.498.12")
-    paperclip("io.papermc:paperclip:2.0.1")
+    remapper("net.fabricmc:tiny-remapper:0.7.0:fat")
+    decompiler("net.minecraftforge:forgeflower:1.5.498.22")
+    paperclip("io.papermc:paperclip:3.0.2")
 }
 
 allprojects {
@@ -26,7 +26,7 @@ allprojects {
 
     java {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(16))
+            languageVersion.set(JavaLanguageVersion.of(17))
         }
     }
 }
@@ -34,7 +34,7 @@ allprojects {
 subprojects {
     tasks.withType<JavaCompile> {
         options.encoding = Charsets.UTF_8.name()
-        options.release.set(16)
+        options.release.set(17)
     }
     tasks.withType<Javadoc> {
         options.encoding = Charsets.UTF_8.name()
