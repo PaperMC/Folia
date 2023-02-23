@@ -8343,10 +8343,10 @@ index 0000000000000000000000000000000000000000..c17669c1e98cd954643fa3b988c12b4b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ee4e3c42abc4e62e4eaee1af9e3cdad27765b39d
+index 0000000000000000000000000000000000000000..4889ebf6e3eb5901eeac49900c541d2359d71316
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,330 @@
 +package io.papermc.paper.threadedregions.commands;
 +
 +import io.papermc.paper.threadedregions.ThreadedRegioniser;
@@ -8376,7 +8376,6 @@ index 0000000000000000000000000000000000000000..ee4e3c42abc4e62e4eaee1af9e3cdad2
 +import java.util.Arrays;
 +import java.util.List;
 +import java.util.Locale;
-+import java.util.concurrent.TimeUnit;
 +
 +public final class CommandServerHealth extends Command {
 +
@@ -8402,16 +8401,16 @@ index 0000000000000000000000000000000000000000..ee4e3c42abc4e62e4eaee1af9e3cdad2
 +        return true;
 +    }
 +
-+    private static Component formatRegionInfo(final String prefix, final TextColor primary, final double util, final double mspt, final double tps,
++    private static Component formatRegionInfo(final String prefix, final double util, final double mspt, final double tps,
 +                                              final boolean newline) {
 +        return Component.text()
-+            .append(Component.text(prefix, primary, TextDecoration.BOLD))
++            .append(Component.text(prefix, PRIMARY, TextDecoration.BOLD))
 +            .append(Component.text(ONE_DECIMAL_PLACES.format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
-+            .append(Component.text("% util at ", primary))
++            .append(Component.text("% util at ", PRIMARY))
 +            .append(Component.text(TWO_DECIMAL_PLACES.format(mspt), CommandUtil.getColourForMSPT(mspt)))
-+            .append(Component.text(" MSPT at ", primary))
++            .append(Component.text(" MSPT at ", PRIMARY))
 +            .append(Component.text(TWO_DECIMAL_PLACES.format(tps), CommandUtil.getColourForTPS(tps)))
-+            .append(Component.text(" TPS" + (newline ? "\n" : ""), primary))
++            .append(Component.text(" TPS" + (newline ? "\n" : ""), PRIMARY))
 +            .build();
 +    }
 +
@@ -8450,10 +8449,10 @@ index 0000000000000000000000000000000000000000..ee4e3c42abc4e62e4eaee1af9e3cdad2
 +            .append(Component.text(":\n", PRIMARY))
 +
 +            .append(
-+                formatRegionInfo("15s: ", PRIMARY, util15s, mspt15s, tps15s, true)
++                formatRegionInfo("15s: ", util15s, mspt15s, tps15s, true)
 +            )
 +            .append(
-+                formatRegionInfo("1m: ", PRIMARY, util1m, mspt1m, tps1m, false)
++                formatRegionInfo("1m: ", util1m, mspt1m, tps1m, false)
 +            )
 +
 +            .build();
@@ -18936,9 +18935,18 @@ index 648d8f3e72e30aacf68eb073a1ac30f8ec29503c..9f20efa5c89d1ab6741c9f349b868126
          super(BlockEntityType.BELL, pos, state);
      }
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
-index 58986bc0677c5ea1ad54d7d6d4efa5c2ea233aea..db3c174afe8f9ddce6f410e5c692d7de2289d4ea 100644
+index 58986bc0677c5ea1ad54d7d6d4efa5c2ea233aea..e62a98a4e9d6d5f2840fedadaa187fdce98b1a82 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
+@@ -26,7 +26,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import co.aikar.timings.Timing; // Paper
+ 
+ public abstract class BlockEntity {
+-    static boolean IGNORE_TILE_UPDATES = false; // Paper
++    static final ThreadLocal<Boolean> IGNORE_TILE_UPDATES = ThreadLocal.withInitial(() -> Boolean.FALSE); // Paper // Folia - region threading
+ 
+     public Timing tickTimer = MinecraftTimings.getTileEntityTimings(this); // Paper
+     // CraftBukkit start - data containers
 @@ -42,6 +42,12 @@ public abstract class BlockEntity {
      protected boolean remove;
      private BlockState blockState;
@@ -18952,6 +18960,15 @@ index 58986bc0677c5ea1ad54d7d6d4efa5c2ea233aea..db3c174afe8f9ddce6f410e5c692d7de
      public BlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
          this.type = type;
          this.worldPosition = pos.immutable();
+@@ -163,7 +169,7 @@ public abstract class BlockEntity {
+ 
+     public void setChanged() {
+         if (this.level != null) {
+-            if (IGNORE_TILE_UPDATES) return; // Paper
++            if (IGNORE_TILE_UPDATES.get()) return; // Paper // Folia - region threading
+             BlockEntity.setChanged(this.level, this.worldPosition, this.blockState);
+         }
+ 
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BrewingStandBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BrewingStandBlockEntity.java
 index 55006724ccec9f3de828ec18693728e9741ff65f..9e806ba83240916d422c4a736a9cfd61e73108e4 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BrewingStandBlockEntity.java
@@ -19033,7 +19050,7 @@ index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..79e586c4d7a7392721f440e57f86c11d
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index ccad692aba2ed77259f6814d88f01b91ed9d229b..e687aa729619c8639bc30a6bdf0a5a1513a7ee04 100644
+index ccad692aba2ed77259f6814d88f01b91ed9d229b..51482063a471202040f02c95ac4144f53a22697b 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 @@ -77,6 +77,16 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
@@ -19053,6 +19070,30 @@ index ccad692aba2ed77259f6814d88f01b91ed9d229b..e687aa729619c8639bc30a6bdf0a5a15
      public HopperBlockEntity(BlockPos pos, BlockState state) {
          super(BlockEntityType.HOPPER, pos, state);
          this.items = NonNullList.withSize(5, ItemStack.EMPTY);
+@@ -262,9 +272,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             if (!origItemStack.isEmpty()) {
+                 origItemStack.setCount(origCount - moved + remaining);
+             }
+-            IGNORE_TILE_UPDATES = true;
++            IGNORE_TILE_UPDATES.set(true); // Folia - region threading
+             iinventory.setItem(i, origItemStack);
+-            IGNORE_TILE_UPDATES = false;
++            IGNORE_TILE_UPDATES.set(false); // Folia - region threading
+             iinventory.setChanged();
+             return true;
+         }
+@@ -592,9 +602,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                     stack = stack.split(to.getMaxStackSize());
+                 }
+                 // Spigot end
+-                IGNORE_TILE_UPDATES = true; // Paper
++                IGNORE_TILE_UPDATES.set(true); // Paper // Folia - region threading
+                 to.setItem(slot, stack);
+-                IGNORE_TILE_UPDATES = false; // Paper
++                IGNORE_TILE_UPDATES.set(false); // Paper // Folia - region threading
+                 stack = leftover; // Paper
+                 flag = true;
+             } else if (HopperBlockEntity.canMergeItems(itemstack1, stack)) {
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java
 index 163e63e3c538c7c1c75ed634896db9d8c00416f3..740cb2858a3f78298895a463fb0fac9e88a9a4a0 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java
