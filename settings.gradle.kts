@@ -5,6 +5,6 @@ pluginManagement {
     }
 }
 
-rootProject.name = "forktest"
+rootProject.name = "Folia"
 
-include("forktest-api", "forktest-server")
+include("Folia-API", "Folia-Server")
