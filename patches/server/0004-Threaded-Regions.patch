@@ -5094,10 +5094,10 @@ index 0000000000000000000000000000000000000000..c13237edb7323fa747d260375f626a5c
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0ce7849e652f8093f061a87bbd48306102b66aa4
+index 0000000000000000000000000000000000000000..ccfe62cc33188a691e6d1fd4e49679ebe4f1bb70
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java
-@@ -0,0 +1,652 @@
+@@ -0,0 +1,658 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.destroystokyo.paper.util.maplist.ReferenceList;
@@ -5194,13 +5194,19 @@ index 0000000000000000000000000000000000000000..0ce7849e652f8093f061a87bbd483061
 +            from.fluidLevelTicks.merge(into.fluidLevelTicks, fromRedstoneTimeOffset);
 +
 +            // tile entity ticking
-+            for (final TickingBlockEntity tileEntity : from.pendingBlockEntityTickers) {
-+                into.pendingBlockEntityTickers.add(tileEntity);
-+                //tileEntity.updateTicks(fromTickOffset, fromRedstoneTimeOffset); // TODO
++            for (final TickingBlockEntity tileEntityWrapped : from.pendingBlockEntityTickers) {
++                into.pendingBlockEntityTickers.add(tileEntityWrapped);
++                final BlockEntity tileEntity = tileEntityWrapped.getTileEntity();
++                if (tileEntity != null) {
++                    tileEntity.updateTicks(fromTickOffset, fromRedstoneTimeOffset);
++                }
 +            }
-+            for (final TickingBlockEntity tileEntity : from.blockEntityTickers) {
-+                into.blockEntityTickers.add(tileEntity);
-+                //tileEntity.updateTicks(fromTickOffset, fromRedstoneTimeOffset); // TODO
++            for (final TickingBlockEntity tileEntityWrapped : from.blockEntityTickers) {
++                into.blockEntityTickers.add(tileEntityWrapped);
++                final BlockEntity tileEntity = tileEntityWrapped.getTileEntity();
++                if (tileEntity != null) {
++                    tileEntity.updateTicks(fromTickOffset, fromRedstoneTimeOffset);
++                }
 +            }
 +
 +            // ticking chunks
@@ -18911,31 +18917,8 @@ index 928625b5ab054ffa412be8a438f58291cc7a3cc0..bbc051be1c3a2697e33cc316e328760b
              if (!blockEntity.beamSections.isEmpty()) {
                  blockEntity.levels = BeaconBlockEntity.updateBase(world, i, j, k);
              }
-diff --git a/src/main/java/net/minecraft/world/level/block/entity/BellBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BellBlockEntity.java
-index 648d8f3e72e30aacf68eb073a1ac30f8ec29503c..9f20efa5c89d1ab6741c9f349b868126d8df8a21 100644
---- a/src/main/java/net/minecraft/world/level/block/entity/BellBlockEntity.java
-+++ b/src/main/java/net/minecraft/world/level/block/entity/BellBlockEntity.java
-@@ -36,6 +36,18 @@ public class BellBlockEntity extends BlockEntity {
-     private boolean resonating;
-     private int resonationTicks;
- 
-+    // Folia start - region ticking
-+
-+    @Override
-+    public void updateTicks(long fromTickOffset, long fromGameTimeOffset) {
-+        super.updateTicks(fromTickOffset, fromGameTimeOffset);
-+        if (this.lastRingTimestamp != 0L) {
-+            this.lastRingTimestamp += fromGameTimeOffset;
-+        }
-+    }
-+
-+    // Folia end - region ticking
-+
-     public BellBlockEntity(BlockPos pos, BlockState state) {
-         super(BlockEntityType.BELL, pos, state);
-     }
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
-index 58986bc0677c5ea1ad54d7d6d4efa5c2ea233aea..e62a98a4e9d6d5f2840fedadaa187fdce98b1a82 100644
+index 58986bc0677c5ea1ad54d7d6d4efa5c2ea233aea..ac1f6d5c78c1970b3242c017031679fb9a906fb0 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 @@ -26,7 +26,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -18952,7 +18935,7 @@ index 58986bc0677c5ea1ad54d7d6d4efa5c2ea233aea..e62a98a4e9d6d5f2840fedadaa187fdc
      private BlockState blockState;
  
 +    // Folia start - region ticking
-+    public void updateTicks(final long fromTickOffset, final long fromGameTimeOffset) {
++    public void updateTicks(final long fromTickOffset, final long fromRedstoneTimeOffset) {
 +
 +    }
 +    // Folia end - region ticking
@@ -18997,27 +18980,10 @@ index 55006724ccec9f3de828ec18693728e9741ff65f..9e806ba83240916d422c4a736a9cfd61
              // CraftBukkit end
  
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
-index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..79e586c4d7a7392721f440e57f86c11de7369151 100644
+index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..2a6e3eb2ec74e8b1a356b5a62ec5f8521da00380 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
-@@ -52,6 +52,16 @@ public class ConduitBlockEntity extends BlockEntity {
-     private UUID destroyTargetUUID;
-     private long nextAmbientSoundActivation;
- 
-+    // Folia start - region ticking
-+    @Override
-+    public void updateTicks(long fromTickOffset, long fromGameTimeOffset) {
-+        super.updateTicks(fromTickOffset, fromGameTimeOffset);
-+        if (this.nextAmbientSoundActivation != 0L) {
-+            this.nextAmbientSoundActivation += fromGameTimeOffset;
-+        }
-+    }
-+    // Folia end - region ticking
-+
-     public ConduitBlockEntity(BlockPos pos, BlockState state) {
-         super(BlockEntityType.CONDUIT, pos, state);
-     }
-@@ -88,7 +98,7 @@ public class ConduitBlockEntity extends BlockEntity {
+@@ -88,7 +88,7 @@ public class ConduitBlockEntity extends BlockEntity {
  
      public static void clientTick(Level world, BlockPos pos, BlockState state, ConduitBlockEntity blockEntity) {
          ++blockEntity.tickCount;
@@ -19026,7 +18992,7 @@ index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..79e586c4d7a7392721f440e57f86c11d
          List<BlockPos> list = blockEntity.effectBlocks;
  
          if (i % 40L == 0L) {
-@@ -106,7 +116,7 @@ public class ConduitBlockEntity extends BlockEntity {
+@@ -106,7 +106,7 @@ public class ConduitBlockEntity extends BlockEntity {
  
      public static void serverTick(Level world, BlockPos pos, BlockState state, ConduitBlockEntity blockEntity) {
          ++blockEntity.tickCount;
@@ -19035,7 +19001,7 @@ index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..79e586c4d7a7392721f440e57f86c11d
          List<BlockPos> list = blockEntity.effectBlocks;
  
          if (i % 40L == 0L) {
-@@ -236,11 +246,11 @@ public class ConduitBlockEntity extends BlockEntity {
+@@ -236,11 +236,11 @@ public class ConduitBlockEntity extends BlockEntity {
  
          if (blockEntity.destroyTarget != null) {
              // CraftBukkit start
@@ -19050,27 +19016,10 @@ index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..79e586c4d7a7392721f440e57f86c11d
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index ccad692aba2ed77259f6814d88f01b91ed9d229b..51482063a471202040f02c95ac4144f53a22697b 100644
+index ccad692aba2ed77259f6814d88f01b91ed9d229b..0fb6d4925cb23616749ffb5088eb7c67620499e4 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-@@ -77,6 +77,16 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
-     }
-     // CraftBukkit end
- 
-+    // Folia start - region ticking
-+    @Override
-+    public void updateTicks(long fromTickOffset, long fromGameTimeOffset) {
-+        super.updateTicks(fromTickOffset, fromGameTimeOffset);
-+        if (this.tickedGameTime != 0L) {
-+            this.tickedGameTime += fromGameTimeOffset;
-+        }
-+    }
-+    // Folia end - region ticking
-+
-     public HopperBlockEntity(BlockPos pos, BlockState state) {
-         super(BlockEntityType.HOPPER, pos, state);
-         this.items = NonNullList.withSize(5, ItemStack.EMPTY);
-@@ -262,9 +272,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -262,9 +262,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
              if (!origItemStack.isEmpty()) {
                  origItemStack.setCount(origCount - moved + remaining);
              }
@@ -19082,7 +19031,7 @@ index ccad692aba2ed77259f6814d88f01b91ed9d229b..51482063a471202040f02c95ac4144f5
              iinventory.setChanged();
              return true;
          }
-@@ -592,9 +602,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -592,9 +592,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      stack = stack.split(to.getMaxStackSize());
                  }
                  // Spigot end
@@ -19376,28 +19325,22 @@ index f80545f80948db27d1fbde77d0505c916eb504ed..3b656e7d5e8b75f8f415d5f43ed5c91d
      private static Vec3 findExitPortalXZPosTentative(ServerLevel world, BlockPos pos) {
          Vec3 vec3d = (new Vec3((double) pos.getX(), 0.0D, (double) pos.getZ())).normalize();
          boolean flag = true;
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/TickingBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TickingBlockEntity.java
+index 28e3b73507b988f7234cbf29c4024c88180d0aef..c8facee29ee08e0975528083f89b64f0b593957f 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/TickingBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/TickingBlockEntity.java
+@@ -10,4 +10,6 @@ public interface TickingBlockEntity {
+     BlockPos getPos();
+ 
+     String getType();
++
++    BlockEntity getTileEntity(); // Folia - region threading
+ }
 diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java b/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
-index 221c5d080d55326e458c1182823d6b49224ef498..2d020e5fc26871528b90ddc80dc1d5f49d4b1940 100644
+index 221c5d080d55326e458c1182823d6b49224ef498..29a27534e6c97b262229b51e4ea0345502020647 100644
 --- a/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
-@@ -44,6 +44,16 @@ public class PistonMovingBlockEntity extends BlockEntity {
-     private long lastTicked;
-     private int deathTicks;
- 
-+    // Folia start - region ticking
-+    @Override
-+    public void updateTicks(long fromTickOffset, long fromGameTimeOffset) {
-+        super.updateTicks(fromTickOffset, fromGameTimeOffset);
-+        if (this.lastTicked != 0L) {
-+            this.lastTicked += fromGameTimeOffset;
-+        }
-+    }
-+    // Folia end - region ticking
-+
-     public PistonMovingBlockEntity(BlockPos pos, BlockState state) {
-         super(BlockEntityType.PISTON, pos, state);
-     }
-@@ -144,8 +154,8 @@ public class PistonMovingBlockEntity extends BlockEntity {
+@@ -144,8 +144,8 @@ public class PistonMovingBlockEntity extends BlockEntity {
  
                                  entity.setDeltaMovement(e, g, h);
                                  // Paper - EAR items stuck in in slime pushed by a piston
@@ -19451,10 +19394,24 @@ index 7e9c388179c75a233d9b179ea1e00428ac65ee99..e5eb4ca68aafed44ab8cb1fb409f304c
                      structurestart = structureAccessor.getStartForStructure(SectionPos.bottomOf(ichunkaccess), (Structure) holder.value(), ichunkaccess);
                  } while (structurestart == null);
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b474bb0b6 100644
+index e776eb8afef978938da084f9ae29d611181b43fe..d270f6b5937e167f18c3f358c99a9f6f3cde9c7a 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-@@ -233,51 +233,15 @@ public class LevelChunk extends ChunkAccess {
+@@ -61,6 +61,13 @@ public class LevelChunk extends ChunkAccess {
+         @Override
+         public void tick() {}
+ 
++        // Folia start - region threading
++        @Override
++        public BlockEntity getTileEntity() {
++            return null;
++        }
++        // Folia end - region threading
++
+         @Override
+         public boolean isRemoved() {
+             return true;
+@@ -233,51 +240,15 @@ public class LevelChunk extends ChunkAccess {
      }
      // Paper end
      // Paper start - optimise checkDespawn
@@ -19511,7 +19468,7 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
  
              double distance = player.distanceToSqr(sourceX, sourceY, sourceZ);
              if (distance < closestDistance && predicate.test(player)) {
-@@ -285,31 +249,17 @@ public class LevelChunk extends ChunkAccess {
+@@ -285,31 +256,17 @@ public class LevelChunk extends ChunkAccess {
                  closestDistance = distance;
              }
          }
@@ -19548,7 +19505,7 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
  
              if (range >= 0.0) {
                  double distanceSquared = player.distanceToSqr(sourceX, sourceY, sourceZ);
-@@ -322,6 +272,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -322,6 +279,7 @@ public class LevelChunk extends ChunkAccess {
                  ret.add(player);
              }
          }
@@ -19556,7 +19513,7 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
      }
      // Paper end - optimise checkDespawn
  
-@@ -557,7 +508,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -557,7 +515,7 @@ public class LevelChunk extends ChunkAccess {
                      return null;
                  } else {
                      // CraftBukkit - Don't place while processing the BlockPlaceEvent, unless it's a BlockContainer. Prevents blocks such as TNT from activating when cancelled.
@@ -19565,7 +19522,7 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
                          iblockdata.onPlace(this.level, blockposition, iblockdata1, flag);
                      }
  
-@@ -604,7 +555,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -604,7 +562,7 @@ public class LevelChunk extends ChunkAccess {
      @Nullable
      public BlockEntity getBlockEntity(BlockPos pos, LevelChunk.EntityCreationType creationType) {
          // CraftBukkit start
@@ -19574,7 +19531,7 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
          if (tileentity == null) {
              tileentity = (BlockEntity) this.blockEntities.get(pos);
          }
-@@ -889,13 +840,13 @@ public class LevelChunk extends ChunkAccess {
+@@ -889,13 +847,13 @@ public class LevelChunk extends ChunkAccess {
  
                  org.bukkit.World world = this.level.getWorld();
                  if (world != null) {
@@ -19590,7 +19547,7 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
                      }
                  }
                  server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(this.bukkitChunk));
-@@ -944,7 +895,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -944,7 +902,7 @@ public class LevelChunk extends ChunkAccess {
      @Override
      public boolean isUnsaved() {
          // Paper start - add dirty system to tick lists
@@ -19599,6 +19556,34 @@ index e776eb8afef978938da084f9ae29d611181b43fe..cf43b204f0611af18b1e41bd9c7e803b
          if (this.blockTicks.isDirty(gameTime) || this.fluidTicks.isDirty(gameTime)) {
              return true;
          }
+@@ -1213,6 +1171,13 @@ public class LevelChunk extends ChunkAccess {
+             this.ticker = wrapped;
+         }
+ 
++        // Folia start - region threading
++        @Override
++        public BlockEntity getTileEntity() {
++            return this.ticker == null ? null : this.ticker.getTileEntity();
++        }
++        // Folia end - region threading
++
+         @Override
+         public void tick() {
+             this.ticker.tick();
+@@ -1249,6 +1214,13 @@ public class LevelChunk extends ChunkAccess {
+             this.ticker = blockentityticker;
+         }
+ 
++        // Folia start - region threading
++        @Override
++        public BlockEntity getTileEntity() {
++            return this.blockEntity;
++        }
++        // Folia end - region threading
++
+         @Override
+         public void tick() {
+             if (!this.blockEntity.isRemoved() && this.blockEntity.hasLevel()) {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 index 256642f2e2aa66f7e8c00cae91a75060a8817c9c..9fb91e3648db3ad79bb6d1fe79894a13ddc07cbb 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
