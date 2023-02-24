@@ -4078,10 +4078,10 @@ index 0000000000000000000000000000000000000000..3549e5f3359f38b207e189d895954420
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionisedServer.java b/src/main/java/io/papermc/paper/threadedregions/RegionisedServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..31209d5cef17f9bdfe03736654d7dcd222afee51
+index 0000000000000000000000000000000000000000..16b51ae5bec72f6c85adca3a350f654754990ad0
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionisedServer.java
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,359 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -4109,7 +4109,6 @@ index 0000000000000000000000000000000000000000..31209d5cef17f9bdfe03736654d7dcd2
 +import net.minecraft.world.level.GameRules;
 +import net.minecraft.world.level.levelgen.LegacyRandomSource;
 +import org.slf4j.Logger;
-+
 +import java.util.ArrayList;
 +import java.util.Arrays;
 +import java.util.Collections;
@@ -4401,7 +4400,8 @@ index 0000000000000000000000000000000000000000..31209d5cef17f9bdfe03736654d7dcd2
 +        // weather cycle
 +        this.advanceWeatherCycle(world);
 +
-+        // sleep status TODO
++        // sleep status
++        this.checkNightSkip(world);
 +
 +        // sky brightness
 +        this.updateSkyBrightness(world);
@@ -4410,6 +4410,10 @@ index 0000000000000000000000000000000000000000..31209d5cef17f9bdfe03736654d7dcd2
 +        this.tickTime(world, tickCount);
 +
 +        world.updateTickData();
++    }
++
++    private void checkNightSkip(final ServerLevel world) {
++        world.tickSleep();
 +    }
 +
 +    private void advanceWeatherCycle(final ServerLevel world) {
@@ -7552,7 +7556,7 @@ index 0000000000000000000000000000000000000000..29f9fed5f02530b3256e6b993e607d46
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..65145994bd062c5c22d8fdf8124e7833323a3ff2
+index 0000000000000000000000000000000000000000..e75aac237764c7a9fa0538ddf8d68b1e14de7d49
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -0,0 +1,544 @@
@@ -7726,9 +7730,9 @@ index 0000000000000000000000000000000000000000..65145994bd062c5c22d8fdf8124e7833
 +        // we CANNOT sync, because WE ARE ON A SCHEDULER THREAD
 +        this.scheduler.halt(false, 0L);
 +
-+        final ChunkPos center = handle.region.region.getCenterChunk();
++        final ChunkPos center = handle.region == null ? null : handle.region.region.getCenterChunk();
 +
-+        LOGGER.error("Region #" + handle.region.id + " centered at chunk " + center + " failed to " + (executingTasks ? "execute tasks" : "tick") + ":", thr);
++        LOGGER.error("Region #" + (handle.region == null ? -1L : handle.region.id) + " centered at chunk " + center + " failed to " + (executingTasks ? "execute tasks" : "tick") + ":", thr);
 +
 +        MinecraftServer.getServer().stopServer();
 +    }
@@ -13470,7 +13474,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..06ad3857f04ec073ae753b6569c5ae2c
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671ca828b519 100644
+index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa836269058cc0fdb2 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -192,35 +192,34 @@ public class ServerLevel extends Level implements WorldGenLevel {
@@ -13660,8 +13664,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
 -        if (nearby == null) {
 -            return null;
 -        }
-+    // Folia - region threading
- 
+-
 -        Object[] backingSet = nearby.getBackingSet();
 -
 -        double closestDistanceSquared = Double.MAX_VALUE;
@@ -13695,7 +13698,8 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
 -                                   double d0, double d1, double d2) {
 -        return this.getNearestPlayer(pathfindertargetcondition, null, d0, d1, d2);
 -    }
--
++    // Folia - region threading
+ 
 -    @Override
 -    public List<Player> getNearbyPlayers(net.minecraft.world.entity.ai.targeting.TargetingConditions condition, LivingEntity source, AABB axisalignedbb) {
 -        com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> nearby;
@@ -13805,7 +13809,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      public void setWeatherParameters(int clearDuration, int rainDuration, boolean raining, boolean thundering) {
          this.serverLevelData.setClearWeatherTime(clearDuration);
          this.serverLevelData.setRainTime(rainDuration);
-@@ -666,26 +664,20 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -666,62 +664,38 @@ public class ServerLevel extends Level implements WorldGenLevel {
          return this.structureManager;
      }
  
@@ -13830,18 +13834,31 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
 +        if (region == null) this.getWorldBorder().tick(); // Folia - regionised ticking - moved into global tick
          gameprofilerfiller.popPush("weather");
 -        this.advanceWeatherCycle();
+-        int i = this.getGameRules().getInt(GameRules.RULE_PLAYERS_SLEEPING_PERCENTAGE);
 +        if (region == null) this.advanceWeatherCycle();
-         int i = this.getGameRules().getInt(GameRules.RULE_PLAYERS_SLEEPING_PERCENTAGE);
++        //int i = this.getGameRules().getInt(GameRules.RULE_PLAYERS_SLEEPING_PERCENTAGE); // Folia - region threading - move intotickSleep
          long j;
  
 -        if (this.sleepStatus.areEnoughSleeping(i) && this.sleepStatus.areEnoughDeepSleeping(i, this.players)) {
-+        if (region != null && this.sleepStatus.areEnoughSleeping(i) && this.sleepStatus.areEnoughDeepSleeping(i, this.players)) { // Folia - region threading - TODO bring this back
-             // CraftBukkit start
-             j = this.levelData.getDayTime() + 24000L;
-             TimeSkipEvent event = new TimeSkipEvent(this.getWorld(), TimeSkipEvent.SkipReason.NIGHT_SKIP, (j - j % 24000L) - this.getDayTime());
-@@ -705,23 +697,23 @@ public class ServerLevel extends Level implements WorldGenLevel {
-             }
-         }
+-            // CraftBukkit start
+-            j = this.levelData.getDayTime() + 24000L;
+-            TimeSkipEvent event = new TimeSkipEvent(this.getWorld(), TimeSkipEvent.SkipReason.NIGHT_SKIP, (j - j % 24000L) - this.getDayTime());
+-            if (this.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) {
+-                getCraftServer().getPluginManager().callEvent(event);
+-                if (!event.isCancelled()) {
+-                    this.setDayTime(this.getDayTime() + event.getSkipAmount());
+-                }
+-            }
+-
+-            if (!event.isCancelled()) {
+-                this.wakeUpAllPlayers();
+-            }
+-            // CraftBukkit end
+-            if (this.getGameRules().getBoolean(GameRules.RULE_WEATHER_CYCLE) && this.isRaining()) {
+-                this.resetWeatherCycle();
+-            }
+-        }
++        if (region == null) this.tickSleep(); // Folia - region threading
  
 -        this.updateSkyBrightness();
 +        if (region == null) this.updateSkyBrightness(); // Folia - region threading
@@ -13868,7 +13885,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          this.timings.raids.stopTiming(); // Paper - timings
          gameprofilerfiller.popPush("chunkSource");
          this.timings.chunkProviderTick.startTiming(); // Paper - timings
-@@ -731,7 +723,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -731,7 +705,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          timings.doSounds.startTiming(); // Spigot
          this.runBlockEvents();
          timings.doSounds.stopTiming(); // Spigot
@@ -13877,7 +13894,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          gameprofilerfiller.pop();
          boolean flag = true || !this.players.isEmpty() || !this.getForcedChunks().isEmpty(); // CraftBukkit - this prevents entity cleanup, other issues on servers with no players
  
-@@ -743,20 +735,30 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -743,20 +717,30 @@ public class ServerLevel extends Level implements WorldGenLevel {
              gameprofilerfiller.push("entities");
              timings.tickEntities.startTiming(); // Spigot
              if (this.dragonFight != null) {
@@ -13909,7 +13926,39 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                          gameprofilerfiller.pop();
                          if (true || this.chunkSource.chunkMap.getDistanceManager().inEntityTickingRange(entity.chunkPosition().toLong())) { // Paper - now always true if in the ticking list
                              Entity entity1 = entity.getVehicle();
-@@ -797,11 +799,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -787,6 +771,31 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         gameprofilerfiller.pop();
+     }
+ 
++    // Folia start - region threading
++    public void tickSleep() {
++        int i = this.getGameRules().getInt(GameRules.RULE_PLAYERS_SLEEPING_PERCENTAGE); long j; // Folia moved from tick loop
++        if (this.sleepStatus.areEnoughSleeping(i) && this.sleepStatus.areEnoughDeepSleeping(i, this.players)) { // Folia - region threading - moved to global tick
++            // CraftBukkit start
++            j = this.levelData.getDayTime() + 24000L;
++            TimeSkipEvent event = new TimeSkipEvent(this.getWorld(), TimeSkipEvent.SkipReason.NIGHT_SKIP, (j - j % 24000L) - this.getDayTime());
++            if (this.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) {
++                getCraftServer().getPluginManager().callEvent(event);
++                if (!event.isCancelled()) {
++                    this.setDayTime(this.getDayTime() + event.getSkipAmount());
++                }
++            }
++
++            if (!event.isCancelled()) {
++                this.wakeUpAllPlayers();
++            }
++            // CraftBukkit end
++            if (this.getGameRules().getBoolean(GameRules.RULE_WEATHER_CYCLE) && this.isRaining()) {
++                this.resetWeatherCycle();
++            }
++        }
++    }
++    // Folia end - region threading
++
+     @Override
+     public boolean shouldTickBlocksAt(long chunkPos) {
+         // Paper start - replace player chunk loader system
+@@ -797,11 +806,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      protected void tickTime() {
          if (this.tickTime) {
@@ -13926,7 +13975,19 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  this.setDayTime(this.levelData.getDayTime() + 1L);
              }
  
-@@ -834,11 +837,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -830,15 +840,23 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     private void wakeUpAllPlayers() {
+         this.sleepStatus.removeAllSleepers();
+         (this.players.stream().filter(LivingEntity::isSleeping).collect(Collectors.toList())).forEach((entityplayer) -> { // CraftBukkit - decompile error
+-            entityplayer.stopSleepInBed(false, false);
++            // Folia start - region threading
++            entityplayer.getBukkitEntity().taskScheduler.schedule((ServerPlayer player) -> {
++                if (player.level != ServerLevel.this || !player.isSleeping()) {
++                    return;
++                }
++                player.stopSleepInBed(false, false);
++            }, null, 1L);
++            // Folia end - region threading
          });
      }
      // Paper start - optimise random block ticking
@@ -13941,7 +14002,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          ChunkPos chunkcoordintpair = chunk.getPos();
          boolean flag = this.isRaining();
          int j = chunkcoordintpair.getMinBlockX();
-@@ -846,7 +850,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -846,7 +864,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          ProfilerFiller gameprofilerfiller = this.getProfiler();
  
          gameprofilerfiller.push("thunder");
@@ -13950,7 +14011,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
  
          if (!this.paperConfig().environment.disableThunder && flag && this.isThundering() && this.spigotConfig.thunderChance > 0 && this.random.nextInt(this.spigotConfig.thunderChance) == 0) { // Spigot // Paper - disable thunder
              blockposition.set(this.findLightningTargetAround(this.getBlockRandomPos(j, 0, k, 15))); // Paper
-@@ -941,7 +945,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -941,7 +959,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  int yPos = (sectionIndex + minSection) << 4;
                  for (int a = 0; a < randomTickSpeed; ++a) {
                      int tickingBlocks = section.tickingList.size();
@@ -13959,7 +14020,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                      if (index >= tickingBlocks) {
                          continue;
                      }
-@@ -955,7 +959,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -955,7 +973,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      BlockPos blockposition2 = blockposition.set(j + randomX, randomY, k + randomZ);
                      BlockState iblockdata = com.destroystokyo.paper.util.maplist.IBlockDataList.getBlockDataFromRaw(raw);
  
@@ -13968,7 +14029,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                      // We drop the fluid tick since LAVA is ALREADY TICKED by the above method (See LiquidBlock).
                      // TODO CHECK ON UPDATE (ping the Canadian)
                  }
-@@ -1009,7 +1013,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1009,7 +1027,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      public boolean isHandlingTick() {
@@ -13977,15 +14038,22 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      public boolean canSleepThroughNights() {
-@@ -1041,6 +1045,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1041,6 +1059,14 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      public void updateSleepingPlayerList() {
-+        if (true) return; // Folia - region threading - TODO figure this shit out
++        // Folia start - region threading
++        if (!io.papermc.paper.threadedregions.RegionisedServer.isGlobalTickThread()) {
++            io.papermc.paper.threadedregions.RegionisedServer.getInstance().addTask(() -> {
++                ServerLevel.this.updateSleepingPlayerList();
++            });
++            return;
++        }
++        // Folia end - region threading
          if (!this.players.isEmpty() && this.sleepStatus.update(this.players)) {
              this.announceSleepStatus();
          }
-@@ -1052,7 +1057,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1052,7 +1078,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          return this.server.getScoreboard();
      }
  
@@ -13994,7 +14062,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          boolean flag = this.isRaining();
  
          if (this.dimensionType().hasSkyLight()) {
-@@ -1138,23 +1143,24 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1138,23 +1164,24 @@ public class ServerLevel extends Level implements WorldGenLevel {
              this.server.getPlayerList().broadcastAll(new PacketPlayOutGameStateChange(PacketPlayOutGameStateChange.THUNDER_LEVEL_CHANGE, this.thunderLevel));
          }
          // */
@@ -14028,7 +14096,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              }
          }
          // CraftBukkit end
-@@ -1218,7 +1224,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1218,7 +1245,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      public void tickNonPassenger(Entity entity) {
          // Paper start - log detailed entity tick information
@@ -14037,7 +14105,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          try {
              if (currentlyTickingEntity.get() == null) {
                  currentlyTickingEntity.lazySet(entity);
-@@ -1251,7 +1257,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1251,7 +1278,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
          if (isActive) { // Paper - EAR 2
              TimingHistory.activatedEntityTicks++;
          entity.tick();
@@ -14055,7 +14123,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          } else { entity.inactiveTick(); } // Paper - EAR 2
          this.getProfiler().pop();
          } finally { timer.stopTiming(); } // Paper - timings
-@@ -1274,7 +1289,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1274,7 +1310,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      private void tickPassenger(Entity vehicle, Entity passenger) {
          if (!passenger.isRemoved() && passenger.getVehicle() == vehicle) {
@@ -14064,7 +14132,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  // Paper - EAR 2
                  final boolean isActive = org.spigotmc.ActivationRange.checkIfActive(passenger);
                  co.aikar.timings.Timing timer = isActive ? passenger.getType().passengerTickTimer.startTiming() : passenger.getType().passengerInactiveTickTimer.startTiming(); // Paper
-@@ -1291,7 +1306,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1291,7 +1327,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  // Paper start - EAR 2
                  if (isActive) {
                  passenger.rideTick();
@@ -14082,7 +14150,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  } else {
                      passenger.setDeltaMovement(Vec3.ZERO);
                      passenger.inactiveTick();
-@@ -1379,7 +1403,15 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1379,7 +1424,15 @@ public class ServerLevel extends Level implements WorldGenLevel {
              // Paper - rewrite chunk system - entity saving moved into ChunkHolder
  
          } else if (close) { chunkproviderserver.close(false); } // Paper - rewrite chunk system
@@ -14098,7 +14166,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          // CraftBukkit start - moved from MinecraftServer.saveChunks
          ServerLevel worldserver1 = this;
  
-@@ -1387,12 +1419,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1387,12 +1440,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          this.serverLevelData.setCustomBossEvents(this.server.getCustomBossEvents().save());
          this.convertable.saveDataTag(this.server.registryAccess(), this.serverLevelData, this.server.getPlayerList().getSingleplayerData());
          // CraftBukkit end
@@ -14112,7 +14180,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
  
          this.getChunkSource().getDataStorage().save();
      }
-@@ -1447,6 +1474,19 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1447,6 +1495,19 @@ public class ServerLevel extends Level implements WorldGenLevel {
          return list;
      }
  
@@ -14132,7 +14200,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      @Nullable
      public ServerPlayer getRandomPlayer() {
          List<ServerPlayer> list = this.getPlayers(LivingEntity::isAlive);
-@@ -1548,8 +1588,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1548,8 +1609,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
          } else {
              if (entity instanceof net.minecraft.world.entity.item.ItemEntity itemEntity && itemEntity.getItem().isEmpty()) return false; // Paper - Prevent empty items from being added
              // Paper start - capture all item additions to the world
@@ -14143,7 +14211,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  return true;
              }
              // Paper end
-@@ -1688,7 +1728,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1688,7 +1749,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @Override
      public void sendBlockUpdated(BlockPos pos, BlockState oldState, BlockState newState, int flags) {
@@ -14152,7 +14220,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              String s = "recursive call to sendBlockUpdated";
  
              Util.logAndPauseIfInIde("recursive call to sendBlockUpdated", new IllegalStateException("recursive call to sendBlockUpdated"));
-@@ -1701,7 +1741,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1701,7 +1762,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
          if (Shapes.joinIsNotEmpty(voxelshape, voxelshape1, BooleanOp.NOT_SAME)) {
              List<PathNavigation> list = new ObjectArrayList();
@@ -14161,7 +14229,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
  
              while (iterator.hasNext()) {
                  // CraftBukkit start - fix SPIGOT-6362
-@@ -1724,7 +1764,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1724,7 +1785,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
  
              try {
@@ -14170,7 +14238,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  iterator = list.iterator();
  
                  while (iterator.hasNext()) {
-@@ -1733,7 +1773,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1733,7 +1794,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      navigationabstract1.recomputePath();
                  }
              } finally {
@@ -14179,7 +14247,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              }
  
          }
-@@ -1742,23 +1782,23 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1742,23 +1803,23 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @Override
      public void updateNeighborsAt(BlockPos pos, Block sourceBlock) {
@@ -14208,7 +14276,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      @Override
-@@ -1784,7 +1824,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1784,7 +1845,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
              explosion.clearToBlow();
          }
  
@@ -14217,7 +14285,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
  
          while (iterator.hasNext()) {
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
-@@ -1799,25 +1839,28 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1799,25 +1860,28 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @Override
      public void blockEvent(BlockPos pos, Block block, int type, int data) {
@@ -14252,7 +14320,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      private boolean doBlockEvent(BlockEventData event) {
-@@ -1828,12 +1871,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1828,12 +1892,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @Override
      public LevelTicks<Block> getBlockTicks() {
@@ -14267,7 +14335,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      @Nonnull
-@@ -1857,7 +1900,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1857,7 +1921,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      public <T extends ParticleOptions> int sendParticles(ServerPlayer sender, T t0, double d0, double d1, double d2, int i, double d3, double d4, double d5, double d6, boolean force) {
          // Paper start - Particle API Expansion
@@ -14276,7 +14344,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
      public <T extends ParticleOptions> int sendParticles(List<ServerPlayer> receivers, ServerPlayer sender, T t0, double d0, double d1, double d2, int i, double d3, double d4, double d5, double d6, boolean force) {
          // Paper end
-@@ -1910,7 +1953,14 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1910,7 +1974,14 @@ public class ServerLevel extends Level implements WorldGenLevel {
      public Entity getEntityOrPart(int id) {
          Entity entity = (Entity) this.getEntities().get(id);
  
@@ -14292,7 +14360,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      @Nullable
-@@ -1918,6 +1968,61 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1918,6 +1989,61 @@ public class ServerLevel extends Level implements WorldGenLevel {
          return (Entity) this.getEntities().get(uuid);
      }
  
@@ -14354,7 +14422,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      @Nullable
      public BlockPos findNearestMapStructure(TagKey<Structure> structureTag, BlockPos pos, int radius, boolean skipReferencedStructures) {
          if (!this.serverLevelData.worldGenOptions().generateStructures()) { // CraftBukkit
-@@ -2082,7 +2187,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2082,7 +2208,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          if (forced) {
              flag1 = forcedchunk.getChunks().add(k);
              if (flag1) {
@@ -14363,7 +14431,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              }
          } else {
              flag1 = forcedchunk.getChunks().remove(k);
-@@ -2110,13 +2215,18 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2110,13 +2236,18 @@ public class ServerLevel extends Level implements WorldGenLevel {
              BlockPos blockposition1 = pos.immutable();
  
              optional.ifPresent((holder) -> {
@@ -14385,7 +14453,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                      // Paper start
                      if (optional.isEmpty() && this.getPoiManager().exists(blockposition1, poiType -> true)) {
                          this.getPoiManager().remove(blockposition1);
-@@ -2124,7 +2234,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2124,7 +2255,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      // Paper end
                      this.getPoiManager().add(blockposition1, holder);
                      DebugPackets.sendPoiAddedPacket(this, blockposition1);
@@ -14399,7 +14467,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              });
          }
      }
-@@ -2171,7 +2286,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2171,7 +2307,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          BufferedWriter bufferedwriter = Files.newBufferedWriter(path.resolve("stats.txt"));
  
          try {
@@ -14408,7 +14476,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              NaturalSpawner.SpawnState spawnercreature_d = this.getChunkSource().getLastSpawnState();
  
              if (spawnercreature_d != null) {
-@@ -2185,7 +2300,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2185,7 +2321,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
  
              bufferedwriter.write(String.format(Locale.ROOT, "entities: %s\n", this.entityLookup.getDebugInfo())); // Paper - rewrite chunk system
@@ -14417,7 +14485,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              bufferedwriter.write(String.format(Locale.ROOT, "block_ticks: %d\n", this.getBlockTicks().count()));
              bufferedwriter.write(String.format(Locale.ROOT, "fluid_ticks: %d\n", this.getFluidTicks().count()));
              bufferedwriter.write("distance_manager: " + playerchunkmap.getDistanceManager().getDebugStatus() + "\n");
-@@ -2331,7 +2446,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2331,7 +2467,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      private void dumpBlockEntityTickers(Writer writer) throws IOException {
          CsvOutput csvwriter = CsvOutput.builder().addColumn("x").addColumn("y").addColumn("z").addColumn("type").build(writer);
@@ -14426,7 +14494,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
  
          while (iterator.hasNext()) {
              TickingBlockEntity tickingblockentity = (TickingBlockEntity) iterator.next();
-@@ -2344,7 +2459,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2344,7 +2480,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @VisibleForTesting
      public void clearBlockEvents(BoundingBox box) {
@@ -14435,7 +14503,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              return box.isInside(blockactiondata.pos());
          });
      }
-@@ -2353,7 +2468,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2353,7 +2489,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
      public void blockUpdated(BlockPos pos, Block block) {
          if (!this.isDebug()) {
              // CraftBukkit start
@@ -14444,7 +14512,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  return;
              }
              // CraftBukkit end
-@@ -2396,9 +2511,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2396,9 +2532,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @VisibleForTesting
      public String getWatchdogStats() {
@@ -14455,7 +14523,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      private static <T> String getTypeCount(Iterable<T> items, Function<T, String> classifier) {
-@@ -2431,6 +2544,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2431,6 +2565,12 @@ public class ServerLevel extends Level implements WorldGenLevel {
      public static void makeObsidianPlatform(ServerLevel worldserver, Entity entity) {
          // CraftBukkit end
          BlockPos blockposition = ServerLevel.END_SPAWN_POINT;
@@ -14468,7 +14536,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          int i = blockposition.getX();
          int j = blockposition.getY() - 2;
          int k = blockposition.getZ();
-@@ -2443,11 +2562,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2443,11 +2583,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          BlockPos.betweenClosed(i - 2, j, k - 2, i + 2, j, k + 2).forEach((blockposition1) -> {
              blockList.setBlock(blockposition1, Blocks.OBSIDIAN.defaultBlockState(), 3);
          });
@@ -14481,7 +14549,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              blockList.updateList();
          }
          // CraftBukkit end
-@@ -2468,13 +2583,17 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2468,13 +2604,17 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      public void startTickingChunk(LevelChunk chunk) {
@@ -14503,7 +14571,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
      }
  
      @Override
-@@ -2496,7 +2615,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2496,7 +2636,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          // Paper end - rewrite chunk system
      }
  
@@ -14512,7 +14580,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
          // Paper start - optimize is ticking ready type functions
          io.papermc.paper.chunk.system.scheduling.NewChunkHolder chunkHolder = this.chunkTaskScheduler.chunkHolderManager.getChunkHolder(chunkPos);
          // isTicking implies the chunk is loaded, and the chunk is loaded now implies the entities are loaded
-@@ -2544,16 +2663,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2544,16 +2684,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
          public void onCreated(Entity entity) {}
  
          public void onDestroyed(Entity entity) {
@@ -14532,7 +14600,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              // Paper start - Reset pearls when they stop being ticked
              if (paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && entity instanceof net.minecraft.world.entity.projectile.ThrownEnderpearl pearl) {
                  pearl.cachedOwner = null;
-@@ -2581,7 +2700,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2581,7 +2721,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
@@ -14541,7 +14609,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              }
  
              if (entity instanceof EnderDragon) {
-@@ -2592,7 +2711,9 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2592,7 +2732,9 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  for (int j = 0; j < i; ++j) {
                      EnderDragonPart entitycomplexpart = aentitycomplexpart[j];
  
@@ -14551,7 +14619,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
                  }
              }
  
-@@ -2666,7 +2787,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2666,7 +2808,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
@@ -14560,7 +14628,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..53b21c1d78f6ab0816343f1a6264671c
              }
  
              if (entity instanceof EnderDragon) {
-@@ -2677,13 +2798,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2677,13 +2819,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  for (int j = 0; j < i; ++j) {
                      EnderDragonPart entitycomplexpart = aentitycomplexpart[j];
  
