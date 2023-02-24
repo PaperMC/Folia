@@ -5096,10 +5096,10 @@ index 0000000000000000000000000000000000000000..c13237edb7323fa747d260375f626a5c
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ccfe62cc33188a691e6d1fd4e49679ebe4f1bb70
+index 0000000000000000000000000000000000000000..8317638bdb40764c389a68ced176e6d334eeb599
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java
-@@ -0,0 +1,658 @@
+@@ -0,0 +1,664 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.destroystokyo.paper.util.maplist.ReferenceList;
@@ -5442,6 +5442,11 @@ index 0000000000000000000000000000000000000000..ccfe62cc33188a691e6d1fd4e49679eb
 +    // From ServerLevel
 +    public boolean hasPhysicsEvent = true; // Paper
 +    public boolean hasEntityMoveEvent = false; // Paper
++    // Paper start - Optimize Hoppers
++    public boolean skipPullModeEventFire = false;
++    public boolean skipPushModeEventFire = false;
++    public boolean skipHopperEvents = false;
++    // Paper end - Optimize Hoppers
 +    public long lastMidTickExecuteFailure;
 +    public long lastMidTickExecute;
 +    // From Level
@@ -5536,6 +5541,7 @@ index 0000000000000000000000000000000000000000..ccfe62cc33188a691e6d1fd4e49679eb
 +        this.tickData = this.world.tickData;
 +        this.hasPhysicsEvent = org.bukkit.event.block.BlockPhysicsEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper
 +        this.hasEntityMoveEvent = io.papermc.paper.event.entity.EntityMoveEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper
++        this.skipHopperEvents = this.world.paperConfig().hopper.disableMoveEvent || org.bukkit.event.inventory.InventoryMoveItemEvent.getHandlerList().getRegisteredListeners().length == 0; // Paper
 +    }
 +
 +    // connections
@@ -19385,9 +19391,49 @@ index 05eab04e4aec4151018f25b59f92ddbbb4c09f87..2a6e3eb2ec74e8b1a356b5a62ec5f852
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index ccad692aba2ed77259f6814d88f01b91ed9d229b..0fb6d4925cb23616749ffb5088eb7c67620499e4 100644
+index ccad692aba2ed77259f6814d88f01b91ed9d229b..955f6560f4c6032d375927987c9bb62561ed5034 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -189,12 +189,11 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         return false;
+     }
+     // Paper start - Optimize Hoppers
+-    private static boolean skipPullModeEventFire = false;
+-    private static boolean skipPushModeEventFire = false;
+-    public static boolean skipHopperEvents = false;
++    // Folia - region threading - moved to RegionisedWorldData
+ 
+     private static boolean hopperPush(Level level, BlockPos pos, Container destination, Direction enumdirection, HopperBlockEntity hopper) {
+-        skipPushModeEventFire = skipHopperEvents;
++        io.papermc.paper.threadedregions.RegionisedWorldData worldData = level.getCurrentWorldData(); // Folia - region threading
++        worldData.skipPushModeEventFire = worldData.skipHopperEvents; // Folia - region threading
+         boolean foundItem = false;
+         for (int i = 0; i < hopper.getContainerSize(); ++i) {
+             ItemStack item = hopper.getItem(i);
+@@ -209,7 +208,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+ 
+                 // We only need to fire the event once to give protection plugins a chance to cancel this event
+                 // Because nothing uses getItem, every event call should end up the same result.
+-                if (!skipPushModeEventFire) {
++                if (!worldData.skipPushModeEventFire) { // Folia - region threading
+                     itemstack = callPushMoveEvent(destination, itemstack, hopper);
+                     if (itemstack == null) { // cancelled
+                         origItemStack.setCount(origCount);
+@@ -238,12 +237,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     }
+ 
+     private static boolean hopperPull(Level level, Hopper ihopper, Container iinventory, ItemStack origItemStack, int i) {
++        io.papermc.paper.threadedregions.RegionisedWorldData worldData = level.getCurrentWorldData(); // Folia - region threading
+         ItemStack itemstack = origItemStack;
+         final int origCount = origItemStack.getCount();
+         final int moved = Math.min(level.spigotConfig.hopperAmount, origCount);
+         itemstack.setCount(moved);
+ 
+-        if (!skipPullModeEventFire) {
++        if (!worldData.skipPullModeEventFire) { // Folia - region threading
+             itemstack = callPullMoveEvent(ihopper, iinventory, itemstack);
+             if (itemstack == null) { // cancelled
+                 origItemStack.setCount(origCount);
 @@ -262,9 +262,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
              if (!origItemStack.isEmpty()) {
                  origItemStack.setCount(origCount - moved + remaining);
@@ -19400,7 +19446,55 @@ index ccad692aba2ed77259f6814d88f01b91ed9d229b..0fb6d4925cb23616749ffb5088eb7c67
              iinventory.setChanged();
              return true;
          }
-@@ -592,9 +592,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -278,12 +278,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     }
+ 
+     private static ItemStack callPushMoveEvent(Container iinventory, ItemStack itemstack, HopperBlockEntity hopper) {
++        io.papermc.paper.threadedregions.RegionisedWorldData worldData = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData(); // Folia - region threading
+         Inventory destinationInventory = getInventory(iinventory);
+         InventoryMoveItemEvent event = new InventoryMoveItemEvent(hopper.getOwner(false).getInventory(),
+             CraftItemStack.asCraftMirror(itemstack), destinationInventory, true);
+         boolean result = event.callEvent();
+         if (!event.calledGetItem && !event.calledSetItem) {
+-            skipPushModeEventFire = true;
++            worldData.skipPushModeEventFire = true; // Folia - region threading
+         }
+         if (!result) {
+             cooldownHopper(hopper);
+@@ -298,6 +299,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     }
+ 
+     private static ItemStack callPullMoveEvent(Hopper hopper, Container iinventory, ItemStack itemstack) {
++        io.papermc.paper.threadedregions.RegionisedWorldData worldData = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData(); // Folia - region threading
+         Inventory sourceInventory = getInventory(iinventory);
+         Inventory destination = getInventory(hopper);
+ 
+@@ -306,7 +308,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             CraftItemStack.asCraftMirror(itemstack), destination, false);
+         boolean result = event.callEvent();
+         if (!event.calledGetItem && !event.calledSetItem) {
+-            skipPullModeEventFire = true;
++            worldData.skipPullModeEventFire = true; // Folia - region threading
+         }
+         if (!result) {
+             cooldownHopper(hopper);
+@@ -447,13 +449,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     // Paper end
+ 
+     public static boolean suckInItems(Level world, Hopper hopper) {
++        io.papermc.paper.threadedregions.RegionisedWorldData worldData = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData(); // Folia - region threading
+         Container iinventory = HopperBlockEntity.getSourceContainer(world, hopper);
+ 
+         if (iinventory != null) {
+             Direction enumdirection = Direction.DOWN;
+ 
+             // Paper start - optimize hoppers and remove streams
+-            skipPullModeEventFire = skipHopperEvents;
++            worldData.skipPullModeEventFire = worldData.skipHopperEvents; // Folia - region threading
+             return !HopperBlockEntity.isEmptyContainer(iinventory, enumdirection) && anyMatch(iinventory, enumdirection, (item, i) -> {
+                 // Logic copied from below to avoid extra getItem calls
+                 if (!item.isEmpty() && canTakeItemFromContainer(iinventory, item, i, enumdirection)) {
+@@ -592,9 +595,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      stack = stack.split(to.getMaxStackSize());
                  }
                  // Spigot end
