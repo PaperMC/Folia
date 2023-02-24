@@ -16346,6 +16346,61 @@ index 83ef8cb27db685cceb5c2b7c9674e17b93ba081c..2d87c16420a97b9142d4ea76ceb6013d
                  }
              }
          }
+diff --git a/src/main/java/net/minecraft/world/damagesource/CombatTracker.java b/src/main/java/net/minecraft/world/damagesource/CombatTracker.java
+index ba96589aab8be0a90144f73f7779769146c7a37e..08dc87506686434d2e53e748ead9d05c35f470cd 100644
+--- a/src/main/java/net/minecraft/world/damagesource/CombatTracker.java
++++ b/src/main/java/net/minecraft/world/damagesource/CombatTracker.java
+@@ -34,7 +34,7 @@ public class CombatTracker {
+     public void prepareForDamage() {
+         this.resetPreparedStatus();
+         Optional<BlockPos> optional = this.mob.getLastClimbablePos();
+-        if (optional.isPresent()) {
++        if (optional.isPresent() && io.papermc.paper.util.TickThread.isTickThreadFor((net.minecraft.server.level.ServerLevel)this.mob.level, optional.get())) { // Folia - region threading - may sync load the block, which would crash
+             BlockState blockState = this.mob.level.getBlockState(optional.get());
+             if (!blockState.is(Blocks.LADDER) && !blockState.is(BlockTags.TRAPDOORS)) {
+                 if (blockState.is(Blocks.VINE)) {
+@@ -85,6 +85,7 @@ public class CombatTracker {
+             CombatEntry combatEntry2 = this.entries.get(this.entries.size() - 1);
+             Component component = combatEntry2.getAttackerName();
+             Entity entity = combatEntry2.getSource().getEntity();
++            if (!io.papermc.paper.util.TickThread.isTickThreadFor(entity)) entity = null; // Folia - region threading - not safe to access other entity data
+             Component component4;
+             if (combatEntry != null && combatEntry2.getSource() == DamageSource.FALL) {
+                 Component component2 = combatEntry.getAttackerName();
+@@ -126,6 +127,7 @@ public class CombatTracker {
+         float g = 0.0F;
+ 
+         for(CombatEntry combatEntry : this.entries) {
++            if (!io.papermc.paper.util.TickThread.isTickThreadFor(combatEntry.getSource().getEntity())) { continue; } // Folia - region threading - skip entities we do not own
+             if (combatEntry.getSource().getEntity() instanceof Player && (player == null || combatEntry.getDamage() > g)) {
+                 g = combatEntry.getDamage();
+                 player = (Player)combatEntry.getSource().getEntity();
+diff --git a/src/main/java/net/minecraft/world/damagesource/EntityDamageSource.java b/src/main/java/net/minecraft/world/damagesource/EntityDamageSource.java
+index b53e04854f960682fae94bb2ef5a12e4274fcebf..01469deddce99a736e661ce9bca8e20e88bb6c1e 100644
+--- a/src/main/java/net/minecraft/world/damagesource/EntityDamageSource.java
++++ b/src/main/java/net/minecraft/world/damagesource/EntityDamageSource.java
+@@ -35,7 +35,7 @@ public class EntityDamageSource extends DamageSource {
+     public Component getLocalizedDeathMessage(LivingEntity entity) {
+         Entity var4 = this.entity;
+         ItemStack var10000;
+-        if (var4 instanceof LivingEntity livingEntity) {
++        if (var4 instanceof LivingEntity livingEntity && io.papermc.paper.util.TickThread.isTickThreadFor(livingEntity)) { // Folia - region threading
+             var10000 = livingEntity.getMainHandItem();
+         } else {
+             var10000 = ItemStack.EMPTY;
+diff --git a/src/main/java/net/minecraft/world/damagesource/IndirectEntityDamageSource.java b/src/main/java/net/minecraft/world/damagesource/IndirectEntityDamageSource.java
+index 6b5fd3e2e19c2d3d694df94f90fce0d310a1a86c..a7a48cf40db1e31ab03e0f42028b617b4f87c8ad 100644
+--- a/src/main/java/net/minecraft/world/damagesource/IndirectEntityDamageSource.java
++++ b/src/main/java/net/minecraft/world/damagesource/IndirectEntityDamageSource.java
+@@ -34,7 +34,7 @@ public class IndirectEntityDamageSource extends EntityDamageSource {
+         Entity entity1 = this.cause;
+         ItemStack itemstack;
+ 
+-        if (entity1 instanceof LivingEntity) {
++        if (entity1 instanceof LivingEntity && io.papermc.paper.util.TickThread.isTickThreadFor(entity1)) { // Folia - region threading
+             LivingEntity entityliving1 = (LivingEntity) entity1;
+ 
+             itemstack = entityliving1.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
 index 1eaab1f6923e6aa34b643293347348e5cc19af3c..87e20dc4e787e7b875d97b6cdb6b3ce497f795e8 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
@@ -17257,7 +17312,7 @@ index 1eaab1f6923e6aa34b643293347348e5cc19af3c..87e20dc4e787e7b875d97b6cdb6b3ce4
      public void unsetRemoved() {
          this.removalReason = null;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 42eb78830855d7282b7f3f1bdbe85e632d489784..678e77ab7103bf69ebd01d03ff84aa7118468c12 100644
+index 42eb78830855d7282b7f3f1bdbe85e632d489784..1e36d889edb6b68d52eae9eee3c13802496af864 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -469,7 +469,7 @@ public abstract class LivingEntity extends Entity {
@@ -17298,6 +17353,15 @@ index 42eb78830855d7282b7f3f1bdbe85e632d489784..678e77ab7103bf69ebd01d03ff84aa71
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level.getScoreboard().getPlayerTeam(s);
              if (!level.paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper
+@@ -2264,7 +2267,7 @@ public abstract class LivingEntity extends Entity {
+ 
+     @Nullable
+     public LivingEntity getKillCredit() {
+-        return (LivingEntity) (this.combatTracker.getKiller() != null ? this.combatTracker.getKiller() : (this.lastHurtByPlayer != null ? this.lastHurtByPlayer : (this.lastHurtByMob != null ? this.lastHurtByMob : null)));
++        return (LivingEntity) (this.combatTracker.getKiller() != null ? this.combatTracker.getKiller() : (this.lastHurtByPlayer != null && io.papermc.paper.util.TickThread.isTickThreadFor(this.lastHurtByPlayer) ? this.lastHurtByPlayer : (this.lastHurtByMob != null && io.papermc.paper.util.TickThread.isTickThreadFor(this.lastHurtByMob) ? this.lastHurtByMob : null))); // Folia - region threading
+     }
+ 
+     public final float getMaxHealth() {
 @@ -3432,7 +3435,7 @@ public abstract class LivingEntity extends Entity {
          this.pushEntities();
          this.level.getProfiler().pop();
