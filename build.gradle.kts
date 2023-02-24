@@ -1,3 +1,5 @@
+import io.papermc.paperweight.patcher.tasks.SimpleRebuildGitPatches
+
 plugins {
     java
     `maven-publish`
@@ -108,4 +110,9 @@ publishing {
             }
         }
     }
+}
+
+
+tasks.withType<SimpleRebuildGitPatches> {
+    filterPatches.set(false)
 }

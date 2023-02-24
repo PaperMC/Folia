@@ -13474,7 +13474,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..06ad3857f04ec073ae753b6569c5ae2c
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa836269058cc0fdb2 100644
+index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..c05c5fca6aaec891519435a45a39b355fe8369c6 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -192,35 +192,34 @@ public class ServerLevel extends Level implements WorldGenLevel {
@@ -13849,7 +13849,8 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
 -                    this.setDayTime(this.getDayTime() + event.getSkipAmount());
 -                }
 -            }
--
++        if (region == null) this.tickSleep(); // Folia - region threading
+ 
 -            if (!event.isCancelled()) {
 -                this.wakeUpAllPlayers();
 -            }
@@ -13858,8 +13859,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
 -                this.resetWeatherCycle();
 -            }
 -        }
-+        if (region == null) this.tickSleep(); // Folia - region threading
- 
+-
 -        this.updateSkyBrightness();
 +        if (region == null) this.updateSkyBrightness(); // Folia - region threading
          this.tickTime();
@@ -14549,7 +14549,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
              blockList.updateList();
          }
          // CraftBukkit end
-@@ -2468,13 +2604,17 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2468,13 +2604,14 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      public void startTickingChunk(LevelChunk chunk) {
@@ -14562,16 +14562,13 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
 -            this.structureCheck.onStructureLoad(chunk.getPos(), chunk.getAllStarts());
 -        });
 +        // Folia start - region threading
-+        io.papermc.paper.threadedregions.RegionisedServer.getInstance().taskQueue.queueChunkTask(
-+            this, chunk.getPos().x, chunk.getPos().z, () -> {
-+                this.structureCheck.onStructureLoad(chunk.getPos(), chunk.getAllStarts());
-+            }
-+        );
++        // no longer needs to be on main
++        this.structureCheck.onStructureLoad(chunk.getPos(), chunk.getAllStarts());
 +        // Folia end - region threading
      }
  
      @Override
-@@ -2496,7 +2636,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2496,7 +2633,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          // Paper end - rewrite chunk system
      }
  
@@ -14580,7 +14577,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
          // Paper start - optimize is ticking ready type functions
          io.papermc.paper.chunk.system.scheduling.NewChunkHolder chunkHolder = this.chunkTaskScheduler.chunkHolderManager.getChunkHolder(chunkPos);
          // isTicking implies the chunk is loaded, and the chunk is loaded now implies the entities are loaded
-@@ -2544,16 +2684,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2544,16 +2681,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
          public void onCreated(Entity entity) {}
  
          public void onDestroyed(Entity entity) {
@@ -14600,7 +14597,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
              // Paper start - Reset pearls when they stop being ticked
              if (paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && entity instanceof net.minecraft.world.entity.projectile.ThrownEnderpearl pearl) {
                  pearl.cachedOwner = null;
-@@ -2581,7 +2721,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2581,7 +2718,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
@@ -14609,7 +14606,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
              }
  
              if (entity instanceof EnderDragon) {
-@@ -2592,7 +2732,9 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2592,7 +2729,9 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  for (int j = 0; j < i; ++j) {
                      EnderDragonPart entitycomplexpart = aentitycomplexpart[j];
  
@@ -14619,7 +14616,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
                  }
              }
  
-@@ -2666,7 +2808,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2666,7 +2805,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
@@ -14628,7 +14625,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..709bec58d81319fc73060dfa83626905
              }
  
              if (entity instanceof EnderDragon) {
-@@ -2677,13 +2819,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2677,13 +2816,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  for (int j = 0; j < i; ++j) {
                      EnderDragonPart entitycomplexpart = aentitycomplexpart[j];
  
@@ -19095,7 +19092,7 @@ index 3d377b9e461040405e0a7dcbd72d1506b48eb44e..782890e227ff9dab44dd92327979c201
          // CraftBukkit start
          this.addFreshEntityWithPassengers(entity, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT);
 diff --git a/src/main/java/net/minecraft/world/level/StructureManager.java b/src/main/java/net/minecraft/world/level/StructureManager.java
-index bad7031426ae6c750ae4376beb238186e7d65270..82c2389cfd42365632c6b05bbff2f2c7e4cb806b 100644
+index bad7031426ae6c750ae4376beb238186e7d65270..070d8fe9e016ad03be2c1fb5f22379f80ad3f155 100644
 --- a/src/main/java/net/minecraft/world/level/StructureManager.java
 +++ b/src/main/java/net/minecraft/world/level/StructureManager.java
 @@ -44,11 +44,8 @@ public class StructureManager {
@@ -19133,6 +19130,15 @@ index bad7031426ae6c750ae4376beb238186e7d65270..82c2389cfd42365632c6b05bbff2f2c7
              if (this.structureHasPieceAt(pos, structureStart)) {
                  return structureStart;
              }
+@@ -168,7 +161,7 @@ public class StructureManager {
+     }
+ 
+     public void addReference(StructureStart structureStart) {
+-        structureStart.addReference();
++        //structureStart.addReference(); // Folia - region threading - move to caller
+         this.structureCheck.incrementReference(structureStart.getChunkPos(), structureStart.getStructure());
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/level/block/Block.java b/src/main/java/net/minecraft/world/level/block/Block.java
 index 7b71073027f4cf79736546500ededdfbb83d968e..6c6b7b94e875dce36619461e3994b148148e7f8a 100644
 --- a/src/main/java/net/minecraft/world/level/block/Block.java
@@ -20059,7 +20065,7 @@ index 7a12a4da4864306ec6589ca81368e84718825047..e3ef5ccad7f8a8138b1372f419680409
      // Paper end
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/ChunkGenerator.java b/src/main/java/net/minecraft/world/level/chunk/ChunkGenerator.java
-index 7e9c388179c75a233d9b179ea1e00428ac65ee99..e5eb4ca68aafed44ab8cb1fb409f304c4776460a 100644
+index 7e9c388179c75a233d9b179ea1e00428ac65ee99..df83966cb2be368aaee95f3b8563e01ab807d816 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/ChunkGenerator.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/ChunkGenerator.java
 @@ -308,7 +308,7 @@ public abstract class ChunkGenerator {
@@ -20071,6 +20077,15 @@ index 7e9c388179c75a233d9b179ea1e00428ac65ee99..e5eb4ca68aafed44ab8cb1fb409f304c
  
                      structurestart = structureAccessor.getStartForStructure(SectionPos.bottomOf(ichunkaccess), (Structure) holder.value(), ichunkaccess);
                  } while (structurestart == null);
+@@ -319,7 +319,7 @@ public abstract class ChunkGenerator {
+     }
+ 
+     private static boolean tryAddReference(StructureManager structureAccessor, StructureStart start) {
+-        if (start.canBeReferenced()) {
++        if (start.tryReference()) { // Folia - region threading
+             structureAccessor.addReference(start);
+             return true;
+         } else {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 index e776eb8afef978938da084f9ae29d611181b43fe..d270f6b5937e167f18c3f358c99a9f6f3cde9c7a 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
@@ -20404,49 +20419,231 @@ index 1c3718d9244513d9fc795dceb564a81375734557..f445e1db1538fb9eda4b2f81f62748dc
                      while (iterator.hasNext()) {
                          Player entityhuman = (Player) iterator.next();
 diff --git a/src/main/java/net/minecraft/world/level/levelgen/structure/StructureCheck.java b/src/main/java/net/minecraft/world/level/levelgen/structure/StructureCheck.java
-index 4761aa772bc34dd66547dd4dd561c2e04c3229ad..7fb7083a2a437b1c14bf1e6e66cd09f2769dc433 100644
+index 4761aa772bc34dd66547dd4dd561c2e04c3229ad..ac4648773c9d6316db4915d515991219589fa473 100644
 --- a/src/main/java/net/minecraft/world/level/levelgen/structure/StructureCheck.java
 +++ b/src/main/java/net/minecraft/world/level/levelgen/structure/StructureCheck.java
-@@ -70,6 +70,7 @@ public class StructureCheck {
-     }
+@@ -51,8 +51,101 @@ public class StructureCheck {
+     private final BiomeSource biomeSource;
+     private final long seed;
+     private final DataFixer fixerUpper;
+-    private final Long2ObjectMap<Object2IntMap<Structure>> loadedChunks = new Long2ObjectOpenHashMap<>();
+-    private final Map<Structure, Long2BooleanMap> featureChecks = new HashMap<>();
++    // Foila start - synchronise this class
++    // additionally, make sure to purge entries from the maps so it does not leak memory
++    private static final int CHUNK_TOTAL_LIMIT = 50 * (2 * 100 + 1) * (2 * 100 + 1); // cache 50 structure lookups
++    private static final int PER_FEATURE_CHECK_LIMIT = 50 * (2 * 100 + 1) * (2 * 100 + 1); // cache 50 structure lookups
++
++    private final SynchronisedLong2ObjectMap<Object2IntMap<Structure>> loadedChunksSafe = new SynchronisedLong2ObjectMap<>(CHUNK_TOTAL_LIMIT);
++    private final java.util.concurrent.ConcurrentHashMap<Structure, SynchronisedLong2BooleanMap> featureChecksSafe = new java.util.concurrent.ConcurrentHashMap<>();
++
++    private static final class SynchronisedLong2ObjectMap<V> {
++        private final it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap<V> map = new it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap<>();
++        private final int limit;
++
++        public SynchronisedLong2ObjectMap(final int limit) {
++            this.limit = limit;
++        }
++
++        // must hold lock on map
++        private void purgeEntries() {
++            while (this.map.size() > this.limit) {
++                this.map.removeLast();
++            }
++        }
++
++        public V get(final long key) {
++            synchronized (this.map) {
++                return this.map.getAndMoveToFirst(key);
++            }
++        }
++
++        public V put(final long key, final V value) {
++            synchronized (this.map) {
++                final V ret = this.map.putAndMoveToFirst(key, value);
++                this.purgeEntries();
++                return ret;
++            }
++        }
++
++        public V compute(final long key, final java.util.function.BiFunction<? super Long, ? super V, ? extends V> remappingFunction) {
++            synchronized (this.map) {
++                // first, compute the value - if one is added, it will be at the last entry
++                this.map.compute(key, remappingFunction);
++                // move the entry to first, just in case it was added at last
++                final V ret = this.map.getAndMoveToFirst(key);
++                // now purge the last entries
++                this.purgeEntries();
++
++                return ret;
++            }
++        }
++    }
++
++    private static final class SynchronisedLong2BooleanMap {
++        private final it.unimi.dsi.fastutil.longs.Long2BooleanLinkedOpenHashMap map = new it.unimi.dsi.fastutil.longs.Long2BooleanLinkedOpenHashMap();
++        private final int limit;
++
++        public SynchronisedLong2BooleanMap(final int limit) {
++            this.limit = limit;
++        }
++
++        // must hold lock on map
++        private void purgeEntries() {
++            while (this.map.size() > this.limit) {
++                this.map.removeLastBoolean();
++            }
++        }
++
++        public boolean remove(final long key) {
++            synchronized (this.map) {
++                return this.map.remove(key);
++            }
++        }
++
++        // note:
++        public boolean getOrCompute(final long key, final it.unimi.dsi.fastutil.longs.Long2BooleanFunction ifAbsent) {
++            synchronized (this.map) {
++                if (this.map.containsKey(key)) {
++                    return this.map.getAndMoveToFirst(key);
++                }
++            }
++
++            final boolean put = ifAbsent.get(key);
++
++            synchronized (this.map) {
++                if (this.map.containsKey(key)) {
++                    return this.map.getAndMoveToFirst(key);
++                }
++                this.map.putAndMoveToFirst(key, put);
++
++                this.purgeEntries();
++
++                return put;
++            }
++        }
++    }
++    // Foila end - synchronise this class
+ 
+     public StructureCheck(ChunkScanAccess chunkIoWorker, RegistryAccess registryManager, StructureTemplateManager structureTemplateManager, ResourceKey<net.minecraft.world.level.dimension.LevelStem> worldKey, ChunkGenerator chunkGenerator, RandomState noiseConfig, LevelHeightAccessor world, BiomeSource biomeSource, long seed, DataFixer dataFixer) { // Paper - fix missing CB diff
+         this.storageAccess = chunkIoWorker;
+@@ -71,7 +164,7 @@ public class StructureCheck {
  
      public StructureCheckResult checkStart(ChunkPos pos, Structure type, boolean skipReferencedStructures) {
-+        if (true) return StructureCheckResult.CHUNK_LOAD_NEEDED; // Folia - region threading
          long l = pos.toLong();
-         Object2IntMap<Structure> object2IntMap = this.loadedChunks.get(l);
+-        Object2IntMap<Structure> object2IntMap = this.loadedChunks.get(l);
++        Object2IntMap<Structure> object2IntMap = this.loadedChunksSafe.get(l); // Folia - region threading
          if (object2IntMap != null) {
-@@ -95,6 +96,7 @@ public class StructureCheck {
- 
-     @Nullable
-     private StructureCheckResult tryLoadFromStorage(ChunkPos pos, Structure structure, boolean skipReferencedStructures, long posLong) {
-+        if (true) return StructureCheckResult.CHUNK_LOAD_NEEDED; // Folia - region threading
-         CollectFields collectFields = new CollectFields(new FieldSelector(IntTag.TYPE, "DataVersion"), new FieldSelector("Level", "Structures", CompoundTag.TYPE, "Starts"), new FieldSelector("structures", CompoundTag.TYPE, "starts"));
- 
-         try {
-@@ -182,6 +184,7 @@ public class StructureCheck {
-     }
- 
-     public void onStructureLoad(ChunkPos pos, Map<Structure, StructureStart> structureStarts) {
-+        if (true) return; // Folia - region threading
-         long l = pos.toLong();
-         Object2IntMap<Structure> object2IntMap = new Object2IntOpenHashMap<>();
-         structureStarts.forEach((start, structureStart) -> {
-@@ -194,6 +197,7 @@ public class StructureCheck {
+             return this.checkStructureInfo(object2IntMap, type, skipReferencedStructures);
+         } else {
+@@ -79,9 +172,9 @@ public class StructureCheck {
+             if (structureCheckResult != null) {
+                 return structureCheckResult;
+             } else {
+-                boolean bl = this.featureChecks.computeIfAbsent(type, (structure2) -> {
+-                    return new Long2BooleanOpenHashMap();
+-                }).computeIfAbsent(l, (chunkPos) -> {
++                boolean bl = this.featureChecksSafe.computeIfAbsent(type, (structure2) -> { // Folia - region threading
++                    return new SynchronisedLong2BooleanMap(PER_FEATURE_CHECK_LIMIT); // Folia - region threading
++                }).getOrCompute(l, (chunkPos) -> { // Folia - region threading
+                     return this.canCreateStructure(pos, type);
+                 });
+                 return !bl ? StructureCheckResult.START_NOT_PRESENT : StructureCheckResult.CHUNK_LOAD_NEEDED;
+@@ -194,17 +287,26 @@ public class StructureCheck {
      }
  
      private void storeFullResults(long pos, Object2IntMap<Structure> referencesByStructure) {
-+        if (true) return; // Folia - region threading
-         this.loadedChunks.put(pos, deduplicateEmptyMap(referencesByStructure));
-         this.featureChecks.values().forEach((generationPossibilityByChunkPos) -> {
-             generationPossibilityByChunkPos.remove(pos);
-@@ -201,6 +205,7 @@ public class StructureCheck {
+-        this.loadedChunks.put(pos, deduplicateEmptyMap(referencesByStructure));
+-        this.featureChecks.values().forEach((generationPossibilityByChunkPos) -> {
+-            generationPossibilityByChunkPos.remove(pos);
+-        });
++        // Folia start - region threading - make access mt-safe
++        this.loadedChunksSafe.put(pos, deduplicateEmptyMap(referencesByStructure));
++        // once we insert into loadedChunks, we don't really need to be very careful about removing everything
++        // from this map, as everything that checks this map uses loadedChunks first
++        // so, one way or another it's a race condition that doesn't matter
++        for (SynchronisedLong2BooleanMap value : this.featureChecksSafe.values()) {
++            value.remove(pos);
++        }
++        // Folia end - region threading - make access mt-safe
      }
  
      public void incrementReference(ChunkPos pos, Structure structure) {
-+        if (true) return; // Folia - region threading
-         this.loadedChunks.compute(pos.toLong(), (posx, referencesByStructure) -> {
-             if (referencesByStructure == null || referencesByStructure.isEmpty()) {
+-        this.loadedChunks.compute(pos.toLong(), (posx, referencesByStructure) -> {
+-            if (referencesByStructure == null || referencesByStructure.isEmpty()) {
++        this.loadedChunksSafe.compute(pos.toLong(), (posx, referencesByStructure) -> { // Folia start - region threading
++            // make this COW so that we do not mutate state that may be currently in use
++            if (referencesByStructure == null) {
                  referencesByStructure = new Object2IntOpenHashMap<>();
++            } else {
++                referencesByStructure = referencesByStructure instanceof Object2IntOpenHashMap<Structure> fastClone ? fastClone.clone() : new Object2IntOpenHashMap<>(referencesByStructure);
+             }
++            // Folia end - region threading
+ 
+             referencesByStructure.computeInt(structure, (feature, references) -> {
+                 return references == null ? 1 : references + 1;
+diff --git a/src/main/java/net/minecraft/world/level/levelgen/structure/StructureStart.java b/src/main/java/net/minecraft/world/level/levelgen/structure/StructureStart.java
+index 6570e0b61d7602c57c61398ddce50418d0719ff2..bcee13beed247f7830ee85d099c367dbfd1ea51d 100644
+--- a/src/main/java/net/minecraft/world/level/levelgen/structure/StructureStart.java
++++ b/src/main/java/net/minecraft/world/level/levelgen/structure/StructureStart.java
+@@ -26,14 +26,14 @@ public final class StructureStart {
+     private final Structure structure;
+     private final PiecesContainer pieceContainer;
+     private final ChunkPos chunkPos;
+-    private int references;
++    private final java.util.concurrent.atomic.AtomicInteger references; // Folia - region threading
+     @Nullable
+     private volatile BoundingBox cachedBoundingBox;
+ 
+     public StructureStart(Structure structure, ChunkPos pos, int references, PiecesContainer children) {
+         this.structure = structure;
+         this.chunkPos = pos;
+-        this.references = references;
++        this.references = new java.util.concurrent.atomic.AtomicInteger(references); // Folia - region threading
+         this.pieceContainer = children;
+     }
+ 
+@@ -101,7 +101,7 @@ public final class StructureStart {
+             compoundTag.putString("id", context.registryAccess().registryOrThrow(Registries.STRUCTURE).getKey(this.structure).toString());
+             compoundTag.putInt("ChunkX", chunkPos.x);
+             compoundTag.putInt("ChunkZ", chunkPos.z);
+-            compoundTag.putInt("references", this.references);
++            compoundTag.putInt("references", this.references.get()); // Folia - region threading
+             compoundTag.put("Children", this.pieceContainer.save(context));
+             return compoundTag;
+         } else {
+@@ -119,15 +119,29 @@ public final class StructureStart {
+     }
+ 
+     public boolean canBeReferenced() {
+-        return this.references < this.getMaxReferences();
++        throw new UnsupportedOperationException("Use tryReference()"); // Folia - region threading
+     }
+ 
++    // Folia start - region threading
++    public boolean tryReference() {
++        for (int curr = this.references.get();;) {
++            if (curr >= this.getMaxReferences()) {
++                return false;
++            }
++
++            if (curr == (curr = this.references.compareAndExchange(curr, curr + 1))) {
++                return true;
++            } // else: try again
++        }
++    }
++    // Folia end - region threading
++
+     public void addReference() {
+-        ++this.references;
++       throw new UnsupportedOperationException("Use tryReference()"); // Folia - region threading
+     }
+ 
+     public int getReferences() {
+-        return this.references;
++        return this.references.get(); // Folia - region threading
+     }
+ 
+     protected int getMaxReferences() {
 diff --git a/src/main/java/net/minecraft/world/level/portal/PortalForcer.java b/src/main/java/net/minecraft/world/level/portal/PortalForcer.java
 index 92d13c9f1ec1e5ff72c1d68f924a8d1c86c91565..3f224315f1e0a8f69e9d84d27fd7dbe45ea75667 100644
 --- a/src/main/java/net/minecraft/world/level/portal/PortalForcer.java
