@@ -1,0 +1,344 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Mon, 27 Feb 2023 08:12:03 -0800
+Subject: [PATCH] Make map data thread-safe to access
+
+We can just synchronise on all of the map data accesses, but
+this means we need to be careful about ensuring that no
+sync loads occur, otherwise we could block other threads for
+long periods of time.
+
+diff --git a/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java b/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java
+index 428523feaa4f30260e32ba03937e88200246c693..5722f1dd949c8ef59379bf4499ec2d77a40df847 100644
+--- a/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java
++++ b/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java
+@@ -290,8 +290,10 @@ public class ItemFrame extends HangingEntity {
+             MapItemSavedData worldmap = MapItem.getSavedData(i, this.level);
+ 
+             if (worldmap != null) {
++                synchronized (worldmap) { // Folia - make map data thread-safe
+                 worldmap.removedFromFrame(this.pos, this.getId());
+                 worldmap.setDirty(true);
++                } // Folia - make map data thread-safe
+             }
+ 
+         });
+diff --git a/src/main/java/net/minecraft/world/item/MapItem.java b/src/main/java/net/minecraft/world/item/MapItem.java
+index 586852e347cfeb6e52d16e51b3f193e814036e81..eacd5b6f649a59f845cc8d9d9373d41ed3757c97 100644
+--- a/src/main/java/net/minecraft/world/item/MapItem.java
++++ b/src/main/java/net/minecraft/world/item/MapItem.java
+@@ -103,6 +103,7 @@ public class MapItem extends ComplexItem {
+     }
+ 
+     public void update(Level world, Entity entity, MapItemSavedData state) {
++        synchronized (state) { // Folia - make map data thread-safe
+         if (world.dimension() == state.dimension && entity instanceof Player) {
+             int i = 1 << state.scale;
+             int j = state.centerX;
+@@ -134,9 +135,9 @@ public class MapItem extends ComplexItem {
+                             int j2 = (j / i + k1 - 64) * i;
+                             int k2 = (k / i + l1 - 64) * i;
+                             Multiset<MaterialColor> multiset = LinkedHashMultiset.create();
+-                            LevelChunk chunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(j2), SectionPos.blockToSectionCoord(k2)); // Paper - Maps shouldn't load chunks
++                            LevelChunk chunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(j2), SectionPos.blockToSectionCoord(k2)); // Paper - Maps shouldn't load chunks // Folia - super important this remains true
+ 
+-                            if (chunk != null && !chunk.isEmpty()) { // Paper - Maps shouldn't load chunks
++                            if (chunk != null && !chunk.isEmpty() && io.papermc.paper.util.TickThread.isTickThreadFor((ServerLevel)world, chunk.getPos())) { // Paper - Maps shouldn't load chunks // Folia - make sure chunk is owned
+                                 int l2 = 0;
+                                 double d1 = 0.0D;
+                                 int i3;
+@@ -227,6 +228,7 @@ public class MapItem extends ComplexItem {
+             }
+ 
+         }
++        } // Folia - make map data thread-safe
+     }
+ 
+     private BlockState getCorrectStateForFluidBlock(Level world, BlockState state, BlockPos pos) {
+@@ -243,6 +245,7 @@ public class MapItem extends ComplexItem {
+         MapItemSavedData worldmap = MapItem.getSavedData(map, world);
+ 
+         if (worldmap != null) {
++            synchronized (worldmap) { // Folia - make map data thread-safe
+             if (world.dimension() == worldmap.dimension) {
+                 int i = 1 << worldmap.scale;
+                 int j = worldmap.centerX;
+@@ -317,6 +320,7 @@ public class MapItem extends ComplexItem {
+                 }
+ 
+             }
++            } // Folia - make map data thread-safe
+         }
+     }
+ 
+@@ -326,6 +330,7 @@ public class MapItem extends ComplexItem {
+             MapItemSavedData worldmap = MapItem.getSavedData(stack, world);
+ 
+             if (worldmap != null) {
++                synchronized (worldmap) { // Folia - region threading
+                 if (entity instanceof Player) {
+                     Player entityhuman = (Player) entity;
+ 
+@@ -335,6 +340,7 @@ public class MapItem extends ComplexItem {
+                 if (!worldmap.locked && (selected || entity instanceof Player && ((Player) entity).getOffhandItem() == stack)) {
+                     this.update(world, entity, worldmap);
+                 }
++                } // Folia - region threading
+ 
+             }
+         }
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+index c8cdcf40e45f5c6270f9b124f0333643266e2858..b370ba924b03cc0a36666ee6ed26be06a6affaa7 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+@@ -10,7 +10,7 @@ import org.slf4j.Logger;
+ 
+ public abstract class SavedData {
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    private boolean dirty;
++    private volatile boolean dirty; // Folia - make map data thread-safe
+ 
+     public abstract CompoundTag save(CompoundTag nbt);
+ 
+@@ -28,6 +28,7 @@ public abstract class SavedData {
+ 
+     public void save(File file) {
+         if (this.isDirty()) {
++            this.setDirty(false); // Folia - make map data thread-safe - move before save, so that any changes after are not lost
+             CompoundTag compoundTag = new CompoundTag();
+             compoundTag.put("data", this.save(new CompoundTag()));
+             compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+@@ -38,7 +39,7 @@ public abstract class SavedData {
+                 LOGGER.error("Could not save data {}", this, var4);
+             }
+ 
+-            this.setDirty(false);
++            // Folia - make map data thread-safe - move before save, so that any changes after are not lost
+         }
+     }
+ }
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
+index 9b2948b5150c8f039ca667a50765109721b93947..1b76e4edce628f2b25815e28cd4cb7504a83a00f 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
+@@ -27,17 +27,21 @@ public class MapIndex extends SavedData {
+ 
+     @Override
+     public CompoundTag save(CompoundTag nbt) {
++        synchronized (this.usedAuxIds) { // Folia - make map data thread-safe
+         for(Object2IntMap.Entry<String> entry : this.usedAuxIds.object2IntEntrySet()) {
+             nbt.putInt(entry.getKey(), entry.getIntValue());
+         }
++        } // Folia - make map data thread-safe
+ 
+         return nbt;
+     }
+ 
+     public int getFreeAuxValueForMap() {
++        synchronized (this.usedAuxIds) { // Folia - make map data thread-safe
+         int i = this.usedAuxIds.getInt("map") + 1;
+         this.usedAuxIds.put("map", i);
+         this.setDirty();
+         return i;
++        } // Folia - make map data thread-safe
+     }
+ }
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+index 9df7c7e44e9a75187bd1e3e8f7e6bc5d385b0733..5121569f389ee4a50273432a9a272a936542fa12 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+@@ -185,7 +185,7 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     @Override
+-    public CompoundTag save(CompoundTag nbt) {
++    public synchronized CompoundTag save(CompoundTag nbt) { // Folia - make map data thread-safe
+         DataResult<Tag> dataresult = ResourceLocation.CODEC.encodeStart(NbtOps.INSTANCE, this.dimension.location()); // CraftBukkit - decompile error
+         Logger logger = MapItemSavedData.LOGGER;
+ 
+@@ -242,7 +242,7 @@ public class MapItemSavedData extends SavedData {
+         return nbt;
+     }
+ 
+-    public MapItemSavedData locked() {
++    public synchronized MapItemSavedData locked() { // Folia - make map data thread-safe
+         MapItemSavedData worldmap = new MapItemSavedData(this.centerX, this.centerZ, this.scale, this.trackingPosition, this.unlimitedTracking, true, this.dimension);
+ 
+         worldmap.bannerMarkers.putAll(this.bannerMarkers);
+@@ -253,11 +253,12 @@ public class MapItemSavedData extends SavedData {
+         return worldmap;
+     }
+ 
+-    public MapItemSavedData scaled(int zoomOutScale) {
++    public synchronized MapItemSavedData scaled(int zoomOutScale) { // Folia - make map data thread-safe
+         return MapItemSavedData.createFresh((double) this.centerX, (double) this.centerZ, (byte) Mth.clamp(this.scale + zoomOutScale, (int) 0, (int) 4), this.trackingPosition, this.unlimitedTracking, this.dimension);
+     }
+ 
+-    public void tickCarriedBy(Player player, ItemStack stack) {
++    public synchronized void tickCarriedBy(Player player, ItemStack stack) { // Folia - make map data thread-safe
++        io.papermc.paper.util.TickThread.ensureTickThread(player, "Ticking map player in incorrect region"); // Folia - region threading
+         if (!this.carriedByPlayers.containsKey(player)) {
+             MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = new MapItemSavedData.HoldingPlayer(player);
+ 
+@@ -427,14 +428,14 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     @Nullable
+-    public Packet<?> getUpdatePacket(int id, Player player) {
++    public synchronized Packet<?> getUpdatePacket(int id, Player player) { // Folia - make map data thread-safe
+         MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = (MapItemSavedData.HoldingPlayer) this.carriedByPlayers.get(player);
+ 
+         return worldmap_worldmaphumantracker == null ? null : worldmap_worldmaphumantracker.nextUpdatePacket(id);
+     }
+ 
+-    public void setColorsDirty(int x, int z) {
+-        this.setDirty();
++    public synchronized void setColorsDirty(int x, int z) { // Folia - make map data thread-safe
++        // Folia - make dirty only after updating data - moved down
+         Iterator iterator = this.carriedBy.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -442,15 +443,16 @@ public class MapItemSavedData extends SavedData {
+ 
+             worldmap_worldmaphumantracker.markColorsDirty(x, z);
+         }
+-
++        this.setDirty(); // Folia - make dirty only after updating data - moved from above
+     }
+ 
+-    public void setDecorationsDirty() {
+-        this.setDirty();
++    public synchronized void setDecorationsDirty() { // Folia - make map data thread-safe
++        // Folia - make dirty only after updating data - moved down
+         this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
++        this.setDirty(); // Folia - make dirty only after updating data - moved from above
+     }
+ 
+-    public MapItemSavedData.HoldingPlayer getHoldingPlayer(Player player) {
++    public synchronized MapItemSavedData.HoldingPlayer getHoldingPlayer(Player player) { // Folia - make map data thread-safe
+         MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = (MapItemSavedData.HoldingPlayer) this.carriedByPlayers.get(player);
+ 
+         if (worldmap_worldmaphumantracker == null) {
+@@ -462,7 +464,7 @@ public class MapItemSavedData extends SavedData {
+         return worldmap_worldmaphumantracker;
+     }
+ 
+-    public boolean toggleBanner(LevelAccessor world, BlockPos pos) {
++    public synchronized boolean toggleBanner(LevelAccessor world, BlockPos pos) { // Folia - make map data thread-safe
+         double d0 = (double) pos.getX() + 0.5D;
+         double d1 = (double) pos.getZ() + 0.5D;
+         int i = 1 << this.scale;
+@@ -471,7 +473,7 @@ public class MapItemSavedData extends SavedData {
+         boolean flag = true;
+ 
+         if (d2 >= -63.0D && d3 >= -63.0D && d2 <= 63.0D && d3 <= 63.0D) {
+-            MapBanner mapiconbanner = MapBanner.fromWorld(world, pos);
++            MapBanner mapiconbanner = world.getChunkIfLoadedImmediately(pos.getX() >> 4, pos.getZ() >> 4) == null || !io.papermc.paper.util.TickThread.isTickThreadFor(world.getMinecraftWorld(), pos) ? null : MapBanner.fromWorld(world, pos); // Folia - make map data thread-safe - don't sync load or read data we do not own
+ 
+             if (mapiconbanner == null) {
+                 return false;
+@@ -492,7 +494,7 @@ public class MapItemSavedData extends SavedData {
+         return false;
+     }
+ 
+-    public void checkBanners(BlockGetter world, int x, int z) {
++    public synchronized void checkBanners(BlockGetter world, int x, int z) { // Folia - make map data thread-safe
+         Iterator iterator = this.bannerMarkers.values().iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -514,12 +516,12 @@ public class MapItemSavedData extends SavedData {
+         return this.bannerMarkers.values();
+     }
+ 
+-    public void removedFromFrame(BlockPos pos, int id) {
++    public synchronized void removedFromFrame(BlockPos pos, int id) { // Folia - make map data thread-safe
+         this.removeDecoration("frame-" + id);
+         this.frameMarkers.remove(MapFrame.frameId(pos));
+     }
+ 
+-    public boolean updateColor(int x, int z, byte color) {
++    public synchronized boolean updateColor(int x, int z, byte color) { // Folia - make map data thread-safe
+         byte b1 = this.colors[x + z * 128];
+ 
+         if (b1 != color) {
+@@ -530,12 +532,12 @@ public class MapItemSavedData extends SavedData {
+         }
+     }
+ 
+-    public void setColor(int x, int z, byte color) {
++    public synchronized void setColor(int x, int z, byte color) { // Folia - make map data thread-safe
+         this.colors[x + z * 128] = color;
+         this.setColorsDirty(x, z);
+     }
+ 
+-    public boolean isExplorationMap() {
++    public synchronized boolean isExplorationMap() { // Folia - make map data thread-safe
+         Iterator iterator = this.decorations.values().iterator();
+ 
+         MapDecoration mapicon;
+@@ -570,7 +572,7 @@ public class MapItemSavedData extends SavedData {
+         return this.decorations.values();
+     }
+ 
+-    public boolean isTrackedCountOverLimit(int iconCount) {
++    public synchronized boolean isTrackedCountOverLimit(int iconCount) { // Folia - make map data thread-safe
+         return this.trackedDecorationCount >= iconCount;
+     }
+ 
+@@ -696,11 +698,13 @@ public class MapItemSavedData extends SavedData {
+         }
+ 
+         public void applyToMap(MapItemSavedData mapState) {
++            synchronized (mapState) { // Folia - make map data thread-safe
+             for (int i = 0; i < this.width; ++i) {
+                 for (int j = 0; j < this.height; ++j) {
+                     mapState.setColor(this.startX + i, this.startY + j, this.mapColors[i + j * this.width]);
+                 }
+             }
++            } // Folia - make map data thread-safe
+ 
+         }
+     }
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index 2da78bc43af715fe399eac1d83b3bf6e8fb8afac..433a9302f496a297172c02f3fe0404174cc7a8f1 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -36,6 +36,7 @@ public class DimensionDataStorage {
+     }
+ 
+     public <T extends SavedData> T computeIfAbsent(Function<CompoundTag, T> readFunction, Supplier<T> supplier, String id) {
++        synchronized (this.cache) { // Folia - make map data thread-safe
+         T savedData = this.get(readFunction, id);
+         if (savedData != null) {
+             return savedData;
+@@ -44,10 +45,12 @@ public class DimensionDataStorage {
+             this.set(id, savedData2);
+             return savedData2;
+         }
++        } // Folia - make map data thread-safe
+     }
+ 
+     @Nullable
+     public <T extends SavedData> T get(Function<CompoundTag, T> readFunction, String id) {
++        synchronized (this.cache) { // Folia - make map data thread-safe
+         SavedData savedData = this.cache.get(id);
+         if (savedData == null && !this.cache.containsKey(id)) {
+             savedData = this.readSavedData(readFunction, id);
+@@ -55,6 +58,7 @@ public class DimensionDataStorage {
+         }
+ 
+         return (T)savedData;
++        } // Folia - make map data thread-safe
+     }
+ 
+     @Nullable
+@@ -73,7 +77,9 @@ public class DimensionDataStorage {
+     }
+ 
+     public void set(String id, SavedData state) {
++        synchronized (this.cache) { // Folia - make map data thread-safe
+         this.cache.put(id, state);
++        } // Folia - make map data thread-safe
+     }
+ 
+     public CompoundTag readTagFromDisk(String id, int dataVersion) throws IOException {
