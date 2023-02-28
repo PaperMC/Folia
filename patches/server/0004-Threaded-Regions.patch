@@ -4078,10 +4078,10 @@ index 0000000000000000000000000000000000000000..3549e5f3359f38b207e189d895954420
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionisedServer.java b/src/main/java/io/papermc/paper/threadedregions/RegionisedServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..16b51ae5bec72f6c85adca3a350f654754990ad0
+index 0000000000000000000000000000000000000000..269c051e20cd07e692c624a873e4ee2b5ae5589a
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionisedServer.java
-@@ -0,0 +1,359 @@
+@@ -0,0 +1,366 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -4403,6 +4403,9 @@ index 0000000000000000000000000000000000000000..16b51ae5bec72f6c85adca3a350f6547
 +        // sleep status
 +        this.checkNightSkip(world);
 +
++        // update raids
++        this.updateRaids(world);
++
 +        // sky brightness
 +        this.updateSkyBrightness(world);
 +
@@ -4410,6 +4413,10 @@ index 0000000000000000000000000000000000000000..16b51ae5bec72f6c85adca3a350f6547
 +        this.tickTime(world, tickCount);
 +
 +        world.updateTickData();
++    }
++
++    private void updateRaids(final ServerLevel world) {
++        world.getRaids().globalTick();
 +    }
 +
 +    private void checkNightSkip(final ServerLevel world) {
@@ -13474,7 +13481,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..06ad3857f04ec073ae753b6569c5ae2c
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..c05c5fca6aaec891519435a45a39b355fe8369c6 100644
+index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..61fd4eea649fab254b3b2c0f160257e01d0873ed 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -192,35 +192,34 @@ public class ServerLevel extends Level implements WorldGenLevel {
@@ -13809,7 +13816,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..c05c5fca6aaec891519435a45a39b355
      public void setWeatherParameters(int clearDuration, int rainDuration, boolean raining, boolean thundering) {
          this.serverLevelData.setClearWeatherTime(clearDuration);
          this.serverLevelData.setRainTime(rainDuration);
-@@ -666,62 +664,38 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -666,55 +664,31 @@ public class ServerLevel extends Level implements WorldGenLevel {
          return this.structureManager;
      }
  
@@ -13877,14 +13884,6 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..c05c5fca6aaec891519435a45a39b355
              gameprofilerfiller.pop();
          }
          timings.scheduledBlocks.stopTiming(); // Paper
- 
-         gameprofilerfiller.popPush("raid");
-         this.timings.raids.startTiming(); // Paper - timings
--        this.raids.tick();
-+        if (region == null) this.raids.tick(); // Folia - region threading - TODO fucking RAIDS
-         this.timings.raids.stopTiming(); // Paper - timings
-         gameprofilerfiller.popPush("chunkSource");
-         this.timings.chunkProviderTick.startTiming(); // Paper - timings
 @@ -731,7 +705,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          timings.doSounds.startTiming(); // Spigot
          this.runBlockEvents();
@@ -17717,6 +17716,21 @@ index 25503678e7d049a8b3172cfad8a5606958c32302..13d60258c6c491a7d0ba5cc93934f0c9
      }
  
      private static class TurtleMoveControl extends MoveControl {
+diff --git a/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java b/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java
+index 428523feaa4f30260e32ba03937e88200246c693..5722f1dd949c8ef59379bf4499ec2d77a40df847 100644
+--- a/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java
++++ b/src/main/java/net/minecraft/world/entity/decoration/ItemFrame.java
+@@ -290,8 +290,10 @@ public class ItemFrame extends HangingEntity {
+             MapItemSavedData worldmap = MapItem.getSavedData(i, this.level);
+ 
+             if (worldmap != null) {
++                synchronized (worldmap) { // Folia - make map data thread-safe
+                 worldmap.removedFromFrame(this.pos, this.getId());
+                 worldmap.setDirty(true);
++                } // Folia - make map data thread-safe
+             }
+ 
+         });
 diff --git a/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java b/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java
 index eacb8a407fe99af2c13f23c12b5544696bda8890..723d5f44c59a8073040669549d9cab88b45e9a3e 100644
 --- a/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java
@@ -18306,10 +18320,32 @@ index f224ebbc0efefddede43d87f0300c014077b9931..2627610b77e779722bb33eeb1096d862
      @Override
      public Entity changeDimension(ServerLevel destination) {
 diff --git a/src/main/java/net/minecraft/world/entity/raid/Raid.java b/src/main/java/net/minecraft/world/entity/raid/Raid.java
-index 08b18428e867baf14f551beb72e3875b0c420639..7ee273a8a7fa72fcdea925be5fa0dd626dc54b71 100644
+index 08b18428e867baf14f551beb72e3875b0c420639..8a082a24f4aba759826f56aa13d4095ef6914d13 100644
 --- a/src/main/java/net/minecraft/world/entity/raid/Raid.java
 +++ b/src/main/java/net/minecraft/world/entity/raid/Raid.java
-@@ -527,7 +527,7 @@ public class Raid {
+@@ -108,6 +108,12 @@ public class Raid {
+     private int celebrationTicks;
+     private Optional<BlockPos> waveSpawnPos;
+ 
++    // Folia start - make raids thread-safe
++    public boolean ownsRaid() {
++        return io.papermc.paper.util.TickThread.isTickThreadFor(this.level, this.getCenter().getX() >> 4, this.getCenter().getZ() >> 4, 8);
++    }
++    // Folia end - make raids thread-safe
++
+     public Raid(int id, ServerLevel world, BlockPos pos) {
+         this.raidEvent = new ServerBossEvent(Raid.RAID_NAME_COMPONENT, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
+         this.random = RandomSource.create();
+@@ -213,7 +219,7 @@ public class Raid {
+         return (entityplayer) -> {
+             BlockPos blockposition = entityplayer.blockPosition();
+ 
+-            return entityplayer.isAlive() && this.level.getRaidAt(blockposition) == this;
++            return io.papermc.paper.util.TickThread.isTickThreadFor(entityplayer) && entityplayer.isAlive() && this.level.getRaidAt(blockposition) == this; // Folia - make raids thread-safe
+         };
+     }
+ 
+@@ -527,7 +533,7 @@ public class Raid {
          boolean flag = true;
          Collection<ServerPlayer> collection = this.raidEvent.getPlayers();
          long i = this.random.nextLong();
@@ -18331,6 +18367,125 @@ index e5ccbaf72f29731f1d1aa939b9297b644a408cd4..1792655d2f0357b388b3c83886cac4bc
                          Raid raid1 = ((ServerLevel) this.level).getRaidAt(this.blockPosition());
  
                          if (raid1 != null && Raids.canJoinRaid(this, raid1)) {
+diff --git a/src/main/java/net/minecraft/world/entity/raid/Raids.java b/src/main/java/net/minecraft/world/entity/raid/Raids.java
+index feb89eb69994bdd1d2f95d2b9992e69251b2bee7..d85dbc87e23ae34a8e3345dc72147979e280a5d3 100644
+--- a/src/main/java/net/minecraft/world/entity/raid/Raids.java
++++ b/src/main/java/net/minecraft/world/entity/raid/Raids.java
+@@ -28,14 +28,14 @@ import net.minecraft.world.phys.Vec3;
+ public class Raids extends SavedData {
+ 
+     private static final String RAID_FILE_ID = "raids";
+-    public final Map<Integer, Raid> raidMap = Maps.newHashMap();
++    public final Map<Integer, Raid> raidMap = new java.util.concurrent.ConcurrentHashMap<>(); // Folia - make raids thread-safe
+     private final ServerLevel level;
+-    private int nextAvailableID;
++    private final java.util.concurrent.atomic.AtomicInteger nextAvailableID = new java.util.concurrent.atomic.AtomicInteger(); // Folia - make raids thread-safe
+     private int tick;
+ 
+     public Raids(ServerLevel world) {
+         this.level = world;
+-        this.nextAvailableID = 1;
++        this.nextAvailableID.set(1); // Folia - make raids thread-safe
+         this.setDirty();
+     }
+ 
+@@ -43,12 +43,26 @@ public class Raids extends SavedData {
+         return (Raid) this.raidMap.get(id);
+     }
+ 
+-    public void tick() {
++    // Folia start - make raids thread-safe
++    public void globalTick() {
+         ++this.tick;
++        if (this.tick % 200 == 0) {
++            this.setDirty();
++        }
++    }
++    // Folia end - make raids thread-safe
++
++    public void tick() {
++        // Folia - make raids thread-safe - move to globalTick()
+         Iterator iterator = this.raidMap.values().iterator();
+ 
+         while (iterator.hasNext()) {
+             Raid raid = (Raid) iterator.next();
++            // Folia start - make raids thread-safe
++            if (!raid.ownsRaid()) {
++                continue;
++            }
++            // Folia end - make raids thread-safe
+ 
+             if (this.level.getGameRules().getBoolean(GameRules.RULE_DISABLE_RAIDS)) {
+                 raid.stop();
+@@ -62,14 +76,17 @@ public class Raids extends SavedData {
+             }
+         }
+ 
+-        if (this.tick % 200 == 0) {
+-            this.setDirty();
+-        }
++        // Folia - make raids thread-safe - move to globalTick()
+ 
+         DebugPackets.sendRaids(this.level, this.raidMap.values());
+     }
+ 
+     public static boolean canJoinRaid(Raider raider, Raid raid) {
++        // Folia start - make raids thread-safe
++        if (!raid.ownsRaid()) {
++            return false;
++        }
++        // Folia end - make raids thread-safe
+         return raider != null && raid != null && raid.getLevel() != null ? raider.isAlive() && raider.canJoinRaid() && raider.getNoActionTime() <= 2400 && raider.level.dimensionType() == raid.getLevel().dimensionType() : false;
+     }
+ 
+@@ -82,7 +99,7 @@ public class Raids extends SavedData {
+         } else {
+             DimensionType dimensionmanager = player.level.dimensionType();
+ 
+-            if (!dimensionmanager.hasRaids()) {
++            if (!dimensionmanager.hasRaids() || !io.papermc.paper.util.TickThread.isTickThreadFor(this.level, player.chunkPosition().x, player.chunkPosition().z, 8)) { // Folia - region threading
+                 return null;
+             } else {
+                 BlockPos blockposition = player.blockPosition();
+@@ -162,7 +179,7 @@ public class Raids extends SavedData {
+     public static Raids load(ServerLevel world, CompoundTag nbt) {
+         Raids persistentraid = new Raids(world);
+ 
+-        persistentraid.nextAvailableID = nbt.getInt("NextAvailableID");
++        persistentraid.nextAvailableID.set(nbt.getInt("NextAvailableID")); // Folia - make raids thread-safe
+         persistentraid.tick = nbt.getInt("Tick");
+         ListTag nbttaglist = nbt.getList("Raids", 10);
+ 
+@@ -178,7 +195,7 @@ public class Raids extends SavedData {
+ 
+     @Override
+     public CompoundTag save(CompoundTag nbt) {
+-        nbt.putInt("NextAvailableID", this.nextAvailableID);
++        nbt.putInt("NextAvailableID", this.nextAvailableID.get()); // Folia - make raids thread-safe
+         nbt.putInt("Tick", this.tick);
+         ListTag nbttaglist = new ListTag();
+         Iterator iterator = this.raidMap.values().iterator();
+@@ -200,7 +217,7 @@ public class Raids extends SavedData {
+     }
+ 
+     private int getUniqueId() {
+-        return ++this.nextAvailableID;
++        return this.nextAvailableID.incrementAndGet(); // Folia - make raids thread-safe
+     }
+ 
+     @Nullable
+@@ -211,6 +228,11 @@ public class Raids extends SavedData {
+ 
+         while (iterator.hasNext()) {
+             Raid raid1 = (Raid) iterator.next();
++            // Folia start - make raids thread-safe
++            if (!io.papermc.paper.util.TickThread.isTickThreadFor(this.level, raid1.getCenter())) {
++                continue;
++            }
++            // Folia end - make raids thread-safe
+             double d1 = raid1.getCenter().distSqr(pos);
+ 
+             if (raid1.isActive() && d1 < d0) {
 diff --git a/src/main/java/net/minecraft/world/entity/vehicle/MinecartHopper.java b/src/main/java/net/minecraft/world/entity/vehicle/MinecartHopper.java
 index 70f1916185b79bbb9f033f4ef8119d7b17a13ef8..54d55e8827f4ab286fca722f199aac42cddab8d2 100644
 --- a/src/main/java/net/minecraft/world/entity/vehicle/MinecartHopper.java
@@ -18458,6 +18613,70 @@ index 6860096cb8c0deecc9c1d87543d1128fb95fd2d4..00cc67322d7de29c30b54aa7da62cc44
              // CraftBukkit end
  
              return enuminteractionresult;
+diff --git a/src/main/java/net/minecraft/world/item/MapItem.java b/src/main/java/net/minecraft/world/item/MapItem.java
+index 586852e347cfeb6e52d16e51b3f193e814036e81..eacd5b6f649a59f845cc8d9d9373d41ed3757c97 100644
+--- a/src/main/java/net/minecraft/world/item/MapItem.java
++++ b/src/main/java/net/minecraft/world/item/MapItem.java
+@@ -103,6 +103,7 @@ public class MapItem extends ComplexItem {
+     }
+ 
+     public void update(Level world, Entity entity, MapItemSavedData state) {
++        synchronized (state) { // Folia - make map data thread-safe
+         if (world.dimension() == state.dimension && entity instanceof Player) {
+             int i = 1 << state.scale;
+             int j = state.centerX;
+@@ -134,9 +135,9 @@ public class MapItem extends ComplexItem {
+                             int j2 = (j / i + k1 - 64) * i;
+                             int k2 = (k / i + l1 - 64) * i;
+                             Multiset<MaterialColor> multiset = LinkedHashMultiset.create();
+-                            LevelChunk chunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(j2), SectionPos.blockToSectionCoord(k2)); // Paper - Maps shouldn't load chunks
++                            LevelChunk chunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(j2), SectionPos.blockToSectionCoord(k2)); // Paper - Maps shouldn't load chunks // Folia - super important this remains true
+ 
+-                            if (chunk != null && !chunk.isEmpty()) { // Paper - Maps shouldn't load chunks
++                            if (chunk != null && !chunk.isEmpty() && io.papermc.paper.util.TickThread.isTickThreadFor((ServerLevel)world, chunk.getPos())) { // Paper - Maps shouldn't load chunks // Folia - make sure chunk is owned
+                                 int l2 = 0;
+                                 double d1 = 0.0D;
+                                 int i3;
+@@ -227,6 +228,7 @@ public class MapItem extends ComplexItem {
+             }
+ 
+         }
++        } // Folia - make map data thread-safe
+     }
+ 
+     private BlockState getCorrectStateForFluidBlock(Level world, BlockState state, BlockPos pos) {
+@@ -243,6 +245,7 @@ public class MapItem extends ComplexItem {
+         MapItemSavedData worldmap = MapItem.getSavedData(map, world);
+ 
+         if (worldmap != null) {
++            synchronized (worldmap) { // Folia - make map data thread-safe
+             if (world.dimension() == worldmap.dimension) {
+                 int i = 1 << worldmap.scale;
+                 int j = worldmap.centerX;
+@@ -317,6 +320,7 @@ public class MapItem extends ComplexItem {
+                 }
+ 
+             }
++            } // Folia - make map data thread-safe
+         }
+     }
+ 
+@@ -326,6 +330,7 @@ public class MapItem extends ComplexItem {
+             MapItemSavedData worldmap = MapItem.getSavedData(stack, world);
+ 
+             if (worldmap != null) {
++                synchronized (worldmap) { // Folia - region threading
+                 if (entity instanceof Player) {
+                     Player entityhuman = (Player) entity;
+ 
+@@ -335,6 +340,7 @@ public class MapItem extends ComplexItem {
+                 if (!worldmap.locked && (selected || entity instanceof Player && ((Player) entity).getOffhandItem() == stack)) {
+                     this.update(world, entity, worldmap);
+                 }
++                } // Folia - region threading
+ 
+             }
+         }
 diff --git a/src/main/java/net/minecraft/world/item/MinecartItem.java b/src/main/java/net/minecraft/world/item/MinecartItem.java
 index c6d2f764efa9b8bec730bbe757d480e365b25ccc..af9313a3b3aaa0af4f2a2f4fb2424dc3e9140d9c 100644
 --- a/src/main/java/net/minecraft/world/item/MinecartItem.java
@@ -20737,11 +20956,100 @@ index b1c594dc6a6b8a6c737b99272acab9e7dbd0ed63..7c1768452fa0f7278ccc84470ef0965a
          boolean bl = this.count > 0;
          boolean bl2 = this.maxChainedNeighborUpdates >= 0 && this.count >= this.maxChainedNeighborUpdates;
          ++this.count;
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+index c8cdcf40e45f5c6270f9b124f0333643266e2858..b370ba924b03cc0a36666ee6ed26be06a6affaa7 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+@@ -10,7 +10,7 @@ import org.slf4j.Logger;
+ 
+ public abstract class SavedData {
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    private boolean dirty;
++    private volatile boolean dirty; // Folia - make map data thread-safe
+ 
+     public abstract CompoundTag save(CompoundTag nbt);
+ 
+@@ -28,6 +28,7 @@ public abstract class SavedData {
+ 
+     public void save(File file) {
+         if (this.isDirty()) {
++            this.setDirty(false); // Folia - make map data thread-safe - move before save, so that any changes after are not lost
+             CompoundTag compoundTag = new CompoundTag();
+             compoundTag.put("data", this.save(new CompoundTag()));
+             compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+@@ -38,7 +39,7 @@ public abstract class SavedData {
+                 LOGGER.error("Could not save data {}", this, var4);
+             }
+ 
+-            this.setDirty(false);
++            // Folia - make map data thread-safe - move before save, so that any changes after are not lost
+         }
+     }
+ }
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
+index 9b2948b5150c8f039ca667a50765109721b93947..1b76e4edce628f2b25815e28cd4cb7504a83a00f 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
+@@ -27,17 +27,21 @@ public class MapIndex extends SavedData {
+ 
+     @Override
+     public CompoundTag save(CompoundTag nbt) {
++        synchronized (this.usedAuxIds) { // Folia - make map data thread-safe
+         for(Object2IntMap.Entry<String> entry : this.usedAuxIds.object2IntEntrySet()) {
+             nbt.putInt(entry.getKey(), entry.getIntValue());
+         }
++        } // Folia - make map data thread-safe
+ 
+         return nbt;
+     }
+ 
+     public int getFreeAuxValueForMap() {
++        synchronized (this.usedAuxIds) { // Folia - make map data thread-safe
+         int i = this.usedAuxIds.getInt("map") + 1;
+         this.usedAuxIds.put("map", i);
+         this.setDirty();
+         return i;
++        } // Folia - make map data thread-safe
+     }
+ }
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index b2845ed8d28627178589da3d2224cd9edd29c31e..9df7c7e44e9a75187bd1e3e8f7e6bc5d385b0733 100644
+index b2845ed8d28627178589da3d2224cd9edd29c31e..5121569f389ee4a50273432a9a272a936542fa12 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-@@ -368,7 +368,7 @@ public class MapItemSavedData extends SavedData {
+@@ -185,7 +185,7 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     @Override
+-    public CompoundTag save(CompoundTag nbt) {
++    public synchronized CompoundTag save(CompoundTag nbt) { // Folia - make map data thread-safe
+         DataResult<Tag> dataresult = ResourceLocation.CODEC.encodeStart(NbtOps.INSTANCE, this.dimension.location()); // CraftBukkit - decompile error
+         Logger logger = MapItemSavedData.LOGGER;
+ 
+@@ -242,7 +242,7 @@ public class MapItemSavedData extends SavedData {
+         return nbt;
+     }
+ 
+-    public MapItemSavedData locked() {
++    public synchronized MapItemSavedData locked() { // Folia - make map data thread-safe
+         MapItemSavedData worldmap = new MapItemSavedData(this.centerX, this.centerZ, this.scale, this.trackingPosition, this.unlimitedTracking, true, this.dimension);
+ 
+         worldmap.bannerMarkers.putAll(this.bannerMarkers);
+@@ -253,11 +253,12 @@ public class MapItemSavedData extends SavedData {
+         return worldmap;
+     }
+ 
+-    public MapItemSavedData scaled(int zoomOutScale) {
++    public synchronized MapItemSavedData scaled(int zoomOutScale) { // Folia - make map data thread-safe
+         return MapItemSavedData.createFresh((double) this.centerX, (double) this.centerZ, (byte) Mth.clamp(this.scale + zoomOutScale, (int) 0, (int) 4), this.trackingPosition, this.unlimitedTracking, this.dimension);
+     }
+ 
+-    public void tickCarriedBy(Player player, ItemStack stack) {
++    public synchronized void tickCarriedBy(Player player, ItemStack stack) { // Folia - make map data thread-safe
++        io.papermc.paper.util.TickThread.ensureTickThread(player, "Ticking map player in incorrect region"); // Folia - region threading
+         if (!this.carriedByPlayers.containsKey(player)) {
+             MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = new MapItemSavedData.HoldingPlayer(player);
+ 
+@@ -368,7 +369,7 @@ public class MapItemSavedData extends SavedData {
              rotation += rotation < 0.0D ? -8.0D : 8.0D;
              b2 = (byte) ((int) (rotation * 16.0D / 360.0D));
              if (this.dimension == Level.NETHER && world != null) {
@@ -20750,6 +21058,168 @@ index b2845ed8d28627178589da3d2224cd9edd29c31e..9df7c7e44e9a75187bd1e3e8f7e6bc5d
  
                  b2 = (byte) (j * j * 34187121 + j * 121 >> 15 & 15);
              }
+@@ -427,14 +428,14 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     @Nullable
+-    public Packet<?> getUpdatePacket(int id, Player player) {
++    public synchronized Packet<?> getUpdatePacket(int id, Player player) { // Folia - make map data thread-safe
+         MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = (MapItemSavedData.HoldingPlayer) this.carriedByPlayers.get(player);
+ 
+         return worldmap_worldmaphumantracker == null ? null : worldmap_worldmaphumantracker.nextUpdatePacket(id);
+     }
+ 
+-    public void setColorsDirty(int x, int z) {
+-        this.setDirty();
++    public synchronized void setColorsDirty(int x, int z) { // Folia - make map data thread-safe
++        // Folia - make dirty only after updating data - moved down
+         Iterator iterator = this.carriedBy.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -442,15 +443,16 @@ public class MapItemSavedData extends SavedData {
+ 
+             worldmap_worldmaphumantracker.markColorsDirty(x, z);
+         }
+-
++        this.setDirty(); // Folia - make dirty only after updating data - moved from above
+     }
+ 
+-    public void setDecorationsDirty() {
+-        this.setDirty();
++    public synchronized void setDecorationsDirty() { // Folia - make map data thread-safe
++        // Folia - make dirty only after updating data - moved down
+         this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
++        this.setDirty(); // Folia - make dirty only after updating data - moved from above
+     }
+ 
+-    public MapItemSavedData.HoldingPlayer getHoldingPlayer(Player player) {
++    public synchronized MapItemSavedData.HoldingPlayer getHoldingPlayer(Player player) { // Folia - make map data thread-safe
+         MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = (MapItemSavedData.HoldingPlayer) this.carriedByPlayers.get(player);
+ 
+         if (worldmap_worldmaphumantracker == null) {
+@@ -462,7 +464,7 @@ public class MapItemSavedData extends SavedData {
+         return worldmap_worldmaphumantracker;
+     }
+ 
+-    public boolean toggleBanner(LevelAccessor world, BlockPos pos) {
++    public synchronized boolean toggleBanner(LevelAccessor world, BlockPos pos) { // Folia - make map data thread-safe
+         double d0 = (double) pos.getX() + 0.5D;
+         double d1 = (double) pos.getZ() + 0.5D;
+         int i = 1 << this.scale;
+@@ -471,7 +473,7 @@ public class MapItemSavedData extends SavedData {
+         boolean flag = true;
+ 
+         if (d2 >= -63.0D && d3 >= -63.0D && d2 <= 63.0D && d3 <= 63.0D) {
+-            MapBanner mapiconbanner = MapBanner.fromWorld(world, pos);
++            MapBanner mapiconbanner = world.getChunkIfLoadedImmediately(pos.getX() >> 4, pos.getZ() >> 4) == null || !io.papermc.paper.util.TickThread.isTickThreadFor(world.getMinecraftWorld(), pos) ? null : MapBanner.fromWorld(world, pos); // Folia - make map data thread-safe - don't sync load or read data we do not own
+ 
+             if (mapiconbanner == null) {
+                 return false;
+@@ -492,7 +494,7 @@ public class MapItemSavedData extends SavedData {
+         return false;
+     }
+ 
+-    public void checkBanners(BlockGetter world, int x, int z) {
++    public synchronized void checkBanners(BlockGetter world, int x, int z) { // Folia - make map data thread-safe
+         Iterator iterator = this.bannerMarkers.values().iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -514,12 +516,12 @@ public class MapItemSavedData extends SavedData {
+         return this.bannerMarkers.values();
+     }
+ 
+-    public void removedFromFrame(BlockPos pos, int id) {
++    public synchronized void removedFromFrame(BlockPos pos, int id) { // Folia - make map data thread-safe
+         this.removeDecoration("frame-" + id);
+         this.frameMarkers.remove(MapFrame.frameId(pos));
+     }
+ 
+-    public boolean updateColor(int x, int z, byte color) {
++    public synchronized boolean updateColor(int x, int z, byte color) { // Folia - make map data thread-safe
+         byte b1 = this.colors[x + z * 128];
+ 
+         if (b1 != color) {
+@@ -530,12 +532,12 @@ public class MapItemSavedData extends SavedData {
+         }
+     }
+ 
+-    public void setColor(int x, int z, byte color) {
++    public synchronized void setColor(int x, int z, byte color) { // Folia - make map data thread-safe
+         this.colors[x + z * 128] = color;
+         this.setColorsDirty(x, z);
+     }
+ 
+-    public boolean isExplorationMap() {
++    public synchronized boolean isExplorationMap() { // Folia - make map data thread-safe
+         Iterator iterator = this.decorations.values().iterator();
+ 
+         MapDecoration mapicon;
+@@ -570,7 +572,7 @@ public class MapItemSavedData extends SavedData {
+         return this.decorations.values();
+     }
+ 
+-    public boolean isTrackedCountOverLimit(int iconCount) {
++    public synchronized boolean isTrackedCountOverLimit(int iconCount) { // Folia - make map data thread-safe
+         return this.trackedDecorationCount >= iconCount;
+     }
+ 
+@@ -696,11 +698,13 @@ public class MapItemSavedData extends SavedData {
+         }
+ 
+         public void applyToMap(MapItemSavedData mapState) {
++            synchronized (mapState) { // Folia - make map data thread-safe
+             for (int i = 0; i < this.width; ++i) {
+                 for (int j = 0; j < this.height; ++j) {
+                     mapState.setColor(this.startX + i, this.startY + j, this.mapColors[i + j * this.width]);
+                 }
+             }
++            } // Folia - make map data thread-safe
+ 
+         }
+     }
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index 2da78bc43af715fe399eac1d83b3bf6e8fb8afac..433a9302f496a297172c02f3fe0404174cc7a8f1 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -36,6 +36,7 @@ public class DimensionDataStorage {
+     }
+ 
+     public <T extends SavedData> T computeIfAbsent(Function<CompoundTag, T> readFunction, Supplier<T> supplier, String id) {
++        synchronized (this.cache) { // Folia - make map data thread-safe
+         T savedData = this.get(readFunction, id);
+         if (savedData != null) {
+             return savedData;
+@@ -44,10 +45,12 @@ public class DimensionDataStorage {
+             this.set(id, savedData2);
+             return savedData2;
+         }
++        } // Folia - make map data thread-safe
+     }
+ 
+     @Nullable
+     public <T extends SavedData> T get(Function<CompoundTag, T> readFunction, String id) {
++        synchronized (this.cache) { // Folia - make map data thread-safe
+         SavedData savedData = this.cache.get(id);
+         if (savedData == null && !this.cache.containsKey(id)) {
+             savedData = this.readSavedData(readFunction, id);
+@@ -55,6 +58,7 @@ public class DimensionDataStorage {
+         }
+ 
+         return (T)savedData;
++        } // Folia - make map data thread-safe
+     }
+ 
+     @Nullable
+@@ -73,7 +77,9 @@ public class DimensionDataStorage {
+     }
+ 
+     public void set(String id, SavedData state) {
++        synchronized (this.cache) { // Folia - make map data thread-safe
+         this.cache.put(id, state);
++        } // Folia - make map data thread-safe
+     }
+ 
+     public CompoundTag readTagFromDisk(String id, int dataVersion) throws IOException {
 diff --git a/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java b/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
 index ac807277a6b26d140ea9873d17c7aa4fb5fe37b2..e13d8700593f1f486cfc5c96ac25894202c07b71 100644
 --- a/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
