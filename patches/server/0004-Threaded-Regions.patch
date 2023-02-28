@@ -18320,23 +18320,24 @@ index f224ebbc0efefddede43d87f0300c014077b9931..2627610b77e779722bb33eeb1096d862
      @Override
      public Entity changeDimension(ServerLevel destination) {
 diff --git a/src/main/java/net/minecraft/world/entity/raid/Raid.java b/src/main/java/net/minecraft/world/entity/raid/Raid.java
-index 08b18428e867baf14f551beb72e3875b0c420639..8a082a24f4aba759826f56aa13d4095ef6914d13 100644
+index 08b18428e867baf14f551beb72e3875b0c420639..941e74fe6f66a1e7d1a909e2dcf494eba0704058 100644
 --- a/src/main/java/net/minecraft/world/entity/raid/Raid.java
 +++ b/src/main/java/net/minecraft/world/entity/raid/Raid.java
-@@ -108,6 +108,12 @@ public class Raid {
+@@ -108,6 +108,13 @@ public class Raid {
      private int celebrationTicks;
      private Optional<BlockPos> waveSpawnPos;
  
 +    // Folia start - make raids thread-safe
 +    public boolean ownsRaid() {
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(this.level, this.getCenter().getX() >> 4, this.getCenter().getZ() >> 4, 8);
++        BlockPos center = this.getCenter();
++        return center != null && io.papermc.paper.util.TickThread.isTickThreadFor(this.level, center.getX() >> 4, center.getZ() >> 4, 8);
 +    }
 +    // Folia end - make raids thread-safe
 +
      public Raid(int id, ServerLevel world, BlockPos pos) {
          this.raidEvent = new ServerBossEvent(Raid.RAID_NAME_COMPONENT, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
          this.random = RandomSource.create();
-@@ -213,7 +219,7 @@ public class Raid {
+@@ -213,7 +220,7 @@ public class Raid {
          return (entityplayer) -> {
              BlockPos blockposition = entityplayer.blockPosition();
  
@@ -18345,7 +18346,7 @@ index 08b18428e867baf14f551beb72e3875b0c420639..8a082a24f4aba759826f56aa13d4095e
          };
      }
  
-@@ -527,7 +533,7 @@ public class Raid {
+@@ -527,7 +534,7 @@ public class Raid {
          boolean flag = true;
          Collection<ServerPlayer> collection = this.raidEvent.getPlayers();
          long i = this.random.nextLong();
@@ -18368,7 +18369,7 @@ index e5ccbaf72f29731f1d1aa939b9297b644a408cd4..1792655d2f0357b388b3c83886cac4bc
  
                          if (raid1 != null && Raids.canJoinRaid(this, raid1)) {
 diff --git a/src/main/java/net/minecraft/world/entity/raid/Raids.java b/src/main/java/net/minecraft/world/entity/raid/Raids.java
-index feb89eb69994bdd1d2f95d2b9992e69251b2bee7..d85dbc87e23ae34a8e3345dc72147979e280a5d3 100644
+index feb89eb69994bdd1d2f95d2b9992e69251b2bee7..39cdb5c0080613662eaefc4f94d17fa1bd25ed30 100644
 --- a/src/main/java/net/minecraft/world/entity/raid/Raids.java
 +++ b/src/main/java/net/minecraft/world/entity/raid/Raids.java
 @@ -28,14 +28,14 @@ import net.minecraft.world.phys.Vec3;
@@ -18479,7 +18480,7 @@ index feb89eb69994bdd1d2f95d2b9992e69251b2bee7..d85dbc87e23ae34a8e3345dc72147979
          while (iterator.hasNext()) {
              Raid raid1 = (Raid) iterator.next();
 +            // Folia start - make raids thread-safe
-+            if (!io.papermc.paper.util.TickThread.isTickThreadFor(this.level, raid1.getCenter())) {
++            if (!raid1.ownsRaid()) {
 +                continue;
 +            }
 +            // Folia end - make raids thread-safe
