@@ -3732,7 +3732,7 @@ index 0000000000000000000000000000000000000000..d9687722e02dfd4088c7030abbf5008e
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..362e85df5e4483608ab4a6192acd8bc499e8c9bd
+index 0000000000000000000000000000000000000000..cd97607d188b8c0cf44af2185b345bf4c5c578bd
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
 @@ -0,0 +1,157 @@
@@ -3856,7 +3856,7 @@ index 0000000000000000000000000000000000000000..362e85df5e4483608ab4a6192acd8bc4
 +        // await scheduler termination
 +        LOGGER.info("Awaiting scheduler termination for 60s");
 +        if (TickRegions.getScheduler().halt(true, TimeUnit.SECONDS.toNanos(60L))) {
-+            LOGGER.warn("Scheduler halted");
++            LOGGER.info("Scheduler halted");
 +        } else {
 +            LOGGER.warn("Scheduler did not terminate within 60s, proceeding with shutdown anyways");
 +        }
@@ -20761,7 +20761,7 @@ index 256642f2e2aa66f7e8c00cae91a75060a8817c9c..9fb91e3648db3ad79bb6d1fe79894a13
          nbt.put("block_ticks", tickSchedulers.blocks().save(i, (block) -> {
              return BuiltInRegistries.BLOCK.getKey(block).toString();
 diff --git a/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java b/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java
-index e9eb32469a5c03f7a3677ef50fd4541c1ed662ad..3ff5e74a2aae72eebe6730a4df15b17c1c8ff43a 100644
+index e9eb32469a5c03f7a3677ef50fd4541c1ed662ad..88b1a06fc44980d05dabd3943caa24091ff4de98 100644
 --- a/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java
 +++ b/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java
 @@ -168,6 +168,7 @@ public class EndDragonFight {
@@ -20796,6 +20796,24 @@ index e9eb32469a5c03f7a3677ef50fd4541c1ed662ad..3ff5e74a2aae72eebe6730a4df15b17c
                      return false;
                  }
  
+@@ -465,7 +472,7 @@ public class EndDragonFight {
+     }
+ 
+     public void onCrystalDestroyed(EndCrystal enderCrystal, DamageSource source) {
+-        if (this.respawnStage != null && this.respawnCrystals.contains(enderCrystal)) {
++        if (io.papermc.paper.util.TickThread.isTickThreadFor(this.level, 0, 0) && this.respawnStage != null && this.respawnCrystals.contains(enderCrystal)) {
+             LOGGER.debug("Aborting respawn sequence");
+             this.respawnStage = null;
+             this.respawnTime = 0;
+@@ -486,7 +493,7 @@ public class EndDragonFight {
+     }
+ 
+     public void tryRespawn() {
+-        if (this.dragonKilled && this.respawnStage == null) {
++        if (this.dragonKilled && this.respawnStage == null && io.papermc.paper.util.TickThread.isTickThreadFor(this.level, 0, 0)) { // Folia - region threading
+             BlockPos blockPos = this.portalLocation;
+             if (blockPos == null) {
+                 LOGGER.debug("Tried to respawn, but need to find the portal first.");
 diff --git a/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java b/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java
 index a908652f1ebb426d265ef614746f70cd1e538268..b2a9cd719c4968a1cde8f0b30f46f01d5872fbc9 100644
 --- a/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java
