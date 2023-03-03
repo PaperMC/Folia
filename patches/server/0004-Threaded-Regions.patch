@@ -13615,7 +13615,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..06ad3857f04ec073ae753b6569c5ae2c
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..e96a348c231ae77efc3175834f52cbc864cb7253 100644
+index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..1a6ff553e8d286bdd8b46ce366a4cbd4485c0e6f 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -192,35 +192,34 @@ public class ServerLevel extends Level implements WorldGenLevel {
@@ -14778,7 +14778,35 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..e96a348c231ae77efc3175834f52cbc8
                  }
              }
  
-@@ -2666,7 +2835,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2618,11 +2787,18 @@ public class ServerLevel extends Level implements WorldGenLevel {
+             {
+                 com.google.common.collect.Streams.stream( ServerLevel.this.getServer().getAllLevels() ).map( ServerLevel::getDataStorage ).forEach( (worldData) ->
+                 {
+-                    for (Object o : worldData.cache.values() )
++                    // Folia start - make map data thread-safe
++                    List<Object> worldDataCache;
++                    synchronized (worldData.cache) {
++                        worldDataCache = new java.util.ArrayList<>(worldData.cache.values());
++                    }
++                    for (Object o : worldDataCache )
++                    // Folia end - make map data thread-safe
+                     {
+                         if ( o instanceof MapItemSavedData )
+                         {
+                             MapItemSavedData map = (MapItemSavedData) o;
++                            synchronized (map) { // Folia - make map data thread-safe
+                             map.carriedByPlayers.remove( (Player) entity );
+                             for ( Iterator<MapItemSavedData.HoldingPlayer> iter = (Iterator<MapItemSavedData.HoldingPlayer>) map.carriedBy.iterator(); iter.hasNext(); )
+                             {
+@@ -2632,6 +2808,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                                     iter.remove();
+                                 }
+                             }
++                            } // Folia - make map data thread-safe
+                         }
+                     }
+                 } );
+@@ -2666,7 +2843,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
@@ -14787,7 +14815,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..e96a348c231ae77efc3175834f52cbc8
              }
  
              if (entity instanceof EnderDragon) {
-@@ -2677,13 +2846,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2677,13 +2854,16 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  for (int j = 0; j < i; ++j) {
                      EnderDragonPart entitycomplexpart = aentitycomplexpart[j];
  
