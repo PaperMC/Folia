@@ -2133,10 +2133,10 @@ index 6df1948b1204a7288ecb7238b6fc2a733f7d25b3..6a413abc67aa4dcbab64231be3eb1344
  
      public static ChunkHolder getUnloadingChunkHolder(final ServerLevel level, final int chunkX, final int chunkZ) {
 diff --git a/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java
-index 7e2176f343160b299e7d4a2817c8f6c9ba7dba7b..245242b276e3de1edde1e2ebd0ce518fd0d08117 100644
+index 7e2176f343160b299e7d4a2817c8f6c9ba7dba7b..9d44c3923ba29d88e39b742f3da97372626b352e 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java
-@@ -232,7 +232,7 @@ public class RegionisedPlayerChunkLoader {
+@@ -232,17 +232,19 @@ public class RegionisedPlayerChunkLoader {
      public void tick() {
          TickThread.ensureTickThread("Cannot tick player chunk loader async");
          long currTime = System.nanoTime();
@@ -2145,15 +2145,56 @@ index 7e2176f343160b299e7d4a2817c8f6c9ba7dba7b..245242b276e3de1edde1e2ebd0ce518f
              player.chunkLoader.update();
              player.chunkLoader.midTickUpdate(currTime);
          }
-@@ -240,7 +240,7 @@ public class RegionisedPlayerChunkLoader {
+     }
  
-     public void tickMidTick() {
+-    public void tickMidTick() {
++    public boolean tickMidTick() { // Folia - region threading - report whether tickets were added
          final long time = System.nanoTime();
 -        for (final ServerPlayer player : this.world.players()) {
+-            player.chunkLoader.midTickUpdate(time);
++        boolean ret = false; // Folia - region threading - report whether tickets were added
 +        for (final ServerPlayer player : this.world.getLocalPlayers()) { // Folia - region threading
-             player.chunkLoader.midTickUpdate(time);
++            ret |= player.chunkLoader.midTickUpdate(time);
          }
++        return ret; // Folia - region threading - report whether tickets were added
      }
+ 
+     private static long[] generateBFSOrder(final int radius) {
+@@ -384,13 +386,13 @@ public class RegionisedPlayerChunkLoader {
+             this.player = player;
+         }
+ 
+-        private void flushDelayedTicketOps() {
++        private boolean flushDelayedTicketOps() { // Folia - region threading - report whether tickets were added
+             if (this.delayedTicketOps.isEmpty()) {
+-                return;
++                return false; // Folia - region threading - report whether tickets were added
+             }
+             this.world.chunkTaskScheduler.chunkHolderManager.pushDelayedTicketUpdates(this.delayedTicketOps);
+             this.delayedTicketOps.clear();
+-            this.world.chunkTaskScheduler.chunkHolderManager.tryDrainTicketUpdates();
++            return this.world.chunkTaskScheduler.chunkHolderManager.tryDrainTicketUpdates() == Boolean.TRUE; // Folia - region threading - report whether tickets were added
+         }
+ 
+         private void pushDelayedTicketOp(final ChunkHolderManager.TicketOperation<?, ?> op) {
+@@ -607,7 +609,7 @@ public class RegionisedPlayerChunkLoader {
+             return Math.max(Math.abs(dx), Math.abs(dz)) <= this.lastTickDistance;
+         }
+ 
+-        void midTickUpdate(final long time) {
++        boolean midTickUpdate(final long time) { // Folia - region threading - report whether tickets were added
+             TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async");
+             // update rate limits
+             this.chunkSendCounter.update(time);
+@@ -799,7 +801,7 @@ public class RegionisedPlayerChunkLoader {
+                 this.chunkSendCounter.addTime(time, sendSlots);
+             }
+ 
+-            this.flushDelayedTicketOps();
++            return this.flushDelayedTicketOps(); // Folia - region threading - report whether tickets were added
+             // we assume propagate ticket levels happens after this call
+         }
+ 
 diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
 index 61c170555c8854b102c640b0b6a615f9f732edbf..515cc130a411f218ed20628eb918be9d770b9939 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
@@ -4508,10 +4549,10 @@ index 0000000000000000000000000000000000000000..269c051e20cd07e692c624a873e4ee2b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionisedTaskQueue.java b/src/main/java/io/papermc/paper/threadedregions/RegionisedTaskQueue.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c13237edb7323fa747d260375f626a5c9979b004
+index 0000000000000000000000000000000000000000..a40b88fbee7b92de38b49c4dfa7c279665043a80
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionisedTaskQueue.java
-@@ -0,0 +1,742 @@
+@@ -0,0 +1,754 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -4743,6 +4784,13 @@ index 0000000000000000000000000000000000000000..c13237edb7323fa747d260375f626a5c
 +        }
 +
 +        public void drainTasks() {
++            // first, update chunk loader
++            final ServerLevel world = this.worldRegionTaskData.world;
++            if (world.playerChunkLoader.tickMidTick()) {
++                // only process ticket updates if the player chunk loader did anything
++                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
++            }
++
 +            final PrioritisedQueue tickTaskQueue = this.tickTaskQueue;
 +            final PrioritisedQueue chunkTaskQueue = this.chunkQueue;
 +
@@ -4758,6 +4806,11 @@ index 0000000000000000000000000000000000000000..c13237edb7323fa747d260375f626a5c
 +                executeChunkTasks = executeChunkTasks && allowedChunkTasks-- > 0 && chunkTaskQueue.executeTask();
 +                executeGlobalTasks = executeGlobalTasks && this.worldRegionTaskData.executeGlobalChunkTask();
 +            } while (executeTickTasks | executeChunkTasks | executeGlobalTasks);
++
++            if (allowedChunkTasks > 0) {
++                // if we executed chunk tasks, we should try to process ticket updates for full status changes
++                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
++            }
 +        }
 +
 +        public boolean hasTasks() {
@@ -8171,10 +8224,10 @@ index 0000000000000000000000000000000000000000..e75aac237764c7a9fa0538ddf8d68b1e
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c17669c1e98cd954643fa3b988c12b4b6c3b174e
+index 0000000000000000000000000000000000000000..390bda127be9be5349c1c442ca01df6b56bfdfb9
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,355 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -8496,6 +8549,16 @@ index 0000000000000000000000000000000000000000..c17669c1e98cd954643fa3b988c12b4b
 +        @Override
 +        protected boolean runRegionTasks(final BooleanSupplier canContinue) {
 +            final RegionisedTaskQueue.RegionTaskQueueData queue = this.region.taskQueueData;
++
++            // first, update chunk loader
++            final ServerLevel world = this.region.world;
++            if (world.playerChunkLoader.tickMidTick()) {
++                // only process ticket updates if the player chunk loader did anything
++                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
++            }
++
++            boolean processedChunkTask = false;
++
 +            boolean executeChunkTask = true;
 +            boolean executeTickTask = true;
 +            do {
@@ -8503,9 +8566,14 @@ index 0000000000000000000000000000000000000000..c17669c1e98cd954643fa3b988c12b4b
 +                    executeTickTask = queue.executeTickTask();
 +                }
 +                if (executeChunkTask) {
-+                    executeChunkTask = queue.executeChunkTask();
++                    processedChunkTask |= (executeChunkTask = queue.executeChunkTask());
 +                }
 +            } while ((executeChunkTask | executeTickTask) && canContinue.getAsBoolean());
++
++            if (processedChunkTask) {
++                // if we processed any chunk tasks, try to process ticket level updates for full status changes
++                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
++            }
 +            return true;
 +        }
 +
