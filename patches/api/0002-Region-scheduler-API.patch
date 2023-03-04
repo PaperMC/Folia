@@ -1,0 +1,162 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sat, 4 Mar 2023 12:48:43 -0800
+Subject: [PATCH] Region scheduler API
+
+Add both a location based scheduler and an entity based scheduler
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..edf4fe717c72aa147e5c0dee758bc7a133a19aa3
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
+@@ -0,0 +1,49 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import org.bukkit.entity.Entity;
++import org.bukkit.plugin.Plugin;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++import java.util.function.Consumer;
++
++/**
++ * An entity can move between worlds with an arbitrary tick delay, be temporarily removed
++ * for players (i.e end credits), be partially removed from world state (i.e inactive but not removed),
++ * teleport between ticking regions, teleport between worlds, and even be removed entirely from the server.
++ * The uncertainty of an entity's state can make it difficult to schedule tasks without worrying about undefined
++ * behaviors resulting from any of the states listed previously.
++ *
++ * <p>
++ * This class is designed to eliminate those states by providing an interface to run tasks only when an entity
++ * is contained in a world, on the owning thread for the region, and by providing the current Entity object.
++ * The scheduler also allows a task to provide a callback, the "retired" callback, that will be invoked
++ * if the entity is removed before a task that was scheduled could be executed. The scheduler is also
++ * completely thread-safe, allowing tasks to be scheduled from any thread context. The scheduler also indicates
++ * properly whether a task was scheduled successfully (i.e scheduler not retired), thus the code scheduling any task
++ * knows whether the given callbacks will be invoked eventually or not - which may be critical for off-thread
++ * contexts.
++ * </p>
++ */
++public interface EntityScheduler {
++
++    /**
++     * Schedules a task with the given delay. If the task failed to schedule because the scheduler is retired (entity
++     * removed), then returns {@code false}. Otherwise, either the run callback will be invoked after the specified delay,
++     * or the retired callback will be invoked if the scheduler is retired.
++     * Note that the retired callback is invoked in critical code, so it should not attempt to remove the entity, remove
++     * other entities, load chunks, load worlds, modify ticket levels, etc.
++     *
++     * <p>
++     * It is guaranteed that the run and retired callback are invoked on the region which owns the entity.
++     * </p>
++     * @param run The callback to run after the specified delay, may not be null.
++     * @param retired Retire callback to run if the entity is retired before the run callback can be invoked, may be null.
++     * @param delay The delay in ticks before the run callback is invoked. Any value less-than 1 is treated as 1.
++     * @return {@code true} if the task was scheduled, which means that either the run function or the retired function
++     *         will be invoked (but never both), or {@code false} indicating neither the run nor retired function will be invoked
++     *         since the scheduler has been retired.
++     */
++    public boolean execute(@NotNull final Plugin plugin, @NotNull final Consumer<? extends Entity> run,
++                           @Nullable final Consumer<? extends Entity> retired, final long delay);
++
++}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionisedScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionisedScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..210a3dce74959efd7ac0ca9a92a2ad8815844246
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionisedScheduler.java
+@@ -0,0 +1,26 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import org.bukkit.Location;
++import org.bukkit.entity.Entity;
++import org.bukkit.plugin.Plugin;
++import org.jetbrains.annotations.NotNull;
++
++/**
++ * The region task scheduler can be used to schedule tasks by location to be executed on the region which owns the location.
++ * <p>
++ * <b>Note</b>: It is entirely inappropriate to use the region scheduler to schedule tasks for entities.
++ * If you wish to schedule tasks to perform actions on entities, you should be using {@link Entity#getScheduler()}
++ * as the entity scheduler will "follow" an entity if it is teleported, whereas the region task scheduler
++ * will not.
++ * </p>
++ */
++public interface RegionisedScheduler {
++
++    /**
++     * Schedules a task to be executed on the region which owns the location.
++     * @param plugin The plugin that owns the task
++     * @param location The location at which the region executing should own
++     * @param run The task to execute
++     */
++    public void execute(@NotNull final Plugin plugin, @NotNull final Location location, @NotNull final Runnable run);
++}
+diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
+index ac9b690fcccb60b587e5345f12f1383afd0a73a1..3b8a6d7336b0cb20594de9c6b56f215f1370ce89 100644
+--- a/src/main/java/org/bukkit/Bukkit.java
++++ b/src/main/java/org/bukkit/Bukkit.java
+@@ -2459,6 +2459,22 @@ public final class Bukkit {
+         return server.getPotionBrewer();
+     }
+     // Paper end
++    // Folia start - region threading API
++    /**
++     * Returns the region task scheduler. The region task scheduler can be used to schedule
++     * tasks by location to be executed on the region which owns the location.
++     * <p>
++     * <b>Note</b>: It is entirely inappropriate to use the region scheduler to schedule tasks for entities.
++     * If you wish to schedule tasks to perform actions on entities, you should be using {@link Entity#getScheduler()}
++     * as the entity scheduler will "follow" an entity if it is teleported, whereas the region task scheduler
++     * will not.
++     * </p>
++     * @return the region task scheduler
++     */
++    public static @NotNull io.papermc.paper.threadedregions.scheduler.RegionisedScheduler getRegionScheduler() {
++        return server.getRegionScheduler();
++    }
++    // Folia end - region threading API
+ 
+     @NotNull
+     public static Server.Spigot spigot() {
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+index 2204336d8800311b65e894739ab1b27273e7c6f2..135467092eec33a21b171df39267d15bad26003e 100644
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -2139,4 +2139,18 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+      */
+     @NotNull org.bukkit.potion.PotionBrewer getPotionBrewer();
+     // Paper end
++    // Folia start - region threading API
++    /**
++     * Returns the region task scheduler. The region task scheduler can be used to schedule
++     * tasks by location to be executed on the region which owns the location.
++     * <p>
++     * <b>Note</b>: It is entirely inappropriate to use the region scheduler to schedule tasks for entities.
++     * If you wish to schedule tasks to perform actions on entities, you should be using {@link Entity#getScheduler()}
++     * as the entity scheduler will "follow" an entity if it is teleported, whereas the region task scheduler
++     * will not.
++     * </p>
++     * @return the region task scheduler
++     */
++    @NotNull io.papermc.paper.threadedregions.scheduler.RegionisedScheduler getRegionScheduler();
++    // Folia end - region threading API
+ }
+diff --git a/src/main/java/org/bukkit/entity/Entity.java b/src/main/java/org/bukkit/entity/Entity.java
+index cdbc7329cf5f67d66e31eb31e83b9e7997040f72..90451ed12b2c95bb372ac2e3cbb57b8b83cc6a82 100644
+--- a/src/main/java/org/bukkit/entity/Entity.java
++++ b/src/main/java/org/bukkit/entity/Entity.java
+@@ -970,4 +970,13 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
+      */
+     boolean wouldCollideUsing(@NotNull BoundingBox boundingBox);
+     // Paper End - Collision API
++    // Folia start - region threading API
++    /**
++     * Returns the task scheduler for this entity. The entity scheduler can be used to schedule tasks
++     * that are guaranteed to always execute on the tick thread that owns the entity.
++     * @return the task scheduler for this entity.
++     * @see io.papermc.paper.threadedregions.scheduler.EntityScheduler
++     */
++    @NotNull io.papermc.paper.threadedregions.scheduler.EntityScheduler getScheduler();
++    // Folia end - region threading API
+ }

@@ -9410,6 +9410,94 @@ index 0000000000000000000000000000000000000000..5bf205d8c0a03ba932be85cc1a63d6ce
 +        return new ArrayList<>();
 +    }
 +}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b924146112006e85dfc12c2b303a2eecf23741ca
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+@@ -0,0 +1,39 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import ca.spottedleaf.concurrentutil.util.Validate;
++import org.bukkit.craftbukkit.entity.CraftEntity;
++import org.bukkit.entity.Entity;
++import org.bukkit.plugin.Plugin;
++import java.util.function.Consumer;
++import java.util.logging.Level;
++
++public final class FoliaEntityScheduler implements EntityScheduler {
++
++    private final CraftEntity entity;
++
++    public FoliaEntityScheduler(final CraftEntity entity) {
++        this.entity = entity;
++    }
++
++    private static Consumer<? extends net.minecraft.world.entity.Entity> wrap(final Plugin plugin, final Consumer<? extends Entity> consumer) {
++        Validate.notNull(plugin, "Plugin may not be null");
++        Validate.notNull(consumer, "Consumer may not be null");
++
++        return (final net.minecraft.world.entity.Entity nmsEntity) -> {
++            try {
++                ((Consumer<Entity>)consumer).accept(nmsEntity.getBukkitEntity());
++            } catch (final Throwable throwable) {
++                plugin.getLogger().log(Level.WARNING, "Entity task for " + plugin.getDescription().getFullName() + " generated an exception", throwable);
++            }
++        };
++    }
++
++    @Override
++    public boolean execute(final Plugin plugin, final Consumer<? extends Entity> run, final Consumer<? extends Entity> retired,
++                           final long delay) {
++        final Consumer<? extends net.minecraft.world.entity.Entity> runNMS = wrap(plugin, run);
++        final Consumer<? extends net.minecraft.world.entity.Entity> runRetired = retired == null ? null : wrap(plugin, retired);
++
++        return this.entity.taskScheduler.schedule(runNMS, runRetired, delay);
++    }
++}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionisedScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionisedScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e4637086ba0095341da9c2bfe20083375c82bc01
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionisedScheduler.java
+@@ -0,0 +1,37 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import ca.spottedleaf.concurrentutil.util.Validate;
++import io.papermc.paper.threadedregions.RegionisedServer;
++import org.bukkit.Location;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.plugin.Plugin;
++import java.util.logging.Level;
++
++public final class FoliaRegionisedScheduler implements RegionisedScheduler {
++
++    private static Runnable wrap(final Plugin plugin, final Location location, final Runnable run) {
++        return () -> {
++            try {
++                run.run();
++            } catch (final Throwable throwable) {
++                plugin.getLogger().log(Level.WARNING, "Location task for " + plugin.getDescription().getFullName() + " at location " + location + " generated an exception", throwable);
++            }
++        };
++    }
++
++    @Override
++    public void execute(final Plugin plugin, final Location location, final Runnable run) {
++        Validate.notNull(plugin, "Plugin may not be null");
++        Validate.notNull(location, "Location may not be null");
++        Validate.notNull(run, "Runnable may not be null");
++
++        final World world = Validate.notNull(location.getWorld(), "Location world may not be null");
++        final int chunkX = location.getBlockX() >> 4;
++        final int chunkZ = location.getBlockZ() >> 4;
++
++        RegionisedServer.getInstance().taskQueue.queueTickTaskQueue(
++            ((CraftWorld)world).getHandle(), chunkX, chunkZ, wrap(plugin, location.clone(), run)
++        );
++    }
++}
 diff --git a/src/main/java/io/papermc/paper/util/CachedLists.java b/src/main/java/io/papermc/paper/util/CachedLists.java
 index e08f4e39db4ee3fed62e37364d17dcc5c5683504..03d239460a2e856c1f59d6bcd95811c8e4e0cf6d 100644
 --- a/src/main/java/io/papermc/paper/util/CachedLists.java
@@ -21671,10 +21759,26 @@ index 7f1ac2cb29eb84833c0895442d611dfa0504527e..c79cfebc65fd04994735dabcf5bb6e6c
          LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
          if (levelChunkTicks == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c4c2a393ee2d5fbcdbf3abb4a49f1bfae2d2c618 100644
+index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..72a8e27c5ff6063d2e2b3590390b24a112387535 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -879,6 +879,9 @@ public final class CraftServer implements Server {
+@@ -307,6 +307,15 @@ public final class CraftServer implements Server {
+         CraftItemFactory.instance();
+     }
+ 
++    // Folia start - region threading API
++    private final io.papermc.paper.threadedregions.scheduler.FoliaRegionisedScheduler regionisedScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaRegionisedScheduler();
++
++    @Override
++    public final io.papermc.paper.threadedregions.scheduler.RegionisedScheduler getRegionScheduler() {
++        return this.regionisedScheduler;
++    }
++    // Folia end - region threading API
++
+     public CraftServer(DedicatedServer console, PlayerList playerList) {
+         this.console = console;
+         this.playerList = (DedicatedPlayerList) playerList;
+@@ -879,6 +888,9 @@ public final class CraftServer implements Server {
  
      // NOTE: Should only be called from DedicatedServer.ah()
      public boolean dispatchServerCommand(CommandSender sender, ConsoleInput serverCommand) {
@@ -21684,7 +21788,7 @@ index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c4c2a393ee2d5fbcdbf3abb4a49f1bfa
          if (sender instanceof Conversable) {
              Conversable conversable = (Conversable) sender;
  
-@@ -898,12 +901,44 @@ public final class CraftServer implements Server {
+@@ -898,12 +910,44 @@ public final class CraftServer implements Server {
          }
      }
  
@@ -21729,7 +21833,7 @@ index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c4c2a393ee2d5fbcdbf3abb4a49f1bfa
          // Paper Start
          if (!org.spigotmc.AsyncCatcher.shuttingDown && !Bukkit.isPrimaryThread()) {
              final CommandSender fSender = sender;
-@@ -2913,7 +2948,7 @@ public final class CraftServer implements Server {
+@@ -2913,7 +2957,7 @@ public final class CraftServer implements Server {
  
      @Override
      public int getCurrentTick() {
@@ -21861,18 +21965,27 @@ index cd4ad8261e56365850068db1d83d6a8454026737..c098ae9f057a3dcc77c61555feb87045
              List<String> offers = waitable.get();
              if (offers == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 78f53ee557276de85f0431ebcb146445b1f4fb92..ab6db7c5193a7c4b3f9433c6997dd24c76a84904 100644
+index 78f53ee557276de85f0431ebcb146445b1f4fb92..91a11cfa430c63455e2d54125d6e1bd407f822ac 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -200,6 +200,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -200,6 +200,16 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
      private EntityDamageEvent lastDamageEvent;
      private final CraftPersistentDataContainer persistentDataContainer = new CraftPersistentDataContainer(CraftEntity.DATA_TYPE_REGISTRY);
      protected net.kyori.adventure.pointer.Pointers adventure$pointers; // Paper - implement pointers
 +    public final io.papermc.paper.threadedregions.EntityScheduler taskScheduler = new io.papermc.paper.threadedregions.EntityScheduler(this); // Folia - region threading
++
++    // Folia start - region threading API
++    private final io.papermc.paper.threadedregions.scheduler.FoliaEntityScheduler apiScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaEntityScheduler(this);
++
++    @Override
++    public final io.papermc.paper.threadedregions.scheduler.EntityScheduler getScheduler() {
++        return this.apiScheduler;
++    };
++    // Folia end - region threading API
  
      public CraftEntity(final CraftServer server, final Entity entity) {
          this.server = server;
-@@ -556,6 +557,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -556,6 +566,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public boolean teleport(Location location, TeleportCause cause, boolean ignorePassengers, boolean dismount) {
@@ -21884,7 +21997,7 @@ index 78f53ee557276de85f0431ebcb146445b1f4fb92..ab6db7c5193a7c4b3f9433c6997dd24c
          // Paper end
          Preconditions.checkArgument(location != null, "location cannot be null");
          location.checkFinite();
-@@ -1206,7 +1212,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1206,7 +1221,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          }
  
          ServerLevel world = ((CraftWorld) this.getWorld()).getHandle();
@@ -21893,7 +22006,7 @@ index 78f53ee557276de85f0431ebcb146445b1f4fb92..ab6db7c5193a7c4b3f9433c6997dd24c
  
          if (entityTracker == null) {
              return;
-@@ -1270,30 +1276,38 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1270,30 +1285,38 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          Preconditions.checkArgument(location != null, "location");
          location.checkFinite();
          Location locationClone = location.clone(); // clone so we don't need to worry about mutations after this call.
