@@ -6142,19 +6142,14 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf516e93c20
+index 0000000000000000000000000000000000000000..3588a0ad7996d77f3e7ee076961e5b1210aa384e
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
-@@ -0,0 +1,1187 @@
+@@ -0,0 +1,1186 @@
 +package io.papermc.paper.threadedregions;
 +
-+import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
 +import ca.spottedleaf.concurrentutil.map.SWMRLong2ObjectHashTable;
 +import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
-+import com.google.gson.JsonArray;
-+import com.google.gson.JsonElement;
-+import com.google.gson.JsonObject;
-+import com.google.gson.JsonParser;
 +import io.papermc.paper.util.CoordinateUtils;
 +import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 +import it.unimi.dsi.fastutil.longs.LongArrayList;
@@ -6164,7 +6159,6 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.ChunkPos;
 +
-+import java.io.FileReader;
 +import java.lang.invoke.VarHandle;
 +import java.util.ArrayList;
 +import java.util.Arrays;
@@ -6195,10 +6189,14 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +    private final MultiThreadedQueue<Operation> ops = new MultiThreadedQueue<>();
 +     */
 +
++    /*
++     * See REGION_LOGIC.md for complete details on what this class is doing
++     */
++
 +    public ThreadedRegioniser(final int minSectionRecalcCount, final double maxDeadRegionPercent,
-+                                 final int emptySectionCreateRadius, final int regionSectionMergeRadius,
-+                                 final int regionSectionChunkShift, final ServerLevel world,
-+                                 final RegionCallbacks<R, S> callbacks) {
++                              final int emptySectionCreateRadius, final int regionSectionMergeRadius,
++                              final int regionSectionChunkShift, final ServerLevel world,
++                              final RegionCallbacks<R, S> callbacks) {
 +        if (emptySectionCreateRadius <= 0) {
 +            throw new IllegalStateException("Region section create radius must be > 0");
 +        }
@@ -6408,7 +6406,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +            } else {
 +                section.addChunk(chunkX, chunkZ);
 +            }
-+            // due to the fast check from above, we know the section is empty whether we need to create it
++            // due to the fast check from above, we know the section is empty whether we needed to create it or not
 +
 +            // enforce the adjacency invariant by creating / updating neighbour sections
 +            final int createRadius = this.emptySectionCreateRadius;
@@ -6520,8 +6518,8 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +
 +                if (delayedTrueMerge && firstUnlockedRegion != null) {
 +                    // we need to retire this region, as it can no longer tick
-+                    if (regionOfInterest.state == ThreadedRegion.STATE_STEADY_STATE) {
-+                        regionOfInterest.state = ThreadedRegion.STATE_NOT_READY;
++                    if (regionOfInterest.state == ThreadedRegion.STATE_READY) {
++                        regionOfInterest.state = ThreadedRegion.STATE_TRANSIENT;
 +                        this.callbacks.onRegionInactive(regionOfInterest);
 +                    }
 +                }
@@ -6531,7 +6529,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +            }
 +
 +            if (regionOfInterestAlive) {
-+                regionOfInterest.state = ThreadedRegion.STATE_STEADY_STATE;
++                regionOfInterest.state = ThreadedRegion.STATE_READY;
 +                if (!regionOfInterest.mergeIntoLater.isEmpty() || !regionOfInterest.expectingMergeFrom.isEmpty()) {
 +                    throw new IllegalStateException("Should not happen on region " + this);
 +                }
@@ -6610,7 +6608,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +
 +            if (!region.mergeIntoLater.isEmpty()) {
 +                // There is another nearby ticking region that we need to merge into
-+                region.state = ThreadedRegion.STATE_NOT_READY;
++                region.state = ThreadedRegion.STATE_TRANSIENT;
 +                this.callbacks.onRegionInactive(region);
 +                // return to avoid removing dead sections or splitting, these actions will be performed
 +                // by the region we merge into
@@ -6647,7 +6645,8 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +        // if we removed dead sections, we should check if the region can be split into smaller ones
 +        // otherwise, the region remains alive
 +        if (!removedDeadSections) {
-+            region.state = ThreadedRegion.STATE_STEADY_STATE;
++            // didn't remove dead sections, don't check for split
++            region.state = ThreadedRegion.STATE_READY;
 +            if (!region.expectingMergeFrom.isEmpty() || !region.mergeIntoLater.isEmpty()) {
 +                throw new IllegalStateException("Illegal state " + region);
 +            }
@@ -6711,7 +6710,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +
 +        if (newRegions.size() == 1) {
 +            // no need to split anything, we're done here
-+            region.state = ThreadedRegion.STATE_STEADY_STATE;
++            region.state = ThreadedRegion.STATE_READY;
 +            if (!region.expectingMergeFrom.isEmpty() || !region.mergeIntoLater.isEmpty()) {
 +                throw new IllegalStateException("Illegal state " + region);
 +            }
@@ -6745,7 +6744,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +        // only after invoking data callbacks
 +
 +        for (final ThreadedRegion<R, S> newRegion : newRegionsSet) {
-+            newRegion.state = ThreadedRegion.STATE_STEADY_STATE;
++            newRegion.state = ThreadedRegion.STATE_READY;
 +            if (!newRegion.expectingMergeFrom.isEmpty() || !newRegion.mergeIntoLater.isEmpty()) {
 +                throw new IllegalStateException("Illegal state " + newRegion);
 +            }
@@ -6758,8 +6757,8 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +
 +        private static final AtomicLong REGION_ID_GENERATOR = new AtomicLong();
 +
-+        private static final int STATE_NOT_READY     = 0;
-+        private static final int STATE_STEADY_STATE  = 1;
++        private static final int STATE_TRANSIENT     = 0;
++        private static final int STATE_READY         = 1;
 +        private static final int STATE_TICKING       = 2;
 +        private static final int STATE_DEAD          = 3;
 +
@@ -6780,7 +6779,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +        public ThreadedRegion(final ThreadedRegioniser<R, S> regioniser) {
 +            this.regioniser = regioniser;
 +            this.id = REGION_ID_GENERATOR.getAndIncrement();
-+            this.state = STATE_NOT_READY;
++            this.state = STATE_TRANSIENT;
 +            this.data = regioniser.callbacks.createNewData(this);
 +        }
 +
@@ -6900,12 +6899,12 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +
 +        private boolean tryKill() {
 +            switch (this.state) {
-+                case STATE_NOT_READY: {
++                case STATE_TRANSIENT: {
 +                    this.state = STATE_DEAD;
 +                    this.onRemove(false);
 +                    return true;
 +                }
-+                case STATE_STEADY_STATE: {
++                case STATE_READY: {
 +                    this.state = STATE_DEAD;
 +                    this.onRemove(true);
 +                    return true;
@@ -6955,12 +6954,12 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +        public boolean tryMarkTicking() {
 +            this.regioniser.acquireWriteLock();
 +            try {
-+                if (this.state != STATE_STEADY_STATE) {
++                if (this.state != STATE_READY) {
 +                    return false;
 +                }
 +
 +                if (!this.mergeIntoLater.isEmpty() || !this.expectingMergeFrom.isEmpty()) {
-+                    throw new IllegalStateException("Region " + this + " should not be steady state");
++                    throw new IllegalStateException("Region " + this + " should not be ready");
 +                }
 +
 +                this.state = STATE_TICKING;
@@ -6979,7 +6978,7 @@ index 0000000000000000000000000000000000000000..f05546aa9124d4c0e34005f528483bf5
 +
 +                this.regioniser.onRegionRelease(this);
 +
-+                return this.state == STATE_STEADY_STATE;
++                return this.state == STATE_READY;
 +            } finally {
 +                this.regioniser.releaseWriteLock();
 +            }
