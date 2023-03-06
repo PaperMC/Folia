@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Mon, 6 Mar 2023 13:14:06 -0800
+Subject: [PATCH] Require plugins to be explicitly marked as Folia supported
+
+Plugins must add "folia-supported: true" to their plugin.yml
+otherwise the server will refuse to load them.
+
+Since Folia is a major breakage for plugins, the vast majority
+of plugins will not function correctly on Folia. To prevent
+user confusion from this, we will refuse to load the plugin
+and provide a log indicating why - which will be much
+more helpful than some random error log caused by
+a breakage.
+
+diff --git a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
+index 0c9f4d1e9104fa6951114c1f9ec954dfcc749196..fc11577083672f127335613459436167d339efa4 100644
+--- a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
++++ b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
+@@ -254,6 +254,17 @@ public final class PluginDescriptionFile {
+     private Set<PluginAwareness> awareness = ImmutableSet.of();
+     private String apiVersion = null;
+     private List<String> libraries = ImmutableList.of();
++    // Folia start - block plugins not marked as supported
++    private boolean foliaSupported;
++
++    /**
++     * Returns whether the plugin has been marked to be compatible with regionised threading as provided
++     * by Folia
++     */
++    public boolean isFoliaSupported() {
++        return foliaSupported;
++    }
++    // Folia end - block plugins not marked as supported
+ 
+     public PluginDescriptionFile(@NotNull final InputStream stream) throws InvalidDescriptionException {
+         loadMap(asMap(YAML.get().load(stream)));
+@@ -1173,6 +1184,11 @@ public final class PluginDescriptionFile {
+         if (map.get("prefix") != null) {
+             prefix = map.get("prefix").toString();
+         }
++        // Folia start - block plugins not marked as supported
++        if (map.get("folia-supported") != null) {
++            foliaSupported = map.get("folia-supported").toString().equalsIgnoreCase("true");
++        }
++        // Folia end - block plugins not marked as supported
+     }
+ 
+     @NotNull
+diff --git a/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
+index 499dc8309a16b33d16b57b433c3c5b4330323717..25f228e616d1f5475a06bf3eeb2cf1cf6b6ed352 100644
+--- a/src/main/java/org/bukkit/plugin/SimplePluginManager.java
++++ b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
+@@ -163,6 +163,12 @@ public final class SimplePluginManager implements PluginManager {
+                     server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + file.getParentFile().getPath() + "': uses the space-character (0x20) in its name"); // Paper
+                     continue;
+                 }
++                // Folia start - block plugins not marked as supported
++                if (!description.isFoliaSupported()) {
++                    server.getLogger().log(Level.SEVERE, "Could not load plugin '" + name + "' as it is not marked as supporting Folia!");
++                    continue;
++                }
++                // Folia end - block plugins not marked as supported
+             } catch (InvalidDescriptionException ex) {
+                 server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + file.getParentFile().getPath() + "'", ex); // Paper
+                 continue;
