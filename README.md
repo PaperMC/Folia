@@ -126,3 +126,11 @@ issues, which then become near impossible to debug.
   required to prevent plugin devs from shipping code that may randomly
   break random parts of the server in entirely _undiagnosable_ manners.
 - More to come here
+- 
+## License
+The PATCHES-LICENSE file describes the license for api & server patches,
+found in `./patches` and its subdirectories except when noted otherwise.
+
+The fork is based off of PaperMC's fork example found [here](https://github.com/PaperMC/paperweight-examples).
+As such, it contains modifications to it in this project, please see the repository for license information
+of modified files.
