@@ -9427,15 +9427,14 @@ index 0000000000000000000000000000000000000000..5bf205d8c0a03ba932be85cc1a63d6ce
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b924146112006e85dfc12c2b303a2eecf23741ca
+index 0000000000000000000000000000000000000000..c0b9f43fc53a5c9b3d9788f080e4fd3f4f94ebfe
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,38 @@
 +package io.papermc.paper.threadedregions.scheduler;
 +
 +import ca.spottedleaf.concurrentutil.util.Validate;
 +import org.bukkit.craftbukkit.entity.CraftEntity;
-+import org.bukkit.entity.Entity;
 +import org.bukkit.plugin.Plugin;
 +import java.util.function.Consumer;
 +import java.util.logging.Level;
@@ -9448,13 +9447,13 @@ index 0000000000000000000000000000000000000000..b924146112006e85dfc12c2b303a2eec
 +        this.entity = entity;
 +    }
 +
-+    private static Consumer<? extends net.minecraft.world.entity.Entity> wrap(final Plugin plugin, final Consumer<? extends Entity> consumer) {
++    private static Consumer<? extends net.minecraft.world.entity.Entity> wrap(final Plugin plugin, final Runnable runnable) {
 +        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(consumer, "Consumer may not be null");
++        Validate.notNull(runnable, "Runnable may not be null");
 +
 +        return (final net.minecraft.world.entity.Entity nmsEntity) -> {
 +            try {
-+                ((Consumer<Entity>)consumer).accept(nmsEntity.getBukkitEntity());
++                runnable.run();
 +            } catch (final Throwable throwable) {
 +                plugin.getLogger().log(Level.WARNING, "Entity task for " + plugin.getDescription().getFullName() + " generated an exception", throwable);
 +            }
@@ -9462,7 +9461,7 @@ index 0000000000000000000000000000000000000000..b924146112006e85dfc12c2b303a2eec
 +    }
 +
 +    @Override
-+    public boolean execute(final Plugin plugin, final Consumer<? extends Entity> run, final Consumer<? extends Entity> retired,
++    public boolean execute(final Plugin plugin, final Runnable run, final Runnable retired,
 +                           final long delay) {
 +        final Consumer<? extends net.minecraft.world.entity.Entity> runNMS = wrap(plugin, run);
 +        final Consumer<? extends net.minecraft.world.entity.Entity> runRetired = retired == null ? null : wrap(plugin, retired);
