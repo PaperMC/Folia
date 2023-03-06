@@ -54,6 +54,12 @@ or to Paperlib.
 
 ### The new rules
 
+First, Folia breaks many plugins. To aid users in figuring out which
+plugins work, only plugins that have been explicitly marked by the
+author(s) to work with Folia will be loaded. By placing
+"folia-supported: true" into the plugin's plugin.yml, plugin authors
+can mark their plugin as compatible with regionised multithreading.
+
 The other important rule is that the regions tick in _parallel_, and not 
 _concurrently_. They do not share data, they do not expect to share data,
 and sharing of data _will_ cause data corruption. 
