@@ -21865,7 +21865,7 @@ index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..72a8e27c5ff6063d2e2b3590390b24a1
  
      @Override
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc0118a44947 100644
+index d33476ffa49d7f6388bb227f8a57cf115a74698f..6d1d49811af39e8c943404d82e8acd64f3ee297a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -180,7 +180,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
@@ -21877,7 +21877,24 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
      }
  
      @Override
-@@ -361,10 +361,10 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -329,6 +329,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public Chunk getChunkAt(int x, int z) {
++        io.papermc.paper.util.TickThread.isTickThreadFor(this.getHandle(), x, z); // Folia - region threading
+         warnUnsafeChunk("getting a faraway chunk", x, z); // Paper
+         // Paper start - add ticket to hold chunk for a little while longer if plugin accesses it
+         net.minecraft.world.level.chunk.LevelChunk chunk = world.getChunkSource().getChunkAtIfLoadedImmediately(x, z);
+@@ -342,7 +343,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     // Paper start
+     private void addTicket(int x, int z) {
+-        io.papermc.paper.util.MCUtil.MAIN_EXECUTOR.execute(() -> world.getChunkSource().addRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 0, Unit.INSTANCE)); // Paper
++        world.getChunkSource().addRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 0, Unit.INSTANCE); // Paper // Folia - region threading - does not need to be on the main thread anymore
+     }
+     // Paper end
+ 
+@@ -361,10 +362,10 @@ public class CraftWorld extends CraftRegionAccessor implements World {
      @Override
      public boolean isChunkGenerated(int x, int z) {
          // Paper start - Fix this method
@@ -21890,7 +21907,7 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
          }
          ChunkAccess chunk = world.getChunkSource().getChunkAtImmediately(x, z);
          if (chunk == null) {
-@@ -530,6 +530,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -530,6 +531,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public boolean loadChunk(int x, int z, boolean generate) {
@@ -21898,7 +21915,16 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
          org.spigotmc.AsyncCatcher.catchOp("chunk load"); // Spigot
          warnUnsafeChunk("loading a faraway chunk", x, z); // Paper
          // Paper start - Optimize this method
-@@ -788,13 +789,14 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -603,7 +605,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         DistanceManager chunkDistanceManager = this.world.getChunkSource().chunkMap.distanceManager;
+ 
+         if (chunkDistanceManager.addRegionTicketAtDistance(TicketType.PLUGIN_TICKET, new ChunkPos(x, z), 2, plugin)) { // keep in-line with force loading, add at level 31
+-            this.getChunkAt(x, z); // ensure loaded
++            //this.getChunkAt(x, z); // ensure loaded // Folia - region threading - do not load chunks for tickets anymore to make this mt-safe
+             return true;
+         }
+ 
+@@ -788,13 +790,14 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public boolean generateTree(Location loc, TreeType type, BlockChangeDelegate delegate) {
@@ -21918,7 +21944,7 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
                  BlockPos position = ((CraftBlockState) blockstate).getPosition();
                  net.minecraft.world.level.block.state.BlockState oldBlock = this.world.getBlockState(position);
                  int flag = ((CraftBlockState) blockstate).getFlag();
-@@ -802,10 +804,10 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -802,10 +805,10 @@ public class CraftWorld extends CraftRegionAccessor implements World {
                  net.minecraft.world.level.block.state.BlockState newBlock = this.world.getBlockState(position);
                  this.world.notifyAndUpdatePhysics(position, null, oldBlock, newBlock, newBlock, flag, 512);
              }
@@ -21931,7 +21957,7 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
              return false;
          }
      }
-@@ -878,7 +880,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -878,7 +881,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public long getGameTime() {
@@ -21940,7 +21966,7 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
      }
  
      @Override
-@@ -1853,7 +1855,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -1853,7 +1856,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
          if (!(entity instanceof CraftEntity craftEntity) || entity.getWorld() != this || sound == null || category == null) return;
  
          ClientboundSoundEntityPacket packet = new ClientboundSoundEntityPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(CraftSound.getSoundEffect(sound)), net.minecraft.sounds.SoundSource.valueOf(category.name()), craftEntity.getHandle(), volume, pitch, this.getHandle().getRandom().nextLong());
@@ -21949,7 +21975,7 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
          if (entityTracker != null) {
              entityTracker.broadcastAndSend(packet);
          }
-@@ -2339,7 +2341,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -2339,7 +2342,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
      // Paper start
      public java.util.concurrent.CompletableFuture<Chunk> getChunkAtAsync(int x, int z, boolean gen, boolean urgent) {
          warnUnsafeChunk("getting a faraway chunk async", x, z); // Paper
@@ -21958,7 +21984,7 @@ index d33476ffa49d7f6388bb227f8a57cf115a74698f..673b5dabaf3b22ea6cd31591027efc01
              net.minecraft.world.level.chunk.LevelChunk immediate = this.world.getChunkSource().getChunkAtIfLoadedImmediately(x, z);
              if (immediate != null) {
                  return java.util.concurrent.CompletableFuture.completedFuture(immediate.getBukkitChunk());
-@@ -2356,7 +2358,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -2356,7 +2359,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
          java.util.concurrent.CompletableFuture<Chunk> ret = new java.util.concurrent.CompletableFuture<>();
  
          io.papermc.paper.chunk.system.ChunkSystem.scheduleChunkLoad(this.getHandle(), x, z, gen, ChunkStatus.FULL, true, priority, (c) -> {
