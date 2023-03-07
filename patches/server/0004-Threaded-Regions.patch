@@ -8600,12 +8600,13 @@ index 0000000000000000000000000000000000000000..390bda127be9be5349c1c442ca01df6b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4889ebf6e3eb5901eeac49900c541d2359d71316
+index 0000000000000000000000000000000000000000..85348ddd7568ea68bfdb5092ded14886359c0c01
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
-@@ -0,0 +1,330 @@
+@@ -0,0 +1,332 @@
 +package io.papermc.paper.threadedregions.commands;
 +
++import io.papermc.paper.threadedregions.RegionisedServer;
 +import io.papermc.paper.threadedregions.ThreadedRegioniser;
 +import io.papermc.paper.threadedregions.TickData;
 +import io.papermc.paper.threadedregions.TickRegionScheduler;
@@ -8740,18 +8741,17 @@ index 0000000000000000000000000000000000000000..4889ebf6e3eb5901eeac49900c541d23
 +            world.regioniser.computeForAllRegions(regions::add);
 +        }
 +
-+        final long currTime = System.nanoTime();
-+
 +        final double minTps;
 +        final double medianTps;
 +        final double maxTps;
-+        long totalTime = 0;
 +        double totalUtil = 0.0;
 +
 +        final DoubleArrayList tpsByRegion = new DoubleArrayList();
 +        final List<TickData.TickReportData> reportsByRegion = new ArrayList<>();
-+
 +        final int maxThreadCount = TickRegions.getScheduler().getTotalThreadCount();
++
++        final long currTime = System.nanoTime();
++        final TickData.TickReportData globalTickReport = RegionisedServer.getGlobalTickData().getTickReport15s(currTime);
 +
 +        for (final ThreadedRegioniser.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region : regions) {
 +            final TickData.TickReportData report = region.getData().getRegionSchedulingHandle().getTickReport15s(currTime);
@@ -8759,6 +8759,8 @@ index 0000000000000000000000000000000000000000..4889ebf6e3eb5901eeac49900c541d23
 +            reportsByRegion.add(report);
 +            totalUtil += (report == null ? 0.0 : report.utilisation());
 +        }
++
++        totalUtil += globalTickReport.utilisation();
 +
 +        tpsByRegion.sort(null);
 +        if (!tpsByRegion.isEmpty()) {
