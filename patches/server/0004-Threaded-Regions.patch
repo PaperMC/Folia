@@ -19270,7 +19270,7 @@ index a213f4098859858a73ddd601bbe8c7511972e0d5..07aa859ccfd3283097c172672c5d8013
  
      static class CacheKey {
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..54f50326beaef3985277ff941e40415a671f31fb 100644
+index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..467e51fd2cb695ecf282757da82e133a3b8b63c8 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -116,10 +116,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -19576,8 +19576,15 @@ index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..54f50326beaef3985277ff941e40415a
      }
  
      public <T extends Entity> void guardEntityTick(Consumer<T> tickConsumer, T entity) {
-@@ -1008,7 +1028,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1006,9 +1026,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+ 
+     @Nullable
      public BlockEntity getBlockEntity(BlockPos blockposition, boolean validate) {
++        // Folia start - region threading
++        if (!io.papermc.paper.util.TickThread.isTickThread()) {
++            return null;
++        }
++        // Folia end - region threading
          // Paper start - Optimize capturedTileEntities lookup
          net.minecraft.world.level.block.entity.BlockEntity blockEntity;
 -        if (!this.capturedTileEntities.isEmpty() && (blockEntity = this.capturedTileEntities.get(blockposition)) != null) {
@@ -19585,7 +19592,7 @@ index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..54f50326beaef3985277ff941e40415a
              return blockEntity;
          }
          // Paper end
-@@ -1021,8 +1041,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1021,8 +1046,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
          if (!this.isOutsideBuildHeight(blockposition)) {
              // CraftBukkit start
@@ -19596,7 +19603,7 @@ index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..54f50326beaef3985277ff941e40415a
                  return;
              }
              // CraftBukkit end
-@@ -1226,13 +1246,30 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1226,13 +1251,30 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      public void disconnect() {}
  
@@ -19629,7 +19636,7 @@ index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..54f50326beaef3985277ff941e40415a
  
      public boolean mayInteract(Player player, BlockPos pos) {
          return true;
-@@ -1438,8 +1475,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1438,8 +1480,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      }
      public final BlockPos.MutableBlockPos getRandomBlockPosition(int x, int y, int z, int l, BlockPos.MutableBlockPos out) {
          // Paper end
@@ -19639,7 +19646,7 @@ index 60003ff929f7ac6b34f9230c53ccbd54dc9e176b..54f50326beaef3985277ff941e40415a
  
          out.set(x + (i1 & 15), y + (i1 >> 16 & l), z + (i1 >> 8 & 15)); // Paper - change to setValues call
          return out; // Paper
-@@ -1470,7 +1506,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1470,7 +1511,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public long nextSubTickCount() {
