@@ -9600,6 +9600,23 @@ index e08f4e39db4ee3fed62e37364d17dcc5c5683504..03d239460a2e856c1f59d6bcd95811c8
 +        // Folia end - region threading
      }
  }
+diff --git a/src/main/java/io/papermc/paper/util/CollisionUtil.java b/src/main/java/io/papermc/paper/util/CollisionUtil.java
+index a87f6380b2c387fb0cdd40d5087b5c93492e3c88..77d369ca6be814d1f5a19ec37b44800529e6cda3 100644
+--- a/src/main/java/io/papermc/paper/util/CollisionUtil.java
++++ b/src/main/java/io/papermc/paper/util/CollisionUtil.java
+@@ -480,7 +480,12 @@ public final class CollisionUtil {
+                 if (chunkProvider == null) {
+                     chunk = (ChunkAccess)getter.getChunkForCollisions(currChunkX, currChunkZ);
+                 } else {
++                    // Folia start - ignore chunk if we do not own the region
++                    if (!io.papermc.paper.util.TickThread.isTickThreadFor(chunkProvider.chunkMap.level, currChunkX, currChunkZ)) {
++                        chunk = null;
++                    } else { // Folia end - ignore chunk if we do not own the region
+                     chunk = loadChunks ? chunkProvider.getChunk(currChunkX, currChunkZ, true) : chunkProvider.getChunkAtIfLoadedImmediately(currChunkX, currChunkZ);
++                    } // Folia - ignore chunk if we do not own the region
+                 }
+ 
+                 if (chunk == null) {
 diff --git a/src/main/java/io/papermc/paper/util/CoordinateUtils.java b/src/main/java/io/papermc/paper/util/CoordinateUtils.java
 index 413e4b6da027876dbbe8eb78f2568a440f431547..3a7dbcb9964723b8ed5e6b0a1ee4267923c746e4 100644
 --- a/src/main/java/io/papermc/paper/util/CoordinateUtils.java
