@@ -9696,7 +9696,7 @@ index 6898c704e60d89d53c8ed114e5e12f73ed63605a..594ada3cdec25784c7bd6abb9ad42d3f
       * Converts an NMS entity's current location to a Bukkit Location
       * @param entity
 diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
-index fc57850b80303fcade89ca95794f63910404a407..7de0bd89b13dcb550cf78ceda625f5ab9f9f3599 100644
+index fc57850b80303fcade89ca95794f63910404a407..911a4590e8c45b917c9245d7e719d79bbd3e5f3d 100644
 --- a/src/main/java/io/papermc/paper/util/TickThread.java
 +++ b/src/main/java/io/papermc/paper/util/TickThread.java
 @@ -1,8 +1,19 @@
@@ -9815,7 +9815,7 @@ index fc57850b80303fcade89ca95794f63910404a407..7de0bd89b13dcb550cf78ceda625f5ab
 +        final RegionisedWorldData worldData = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData();
 +
 +        // pass through the check if the entity is removed and we own its chunk
-+        return worldData.hasEntity(entity) || (entity.isRemoved() && !(entity instanceof ServerPlayer) && isTickThreadFor((ServerLevel)level, entity.chunkPosition()));
++        return worldData.hasEntity(entity) || ((entity.hasNullCallback() || entity.isRemoved()) && !(entity instanceof ServerPlayer) && isTickThreadFor((ServerLevel)level, entity.chunkPosition()));
      }
  }
 diff --git a/src/main/java/io/papermc/paper/util/set/LinkedSortedSet.java b/src/main/java/io/papermc/paper/util/set/LinkedSortedSet.java
@@ -16744,7 +16744,7 @@ index 6b5fd3e2e19c2d3d694df94f90fce0d310a1a86c..a7a48cf40db1e31ab03e0f42028b617b
  
              itemstack = entityliving1.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 1eaab1f6923e6aa34b643293347348e5cc19af3c..b8fe79dff6b9917e3a053a52a9efff4679231501 100644
+index 1eaab1f6923e6aa34b643293347348e5cc19af3c..56d8a63fa576e6e325a10bedd320fb85aa51b891 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -165,7 +165,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17717,7 +17717,20 @@ index 1eaab1f6923e6aa34b643293347348e5cc19af3c..b8fe79dff6b9917e3a053a52a9efff46
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4461,7 +5228,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4437,6 +5204,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         return this.removalReason != null;
+     }
+ 
++    // Folia start - region threading
++    public final boolean hasNullCallback() {
++        return this.levelCallback == EntityInLevelCallback.NULL;
++    }
++    // Folia end - region threading
++
+     @Nullable
+     public Entity.RemovalReason getRemovalReason() {
+         return this.removalReason;
+@@ -4461,7 +5234,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
          this.levelCallback.onRemove(reason);
