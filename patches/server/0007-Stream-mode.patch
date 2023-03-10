@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Thu, 9 Mar 2023 19:46:04 -0800
+Subject: [PATCH] Stream mode
+
+We need to disable chat for the public test, because people
+will want to play "get x banned from twitch any %"
+
+diff --git a/src/main/java/net/minecraft/commands/Commands.java b/src/main/java/net/minecraft/commands/Commands.java
+index 22f06033a731c3ba1b815842be7a9d575fa820f2..93262f2ade2e9f70377bbf9acfe1a02e741e68d4 100644
+--- a/src/main/java/net/minecraft/commands/Commands.java
++++ b/src/main/java/net/minecraft/commands/Commands.java
+@@ -138,7 +138,7 @@ public class Commands {
+         this(); // CraftBukkit
+         AdvancementCommands.register(this.dispatcher);
+         AttributeCommand.register(this.dispatcher, commandRegistryAccess);
+-        ExecuteCommand.register(this.dispatcher, commandRegistryAccess);
++        ExecuteCommand.register(this.dispatcher, commandRegistryAccess); // Folia - stream mode
+         //BossBarCommands.register(this.dispatcher); // Folia - region threading - TODO
+         ClearInventoryCommands.register(this.dispatcher, commandRegistryAccess);
+         //CloneCommands.register(this.dispatcher, commandRegistryAccess); // Folia - region threading - TODO
+@@ -148,7 +148,7 @@ public class Commands {
+         DefaultGameModeCommands.register(this.dispatcher);
+         DifficultyCommand.register(this.dispatcher);
+         EffectCommands.register(this.dispatcher, commandRegistryAccess);
+-        EmoteCommands.register(this.dispatcher);
++        //EmoteCommands.register(this.dispatcher);  // Folia - stream mode
+         EnchantCommand.register(this.dispatcher, commandRegistryAccess);
+         ExperienceCommand.register(this.dispatcher);
+         FillCommand.register(this.dispatcher, commandRegistryAccess);
+@@ -165,7 +165,7 @@ public class Commands {
+         ListPlayersCommand.register(this.dispatcher);
+         LocateCommand.register(this.dispatcher, commandRegistryAccess);
+         //LootCommand.register(this.dispatcher, commandRegistryAccess); // Folia - region threading - TODO later
+-        MsgCommand.register(this.dispatcher);
++        //MsgCommand.register(this.dispatcher); // Folia - stream mode
+         ParticleCommand.register(this.dispatcher, commandRegistryAccess);
+         PlaceCommand.register(this.dispatcher);
+         PlaySoundCommand.register(this.dispatcher);
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 97a762b08cd2609a8aa364c174c1167f79fb4d62..69536e84b3baf7a55d344ce7fc5bbfc609d30c64 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2222,7 +2222,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+             this.disconnect(Component.translatable("multiplayer.disconnect.illegal_characters"), org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_CHARACTERS); // Paper - add cause
+             // Folia - region threading
+         } else {
+-            Optional<LastSeenMessages> optional = this.tryHandleChat(packet.message(), packet.timeStamp(), packet.lastSeenMessages());
++            // Folia - stream mode
++            Optional<LastSeenMessages> optional = this.tryHandleChat(packet.message(), packet.timeStamp(), packet.lastSeenMessages(), true); // Folia - disable chat
+ 
+             if (optional.isPresent()) {
+                 // this.server.submit(() -> { // CraftBukkit - async chat
+@@ -2258,7 +2259,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+             this.disconnect(Component.translatable("multiplayer.disconnect.illegal_characters"), org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_CHARACTERS); // Paper
+             // Folia - region threading
+         } else {
+-            Optional<LastSeenMessages> optional = this.tryHandleChat(packet.command(), packet.timeStamp(), packet.lastSeenMessages());
++            Optional<LastSeenMessages> optional = this.tryHandleChat(packet.command(), packet.timeStamp(), packet.lastSeenMessages(), false); // Folia - disable chat
+ 
+             if (optional.isPresent()) {
+                 this.player.getBukkitEntity().taskScheduler.schedule((ServerPlayer player) -> { // Folia - region threading
+@@ -2335,14 +2336,14 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+         return com_mojang_brigadier_commanddispatcher.parse(command, this.player.createCommandSourceStack());
+     }
+ 
+-    private Optional<LastSeenMessages> tryHandleChat(String message, Instant timestamp, LastSeenMessages.Update acknowledgment) {
++    private Optional<LastSeenMessages> tryHandleChat(String message, Instant timestamp, LastSeenMessages.Update acknowledgment, boolean chat) { // Folia - stream mode
+         if (!this.updateChatOrder(timestamp)) {
+             ServerGamePacketListenerImpl.LOGGER.warn("{} sent out-of-order chat: '{}': {} > {}", this.player.getName().getString(), message, this.lastChatTimeStamp.get().getEpochSecond(), timestamp.getEpochSecond()); // Paper
+             // Folia - region threading
+             this.disconnect(Component.translatable("multiplayer.disconnect.out_of_order_chat"), org.bukkit.event.player.PlayerKickEvent.Cause.OUT_OF_ORDER_CHAT); // Paper - kick event ca
+             // Folia - region threading
+             return Optional.empty();
+-        } else if (this.player.isRemoved() || this.player.getChatVisibility() == ChatVisiblity.HIDDEN) { // CraftBukkit - dead men tell no tales
++        } else if (this.player.isRemoved() || this.player.getChatVisibility() == ChatVisiblity.HIDDEN || (chat && !this.player.getBukkitEntity().isOp())) { // CraftBukkit - dead men tell no tales // Folia - stream mode
+             this.send(new ClientboundSystemChatPacket(Component.translatable("chat.disabled.options").withStyle(ChatFormatting.RED), false));
+             return Optional.empty();
+         } else {
