@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Fri, 10 Mar 2023 00:16:26 -0800
+Subject: [PATCH] Add chunk system throughput counters to /tps
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java
+index 300700477ee34bc22b31315825c0e40f61070cd5..0b78d1eb90500e0123b7281d722805dc65d551d0 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java
+@@ -22,6 +22,9 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+     protected final ChunkAccess fromChunk;
+     protected final PrioritisedExecutor.PrioritisedTask convertToFullTask;
+ 
++    public static final io.papermc.paper.util.IntervalledCounter chunkLoads = new io.papermc.paper.util.IntervalledCounter(java.util.concurrent.TimeUnit.SECONDS.toNanos(15L));
++    public static final io.papermc.paper.util.IntervalledCounter chunkGenerates = new io.papermc.paper.util.IntervalledCounter(java.util.concurrent.TimeUnit.SECONDS.toNanos(15L));
++
+     public ChunkFullTask(final ChunkTaskScheduler scheduler, final ServerLevel world, final int chunkX, final int chunkZ,
+                          final NewChunkHolder chunkHolder, final ChunkAccess fromChunk, final PrioritisedExecutor.Priority priority) {
+         super(scheduler, world, chunkX, chunkZ);
+@@ -35,6 +38,20 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+         return ChunkStatus.FULL;
+     }
+ 
++    public static double genRate(final long time) {
++        synchronized (chunkGenerates) {
++            chunkGenerates.updateCurrentTime(time);
++            return chunkGenerates.getRate();
++        }
++    }
++
++    public static double loadRate(final long time) {
++        synchronized (chunkLoads) {
++            chunkLoads.updateCurrentTime(time);
++            return chunkLoads.getRate();
++        }
++    }
++
+     @Override
+     public void run() {
+         // See Vanilla protoChunkToFullChunk for what this function should be doing
+@@ -49,6 +66,17 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+                 this.world.getPoiManager().checkConsistency(this.fromChunk);
+             }
+ 
++            final long time = System.nanoTime();
++            if (this.fromChunk instanceof ImposterProtoChunk wrappedFull) {
++                synchronized (chunkLoads) {
++                    chunkLoads.updateAndAdd(1L, time);
++                }
++            } else {
++                synchronized (chunkGenerates) {
++                    chunkGenerates.updateAndAdd(1L, time);
++                }
++            }
++
+             if (this.fromChunk instanceof ImposterProtoChunk wrappedFull) {
+                 chunk = wrappedFull.getWrapped();
+             } else {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
+index 98aacd93794e7bde711b5a1e56aa6e82c8e9da1b..c22c9022ab5c09053bcc91700f9653b966178a8b 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
++++ b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
+@@ -154,6 +154,9 @@ public final class CommandServerHealth extends Command {
+             totalUtil += (report == null ? 0.0 : report.utilisation());
+         }
+ 
++        final double genRate = io.papermc.paper.chunk.system.scheduling.ChunkFullTask.genRate(currTime);
++        final double loadRate = io.papermc.paper.chunk.system.scheduling.ChunkFullTask.loadRate(currTime);
++
+         totalUtil += globalTickReport.utilisation();
+ 
+         tpsByRegion.sort(null);
+@@ -261,6 +264,12 @@ public final class CommandServerHealth extends Command {
+                 .append(Component.text(ONE_DECIMAL_PLACES.format(maxThreadCount * 100.0), INFORMATION))
+                 .append(Component.text("%\n", PRIMARY))
+ 
++                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
++                .append(Component.text("Load rate: ", PRIMARY))
++                .append(Component.text(TWO_DECIMAL_PLACES.format(loadRate) + ", ", INFORMATION))
++                .append(Component.text("Gen rate: ", PRIMARY))
++                .append(Component.text(TWO_DECIMAL_PLACES.format(genRate) + "\n", INFORMATION))
++
+                 .append(Component.text(" - ", LIST, TextDecoration.BOLD))
+                 .append(Component.text("Lowest Region TPS: ", PRIMARY))
+                 .append(Component.text(TWO_DECIMAL_PLACES.format(minTps) + "\n", CommandUtil.getColourForTPS(minTps)))
