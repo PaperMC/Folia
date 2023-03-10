@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Thu, 9 Mar 2023 20:50:15 -0800
+Subject: [PATCH] Max pending logins
+
+Should help the floodgates on launch
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
+index 626d99c785d2886bce605ba468ee24ce1710beb2..37ca4f314c8f0fdca2927c0b425bda4b959acff8 100644
+--- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
+@@ -85,7 +85,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+             UUID uniqueId = UUIDUtil.getOrCreatePlayerUUID(this.gameProfile);
+             if (this.server.getPlayerList().pushPendingJoin(name, uniqueId, this.connection)) {
+                 this.handleAcceptedLogin();
+-            }
++            } else { --this.tick; }
+             // Folia end - region threading - rewrite login process
+         } // Folia - region threading - remove delayed accept
+ 
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index a0267f2e110bacd30f33978414fd2aff2dc84ab1..d75932753449df47fcd9c6409cf43e7e5327e9de 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -168,6 +168,8 @@ public abstract class PlayerList {
+     private final Map<String, Connection> connectionByName = new java.util.HashMap<>();
+     private final Map<UUID, Connection> connectionById = new java.util.HashMap<>();
+ 
++    public static int maxConcurrentLogins = 5;
++
+     public boolean pushPendingJoin(String userName, UUID byId, Connection conn) {
+         userName = userName.toLowerCase(java.util.Locale.ROOT);
+         Connection conflictingName, conflictingId;
+@@ -176,6 +178,15 @@ public abstract class PlayerList {
+             conflictingId = this.connectionById.get(byId);
+ 
+             if (conflictingName == null && conflictingId == null) {
++                int loggedInCount = 0;
++                for (Connection value : this.connectionById.values()) {
++                    if (value.isPlayerConnected()) {
++                        ++loggedInCount;
++                    }
++                }
++                if ((this.connectionById.size() - loggedInCount) >= maxConcurrentLogins) {
++                    return false;
++                }
+                 this.connectionByName.put(userName, conn);
+                 this.connectionById.put(byId, conn);
+             }
