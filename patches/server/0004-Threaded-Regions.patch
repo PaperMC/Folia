@@ -7695,10 +7695,10 @@ index 0000000000000000000000000000000000000000..29f9fed5f02530b3256e6b993e607d46
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..27c1029673638249b5770a3e757edb8c763e7fa3
+index 0000000000000000000000000000000000000000..22d54b86ad86ecb8b739f51aedcb3fc02c9a738a
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-@@ -0,0 +1,548 @@
+@@ -0,0 +1,559 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -7742,6 +7742,7 @@ index 0000000000000000000000000000000000000000..27c1029673638249b5770a3e757edb8c
 +            @Override
 +            public Thread newThread(final Runnable run) {
 +                final Thread ret = new TickThreadRunner(run, "Region Scheduler Thread #" + this.idGenerator.getAndIncrement());
++                ret.setUncaughtExceptionHandler(TickRegionScheduler.this::uncaughtException);
 +                return ret;
 +            }
 +        });
@@ -7860,6 +7861,16 @@ index 0000000000000000000000000000000000000000..27c1029673638249b5770a3e757edb8c
 +
 +    public void init() {
 +        this.scheduler.start();
++    }
++
++    private void uncaughtException(final Thread thread, final Throwable thr) {
++        LOGGER.error("Uncaught exception in tick thread \"" + thread.getName() + "\"", thr);
++
++        // prevent further ticks from occurring
++        // we CANNOT sync, because WE ARE ON A SCHEDULER THREAD
++        this.scheduler.halt(false, 0L);
++
++        MinecraftServer.getServer().stopServer();
 +    }
 +
 +    private void regionFailed(final RegionScheduleHandle handle, final boolean executingTasks, final Throwable thr) {
