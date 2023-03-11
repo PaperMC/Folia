@@ -6162,10 +6162,10 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3588a0ad7996d77f3e7ee076961e5b1210aa384e
+index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3abab5057
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
-@@ -0,0 +1,1186 @@
+@@ -0,0 +1,1187 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.map.SWMRLong2ObjectHashTable;
@@ -6186,6 +6186,7 @@ index 0000000000000000000000000000000000000000..3588a0ad7996d77f3e7ee076961e5b12
 +import java.util.List;
 +import java.util.concurrent.atomic.AtomicLong;
 +import java.util.concurrent.locks.StampedLock;
++import java.util.function.BooleanSupplier;
 +import java.util.function.Consumer;
 +
 +public final class ThreadedRegioniser<R extends ThreadedRegioniser.ThreadedRegionData<R, S>, S extends ThreadedRegioniser.ThreadedRegionSectionData> {
@@ -6971,10 +6972,10 @@ index 0000000000000000000000000000000000000000..3588a0ad7996d77f3e7ee076961e5b12
 +            return this.data;
 +        }
 +
-+        public boolean tryMarkTicking() {
++        public boolean tryMarkTicking(final BooleanSupplier abort) {
 +            this.regioniser.acquireWriteLock();
 +            try {
-+                if (this.state != STATE_READY) {
++                if (this.state != STATE_READY || abort.getAsBoolean()) {
 +                    return false;
 +                }
 +
@@ -7693,10 +7694,10 @@ index 0000000000000000000000000000000000000000..29f9fed5f02530b3256e6b993e607d46
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e75aac237764c7a9fa0538ddf8d68b1e14de7d49
+index 0000000000000000000000000000000000000000..27c1029673638249b5770a3e757edb8c763e7fa3
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-@@ -0,0 +1,544 @@
+@@ -0,0 +1,548 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -7932,6 +7933,10 @@ index 0000000000000000000000000000000000000000..e75aac237764c7a9fa0538ddf8d68b1e
 +
 +        public final void markNonSchedulable() {
 +            this.cancelled.set(true);
++        }
++
++        public final boolean isMarkedAsNonSchedulable() {
++            return this.cancelled.get();
 +        }
 +
 +        protected abstract boolean tryMarkTicking();
@@ -8243,7 +8248,7 @@ index 0000000000000000000000000000000000000000..e75aac237764c7a9fa0538ddf8d68b1e
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..390bda127be9be5349c1c442ca01df6b56bfdfb9
+index 0000000000000000000000000000000000000000..f29f16ee5969dc1dfba512d7e5edb79d774baea1
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
 @@ -0,0 +1,355 @@
@@ -8552,7 +8557,7 @@ index 0000000000000000000000000000000000000000..390bda127be9be5349c1c442ca01df6b
 +
 +        @Override
 +        protected boolean tryMarkTicking() {
-+            return this.region.region.tryMarkTicking();
++            return this.region.region.tryMarkTicking(ConcreteRegionTickHandle.this::isMarkedAsNonSchedulable);
 +        }
 +
 +        @Override
