@@ -6163,14 +6163,16 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3abab5057
+index 0000000000000000000000000000000000000000..f6e41c466ba2501f82fd7916742c5fc045ddf828
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
-@@ -0,0 +1,1187 @@
+@@ -0,0 +1,1203 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.map.SWMRLong2ObjectHashTable;
 +import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
++import com.destroystokyo.paper.util.SneakyThrow;
++import com.mojang.logging.LogUtils;
 +import io.papermc.paper.util.CoordinateUtils;
 +import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 +import it.unimi.dsi.fastutil.longs.LongArrayList;
@@ -6179,7 +6181,7 @@ index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.ChunkPos;
-+
++import org.slf4j.Logger;
 +import java.lang.invoke.VarHandle;
 +import java.util.ArrayList;
 +import java.util.Arrays;
@@ -6191,6 +6193,8 @@ index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3
 +import java.util.function.Consumer;
 +
 +public final class ThreadedRegioniser<R extends ThreadedRegioniser.ThreadedRegionData<R, S>, S extends ThreadedRegioniser.ThreadedRegionSectionData> {
++
++    private static final Logger LOGGER = LogUtils.getLogger();
 +
 +    public final int regionSectionChunkSize;
 +    public final int sectionChunkShift;
@@ -6557,6 +6561,10 @@ index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3
 +                }
 +                this.callbacks.onRegionActive(regionOfInterest);
 +            }
++        } catch (final Throwable throwable) {
++            LOGGER.error("Failed to add chunk (" + chunkX + "," + chunkZ + ")", throwable);
++            SneakyThrow.sneaky(throwable);
++            return; // unreachable
 +        } finally {
 +            this.releaseWriteLock();
 +        }
@@ -6600,6 +6608,10 @@ index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3
 +                    neighbourSection.decrementNonEmptyNeighbours();
 +                }
 +            }
++        } catch (final Throwable throwable) {
++            LOGGER.error("Failed to add chunk (" + chunkX + "," + chunkZ + ")", throwable);
++            SneakyThrow.sneaky(throwable);
++            return; // unreachable
 +        } finally {
 +            this.releaseWriteLock();
 +        }
@@ -7001,6 +7013,10 @@ index 0000000000000000000000000000000000000000..5c4c65f1579ac170a3274c65dd0c4fa3
 +                this.regioniser.onRegionRelease(this);
 +
 +                return this.state == STATE_READY;
++            } catch (final Throwable throwable) {
++                LOGGER.error("Failed to acquire region " + this, throwable);
++                SneakyThrow.sneaky(throwable);
++                return false; // unreachable
 +            } finally {
 +                this.regioniser.releaseWriteLock();
 +            }
