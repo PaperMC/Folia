@@ -15543,10 +15543,10 @@ index 869daafbc236b3ff63f878e5fe28427fde75afe5..8cceb1031763bee4b791795534130112
          this.removeAllEffects(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.DEATH);
          this.effectsDirty = true;
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-index 58b093bb1de78ee3b3b2ea364aa50474883f443a..147c9baaf73d0f8c315477ee32236bc163e1736c 100644
+index 58b093bb1de78ee3b3b2ea364aa50474883f443a..dd6a45f88d69e892e57cbb862b978b08d404a3e9 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-@@ -123,7 +123,7 @@ public class ServerPlayerGameMode {
+@@ -123,11 +123,11 @@ public class ServerPlayerGameMode {
      }
  
      public void tick() {
@@ -15555,6 +15555,20 @@ index 58b093bb1de78ee3b3b2ea364aa50474883f443a..147c9baaf73d0f8c315477ee32236bc1
          BlockState iblockdata;
  
          if (this.hasDelayedDestroy) {
+-            iblockdata = this.level.getBlockStateIfLoaded(this.delayedDestroyPos); // Paper
++            iblockdata = !io.papermc.paper.util.TickThread.isTickThreadFor(this.level, this.delayedDestroyPos) ? null : this.level.getBlockStateIfLoaded(this.delayedDestroyPos); // Paper // Folia - region threading - don't destroy blocks not owned
+             if (iblockdata == null || iblockdata.isAir()) { // Paper
+                 this.hasDelayedDestroy = false;
+             } else {
+@@ -140,7 +140,7 @@ public class ServerPlayerGameMode {
+             }
+         } else if (this.isDestroyingBlock) {
+             // Paper start - don't want to do same logic as above, return instead
+-            iblockdata = this.level.getBlockStateIfLoaded(this.destroyPos);
++            iblockdata = !io.papermc.paper.util.TickThread.isTickThreadFor(this.level, this.destroyPos) ? null : this.level.getBlockStateIfLoaded(this.destroyPos); // Folia - region threading - don't destroy blocks not owned
+             if (iblockdata == null) {
+                 this.isDestroyingBlock = false;
+                 return;
 @@ -408,7 +408,7 @@ public class ServerPlayerGameMode {
              } else {
                  // CraftBukkit start
@@ -15732,7 +15746,7 @@ index abcc3266d18f34d160eac87fdea153dce24c60b8..7cf0619883577a0f21ed75ba70ece90d
                  Collections.shuffle( this.connections );
              }
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 3472f7f9b98d6d9c9f6465872803ef17fa67486d..97a762b08cd2609a8aa364c174c1167f79fb4d62 100644
+index 3472f7f9b98d6d9c9f6465872803ef17fa67486d..7bd6a7a86c10f5b0db94d4a1222310857d56111d 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -320,10 +320,10 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
@@ -15972,6 +15986,15 @@ index 3472f7f9b98d6d9c9f6465872803ef17fa67486d..97a762b08cd2609a8aa364c174c1167f
                      } else {
                          // Else we increment the drop count and check the amount.
                          this.dropCount++;
+@@ -1859,7 +1874,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+             case ABORT_DESTROY_BLOCK:
+             case STOP_DESTROY_BLOCK:
+                 // Paper start - Don't allow digging in unloaded chunks
+-                if (this.player.level.getChunkIfLoadedImmediately(blockposition.getX() >> 4, blockposition.getZ() >> 4) == null) {
++                if (!io.papermc.paper.util.TickThread.isTickThreadFor(this.player.getLevel(), blockposition) || this.player.level.getChunkIfLoadedImmediately(blockposition.getX() >> 4, blockposition.getZ() >> 4) == null) { // Folia - region threading - don't destroy blocks not owned
+                     this.player.connection.ackBlockChangesUpTo(packet.getSequence());
+                     return;
+                 }
 @@ -2056,7 +2071,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
                  Entity entity = packet.getEntity(worldserver);
  
