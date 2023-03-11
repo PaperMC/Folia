@@ -15746,7 +15746,7 @@ index abcc3266d18f34d160eac87fdea153dce24c60b8..7cf0619883577a0f21ed75ba70ece90d
                  Collections.shuffle( this.connections );
              }
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 3472f7f9b98d6d9c9f6465872803ef17fa67486d..7bd6a7a86c10f5b0db94d4a1222310857d56111d 100644
+index 3472f7f9b98d6d9c9f6465872803ef17fa67486d..eb717d86deeebda89b5bcbbfce1755dd10420da9 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -320,10 +320,10 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
@@ -15991,10 +15991,19 @@ index 3472f7f9b98d6d9c9f6465872803ef17fa67486d..7bd6a7a86c10f5b0db94d4a122231085
              case STOP_DESTROY_BLOCK:
                  // Paper start - Don't allow digging in unloaded chunks
 -                if (this.player.level.getChunkIfLoadedImmediately(blockposition.getX() >> 4, blockposition.getZ() >> 4) == null) {
-+                if (!io.papermc.paper.util.TickThread.isTickThreadFor(this.player.getLevel(), blockposition) || this.player.level.getChunkIfLoadedImmediately(blockposition.getX() >> 4, blockposition.getZ() >> 4) == null) { // Folia - region threading - don't destroy blocks not owned
++                if (!io.papermc.paper.util.TickThread.isTickThreadFor(this.player.getLevel(), blockposition.getX() >> 4, blockposition.getZ() >> 4, 8) || this.player.level.getChunkIfLoadedImmediately(blockposition.getX() >> 4, blockposition.getZ() >> 4) == null) { // Folia - region threading - don't destroy blocks not owned
                      this.player.connection.ackBlockChangesUpTo(packet.getSequence());
                      return;
                  }
+@@ -1943,7 +1958,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+             BlockPos blockposition = movingobjectpositionblock.getBlockPos();
+             Vec3 vec3d1 = Vec3.atCenterOf(blockposition);
+ 
+-            if (this.player.getEyePosition().distanceToSqr(vec3d1) <= ServerGamePacketListenerImpl.MAX_INTERACTION_DISTANCE) {
++            if (io.papermc.paper.util.TickThread.isTickThreadFor(this.player.getLevel(), blockposition.getX() >> 4, blockposition.getZ() >> 4, 8) && this.player.getEyePosition().distanceToSqr(vec3d1) <= ServerGamePacketListenerImpl.MAX_INTERACTION_DISTANCE) { // Folia - do not allow players to interact with blocks outside the current region
+                 Vec3 vec3d2 = vec3d.subtract(vec3d1);
+                 double d0 = 1.0000001D;
+ 
 @@ -2056,7 +2071,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
                  Entity entity = packet.getEntity(worldserver);
  
