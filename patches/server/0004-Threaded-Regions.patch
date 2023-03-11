@@ -10295,7 +10295,7 @@ index 1e6ba6d9cceda1d4867b183c3dbc03d317ed287f..de8cf0f0d34708b960f1c81cb10d813a
          }
  
 diff --git a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
-index 58fa7b99dc7a9745afe6faf31c1804e95ed27dbe..28a260dfe6ba9f7e9ff161562dcb87a6314af87c 100644
+index 58fa7b99dc7a9745afe6faf31c1804e95ed27dbe..979871b342317b5cbc3d71b3147243bcf0672dc9 100644
 --- a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
 +++ b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
 @@ -221,7 +221,7 @@ public interface DispenseItemBehavior {
@@ -10413,10 +10413,12 @@ index 58fa7b99dc7a9745afe6faf31c1804e95ed27dbe..28a260dfe6ba9f7e9ff161562dcb87a6
                  // CraftBukkit start
 -                worldserver.captureTreeGeneration = false;
 -                if (worldserver.capturedBlockStates.size() > 0) {
+-                    TreeType treeType = SaplingBlock.treeType;
+-                    SaplingBlock.treeType = null;
 +                worldData.captureTreeGeneration = false; // Folia - region threading
 +                if (worldData.capturedBlockStates.size() > 0) { // Folia - region threading
-                     TreeType treeType = SaplingBlock.treeType;
-                     SaplingBlock.treeType = null;
++                    TreeType treeType = SaplingBlock.treeTypeRT.get(); // Folia - region threading
++                    SaplingBlock.treeTypeRT.set(null); // Folia - region threading
                      Location location = new Location(worldserver.getWorld(), blockposition.getX(), blockposition.getY(), blockposition.getZ());
 -                    List<org.bukkit.block.BlockState> blocks = new java.util.ArrayList<>(worldserver.capturedBlockStates.values());
 -                    worldserver.capturedBlockStates.clear();
@@ -19140,7 +19142,7 @@ index 9c8604376228c02f8bbd9a15673fbdf5097e7cb2..40410ce889ef18344291f04d29938b4d
              }
  
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index 6860096cb8c0deecc9c1d87543d1128fb95fd2d4..00cc67322d7de29c30b54aa7da62cc44d6469a1d 100644
+index 6860096cb8c0deecc9c1d87543d1128fb95fd2d4..9e11c7310ad83a2550affe2dc84721f4ab70db96 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
 @@ -333,6 +333,7 @@ public final class ItemStack {
@@ -19178,10 +19180,12 @@ index 6860096cb8c0deecc9c1d87543d1128fb95fd2d4..00cc67322d7de29c30b54aa7da62cc44
 +            if (enuminteractionresult.consumesAction() && worldData.captureTreeGeneration && worldData.capturedBlockStates.size() > 0) { // Folia - region threading
 +                world.getCurrentWorldData().captureTreeGeneration = false; // Folia - region threading
                  Location location = new Location(world.getWorld(), blockposition.getX(), blockposition.getY(), blockposition.getZ());
-                 TreeType treeType = SaplingBlock.treeType;
-                 SaplingBlock.treeType = null;
+-                TreeType treeType = SaplingBlock.treeType;
+-                SaplingBlock.treeType = null;
 -                List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
 -                world.capturedBlockStates.clear();
++                TreeType treeType = SaplingBlock.treeTypeRT.get(); // Folia - region threading
++                SaplingBlock.treeTypeRT.set(null); // Folia - region threading
 +                List<BlockState> blocks = new java.util.ArrayList<>(worldData.capturedBlockStates.values()); // Folia - region threading
 +                worldData.capturedBlockStates.clear(); // Folia - region threading
                  StructureGrowEvent structureEvent = null;
@@ -20164,6 +20168,22 @@ index e234ae13fe9793db237adb6f6216fa32638cfc4f..9447bc16dcd7ecfa941081197d5e4c34
              return;
          }
          // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/world/level/block/FungusBlock.java b/src/main/java/net/minecraft/world/level/block/FungusBlock.java
+index 9d0fc6b5b8d8fb31cacf7e8b346b9babf1a3e8a2..85701eba8dea71c64f92d5eaf99cb232bf2d9722 100644
+--- a/src/main/java/net/minecraft/world/level/block/FungusBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/FungusBlock.java
+@@ -61,9 +61,9 @@ public class FungusBlock extends BushBlock implements BonemealableBlock {
+         this.getFeature(world).ifPresent((holder) -> {
+             // CraftBukkit start
+             if (this == Blocks.WARPED_FUNGUS) {
+-                SaplingBlock.treeType = org.bukkit.TreeType.WARPED_FUNGUS;
++                SaplingBlock.treeTypeRT.set(org.bukkit.TreeType.WARPED_FUNGUS); // Folia - region threading
+             } else if (this == Blocks.CRIMSON_FUNGUS) {
+-                SaplingBlock.treeType = org.bukkit.TreeType.CRIMSON_FUNGUS;
++                SaplingBlock.treeTypeRT.set(org.bukkit.TreeType.CRIMSON_FUNGUS); // Folia - region threading
+             }
+             // CraftBukkit end
+             ((ConfiguredFeature) holder.value()).place(world, world.getChunkSource().getGenerator(), random, pos);
 diff --git a/src/main/java/net/minecraft/world/level/block/HoneyBlock.java b/src/main/java/net/minecraft/world/level/block/HoneyBlock.java
 index 683f24251baf8ef3bef8f32ba83dc7f0e8ed7d70..b0352a9f05ad1ec49314d505dc99ed7b29ed09c3 100644
 --- a/src/main/java/net/minecraft/world/level/block/HoneyBlock.java
@@ -20206,6 +20226,19 @@ index d3540a4daaa8021ae009bfd4d9ef4f1172ab4c56..336a4797d114ccfad319086c68e3546b
          }
  
          super.stepOn(world, pos, state, entity);
+diff --git a/src/main/java/net/minecraft/world/level/block/MushroomBlock.java b/src/main/java/net/minecraft/world/level/block/MushroomBlock.java
+index f6f8e155223cba10c4073ddca602d1aa3aa872d7..bc42faf2f5cf54197849b1ad133a88510bfea09d 100644
+--- a/src/main/java/net/minecraft/world/level/block/MushroomBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/MushroomBlock.java
+@@ -92,7 +92,7 @@ public class MushroomBlock extends BushBlock implements BonemealableBlock {
+             return false;
+         } else {
+             world.removeBlock(pos, false);
+-            SaplingBlock.treeType = (this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM; // CraftBukkit // Paper
++            SaplingBlock.treeTypeRT.set((this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM); // CraftBukkit // Paper // Folia - region threading
+             if (((ConfiguredFeature) ((Holder) optional.get()).value()).place(world, world.getChunkSource().getGenerator(), random, pos)) {
+                 return true;
+             } else {
 diff --git a/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java b/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java
 index e78fdd317d59cfca6a28deb6e0bd02aabe91e930..c2cb07426d22ff0c14dfa24cc2ead785eaaf1903 100644
 --- a/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java
@@ -20346,9 +20379,18 @@ index da07fce0cf7c9fbdb57d2c59e431b59bf583bf50..16e46bb6205c3f7444e864c553e8072f
      }
  }
 diff --git a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java b/src/main/java/net/minecraft/world/level/block/SaplingBlock.java
-index 901978a338f0f1b6f20ffb65aac59704bfa6f36a..01d8895fc04830d6f691852aaadf21d3ede75808 100644
+index 901978a338f0f1b6f20ffb65aac59704bfa6f36a..b76eb074ca64164ec55953d3203a56bb43c18c3b 100644
 --- a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/SaplingBlock.java
+@@ -26,7 +26,7 @@ public class SaplingBlock extends BushBlock implements BonemealableBlock {
+     protected static final float AABB_OFFSET = 6.0F;
+     protected static final VoxelShape SHAPE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 12.0D, 14.0D);
+     private final AbstractTreeGrower treeGrower;
+-    public static TreeType treeType; // CraftBukkit
++    public static final ThreadLocal<TreeType> treeTypeRT = new ThreadLocal<>(); // CraftBukkit // Folia - region threading
+ 
+     protected SaplingBlock(AbstractTreeGrower generator, BlockBehaviour.Properties settings) {
+         super(settings);
 @@ -52,18 +52,19 @@ public class SaplingBlock extends BushBlock implements BonemealableBlock {
              world.setBlock(pos, (net.minecraft.world.level.block.state.BlockState) state.cycle(SaplingBlock.STAGE), 4);
          } else {
@@ -20363,10 +20405,12 @@ index 901978a338f0f1b6f20ffb65aac59704bfa6f36a..01d8895fc04830d6f691852aaadf21d3
                  this.treeGrower.growTree(world, world.getChunkSource().getGenerator(), pos, state, random);
 -                world.captureTreeGeneration = false;
 -                if (world.capturedBlockStates.size() > 0) {
+-                    TreeType treeType = SaplingBlock.treeType;
+-                    SaplingBlock.treeType = null;
 +                worldData.captureTreeGeneration = false; // Folia - region threading
 +                if (worldData.capturedBlockStates.size() > 0) { // Folia - region threading
-                     TreeType treeType = SaplingBlock.treeType;
-                     SaplingBlock.treeType = null;
++                    TreeType treeType = SaplingBlock.treeTypeRT.get(); // Folia - region threading
++                    SaplingBlock.treeTypeRT.set(null); // Folia - region threading
                      Location location = new Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ());
 -                    java.util.List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
 -                    world.capturedBlockStates.clear();
@@ -20936,6 +20980,82 @@ index 28e3b73507b988f7234cbf29c4024c88180d0aef..c8facee29ee08e0975528083f89b64f0
      String getType();
 +
 +    BlockEntity getTileEntity(); // Folia - region threading
+ }
+diff --git a/src/main/java/net/minecraft/world/level/block/grower/AbstractTreeGrower.java b/src/main/java/net/minecraft/world/level/block/grower/AbstractTreeGrower.java
+index df41c210a0c06a2789fe4944fe1b9c2ba9509b61..c774545cbe195b71ebf3ee86cf6450a7ced61d4b 100644
+--- a/src/main/java/net/minecraft/world/level/block/grower/AbstractTreeGrower.java
++++ b/src/main/java/net/minecraft/world/level/block/grower/AbstractTreeGrower.java
+@@ -75,49 +75,51 @@ public abstract class AbstractTreeGrower {
+     // CraftBukkit start
+     protected void setTreeType(Holder<ConfiguredFeature<?, ?>> holder) {
+         ResourceKey<ConfiguredFeature<?, ?>> worldgentreeabstract = holder.unwrapKey().get();
++        TreeType treeType; // Folia - region threading
+         if (worldgentreeabstract == TreeFeatures.OAK || worldgentreeabstract == TreeFeatures.OAK_BEES_005) {
+-            SaplingBlock.treeType = TreeType.TREE;
++            treeType = TreeType.TREE; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.HUGE_RED_MUSHROOM) {
+-            SaplingBlock.treeType = TreeType.RED_MUSHROOM;
++            treeType = TreeType.RED_MUSHROOM; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.HUGE_BROWN_MUSHROOM) {
+-            SaplingBlock.treeType = TreeType.BROWN_MUSHROOM;
++            treeType = TreeType.BROWN_MUSHROOM; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.JUNGLE_TREE) {
+-            SaplingBlock.treeType = TreeType.COCOA_TREE;
++            treeType = TreeType.COCOA_TREE; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.JUNGLE_TREE_NO_VINE) {
+-            SaplingBlock.treeType = TreeType.SMALL_JUNGLE;
++            treeType = TreeType.SMALL_JUNGLE; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.PINE) {
+-            SaplingBlock.treeType = TreeType.TALL_REDWOOD;
++            treeType = TreeType.TALL_REDWOOD; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.SPRUCE) {
+-            SaplingBlock.treeType = TreeType.REDWOOD;
++            treeType = TreeType.REDWOOD; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.ACACIA) {
+-            SaplingBlock.treeType = TreeType.ACACIA;
++            treeType = TreeType.ACACIA; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.BIRCH || worldgentreeabstract == TreeFeatures.BIRCH_BEES_005) {
+-            SaplingBlock.treeType = TreeType.BIRCH;
++            treeType = TreeType.BIRCH; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.SUPER_BIRCH_BEES_0002) {
+-            SaplingBlock.treeType = TreeType.TALL_BIRCH;
++            treeType = TreeType.TALL_BIRCH; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.SWAMP_OAK) {
+-            SaplingBlock.treeType = TreeType.SWAMP;
++            treeType = TreeType.SWAMP; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.FANCY_OAK || worldgentreeabstract == TreeFeatures.FANCY_OAK_BEES_005) {
+-            SaplingBlock.treeType = TreeType.BIG_TREE;
++            treeType = TreeType.BIG_TREE; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.JUNGLE_BUSH) {
+-            SaplingBlock.treeType = TreeType.JUNGLE_BUSH;
++            treeType = TreeType.JUNGLE_BUSH; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.DARK_OAK) {
+-            SaplingBlock.treeType = TreeType.DARK_OAK;
++            treeType = TreeType.DARK_OAK; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.MEGA_SPRUCE) {
+-            SaplingBlock.treeType = TreeType.MEGA_REDWOOD;
++            treeType = TreeType.MEGA_REDWOOD; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.MEGA_PINE) {
+-            SaplingBlock.treeType = TreeType.MEGA_REDWOOD;
++            treeType = TreeType.MEGA_REDWOOD; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.MEGA_JUNGLE_TREE) {
+-            SaplingBlock.treeType = TreeType.JUNGLE;
++            treeType = TreeType.JUNGLE; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.AZALEA_TREE) {
+-            SaplingBlock.treeType = TreeType.AZALEA;
++            treeType = TreeType.AZALEA; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.MANGROVE) {
+-            SaplingBlock.treeType = TreeType.MANGROVE;
++            treeType = TreeType.MANGROVE; // Folia - region threading
+         } else if (worldgentreeabstract == TreeFeatures.TALL_MANGROVE) {
+-            SaplingBlock.treeType = TreeType.TALL_MANGROVE;
++            treeType = TreeType.TALL_MANGROVE; // Folia - region threading
+         } else {
+             throw new IllegalArgumentException("Unknown tree generator " + worldgentreeabstract);
+         }
++        SaplingBlock.treeTypeRT.set(treeType); // Folia - region threading
+     }
+     // CraftBukkit end
  }
 diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java b/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
 index 221c5d080d55326e458c1182823d6b49224ef498..29a27534e6c97b262229b51e4ea0345502020647 100644
@@ -22283,7 +22403,7 @@ index fb6454cc64ebc549f61ad7d51efb16ef15f8384d..903408d4d8f9ce5c9566ec96312281ab
                      tileentitybeehive.addOccupantWithPresetTicks(entitybee, false, random.nextInt(599));
                  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index 350cbf64c17938021002d5fd67176c44b398231e..e54713a530e18344a7c7d1c400147fc33d64967f 100644
+index 350cbf64c17938021002d5fd67176c44b398231e..0399f8d0d5ede68ef61fb094b278e519fba9a5d3 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 @@ -568,16 +568,17 @@ public class CraftBlock implements Block {
@@ -22299,11 +22419,13 @@ index 350cbf64c17938021002d5fd67176c44b398231e..e54713a530e18344a7c7d1c400147fc3
 +        worldData.captureTreeGeneration = false; // Folia - region threading
  
 -        if (world.capturedBlockStates.size() > 0) {
-+        if (worldData.capturedBlockStates.size() > 0) { // Folia - region threading
-             TreeType treeType = SaplingBlock.treeType;
-             SaplingBlock.treeType = null;
+-            TreeType treeType = SaplingBlock.treeType;
+-            SaplingBlock.treeType = null;
 -            List<BlockState> blocks = new ArrayList<>(world.capturedBlockStates.values());
 -            world.capturedBlockStates.clear();
++        if (worldData.capturedBlockStates.size() > 0) { // Folia - region threading
++            TreeType treeType = SaplingBlock.treeTypeRT.get(); // Folia - region threading
++            SaplingBlock.treeTypeRT.set(null); // Folia - region threading
 +            List<BlockState> blocks = new ArrayList<>(worldData.capturedBlockStates.values()); // Folia - region threading
 +            worldData.capturedBlockStates.clear(); // Folia - region threading
              StructureGrowEvent structureEvent = null;
