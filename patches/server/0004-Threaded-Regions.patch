@@ -3773,10 +3773,10 @@ index 0000000000000000000000000000000000000000..d9687722e02dfd4088c7030abbf5008e
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..55c6387b6507b6495958ab4cbdceee386ac9cfca
+index 0000000000000000000000000000000000000000..85ef8a74152cb0a71d9133815bee05e3f2afd9e8
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,174 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.mojang.logging.LogUtils;
@@ -3838,14 +3838,14 @@ index 0000000000000000000000000000000000000000..55c6387b6507b6495958ab4cbdceee38
 +
 +    private void finishTeleportations(final ThreadedRegioniser.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region,
 +                                      final ServerLevel world) {
-+        final List<ServerLevel.PendingTeleport> pendingTeleports = world.removeAllRegionTeleports();
-+        if (pendingTeleports.isEmpty()) {
-+            return;
-+        }
-+        final ChunkPos center = region.getCenterChunk();
-+        LOGGER.info("Completing " + pendingTeleports.size() + " pending teleports in region around chunk " + center + " in world '" + region.regioniser.world.getWorld().getName() + "'");
 +        try {
 +            this.shuttingDown = region;
++            final List<ServerLevel.PendingTeleport> pendingTeleports = world.removeAllRegionTeleports();
++            if (pendingTeleports.isEmpty()) {
++                return;
++            }
++            final ChunkPos center = region.getCenterChunk();
++            LOGGER.info("Completing " + pendingTeleports.size() + " pending teleports in region around chunk " + center + " in world '" + region.regioniser.world.getWorld().getName() + "'");
 +            for (final ServerLevel.PendingTeleport pendingTeleport : pendingTeleports) {
 +                LOGGER.info("Completing teleportation to target position " + pendingTeleport.to());
 +
@@ -3872,10 +3872,11 @@ index 0000000000000000000000000000000000000000..55c6387b6507b6495958ab4cbdceee38
 +
 +    private void saveRegionChunks(final ThreadedRegioniser.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region,
 +                                  final boolean last) {
-+        final ChunkPos center = region.getCenterChunk();
-+        LOGGER.info("Saving chunks around region around chunk " + center + " in world '" + region.regioniser.world.getWorld().getName() + "'");
++        ChunkPos center = null;
 +        try {
 +            this.shuttingDown = region;
++            center = region.getCenterChunk();
++            LOGGER.info("Saving chunks around region around chunk " + center + " in world '" + region.regioniser.world.getWorld().getName() + "'");
 +            region.regioniser.world.chunkTaskScheduler.chunkHolderManager.close(true, true, false, last, false);
 +        } catch (final Throwable thr) {
 +            LOGGER.error("Failed to save chunks for region around chunk " + center + " in world '" + region.regioniser.world.getWorld().getName() + "'", thr);
