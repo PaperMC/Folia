@@ -1,0 +1,763 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sun, 12 Mar 2023 15:00:00 -0700
+Subject: [PATCH] fixup! Threaded Regions
+
+
+diff --git a/src/main/java/ca/spottedleaf/concurrentutil/lock/AreaLock.java b/src/main/java/ca/spottedleaf/concurrentutil/lock/AreaLock.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6a155b779914828a0d4199bdfcb0d6fca25e1581
+--- /dev/null
++++ b/src/main/java/ca/spottedleaf/concurrentutil/lock/AreaLock.java
+@@ -0,0 +1,146 @@
++package ca.spottedleaf.concurrentutil.lock;
++
++import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
++import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.concurrent.locks.LockSupport;
++
++public final class AreaLock {
++
++    private final int coordinateShift;
++
++    private final Long2ReferenceOpenHashMap<Node> nodesByPosition = new Long2ReferenceOpenHashMap<>(1024, 0.10f);
++
++    public AreaLock(final int coordinateShift) {
++        this.coordinateShift = coordinateShift;
++    }
++
++    private static long key(final int x, final int z) {
++        return ((long)z << 32) | (x & 0xFFFFFFFFL);
++    }
++
++    public Node lock(final int x, final int z, final int radius) {
++        final Thread thread = Thread.currentThread();
++        final int minX = (x - radius) >> this.coordinateShift;
++        final int minZ = (z - radius) >> this.coordinateShift;
++        final int maxX = (x + radius) >> this.coordinateShift;
++        final int maxZ = (z + radius) >> this.coordinateShift;
++
++        final Node node = new Node(x, z, radius, thread);
++
++        synchronized (this) {
++            ReferenceOpenHashSet<Node> parents = null;
++            for (int currZ = minZ; currZ <= maxZ; ++currZ) {
++                for (int currX = minX; currX <= maxX; ++currX) {
++                    final Node dependency = this.nodesByPosition.put(key(currX, currZ), node);
++                    if (dependency == null) {
++                        continue;
++                    }
++
++                    if (parents == null) {
++                        parents = new ReferenceOpenHashSet<>();
++                    }
++
++                    if (parents.add(dependency)) {
++                        // added a dependency, so we need to add as a child to the dependency
++                        if (dependency.children == null) {
++                            dependency.children = new ArrayList<>();
++                        }
++                        dependency.children.add(node);
++                    }
++                }
++            }
++
++            if (parents == null) {
++                // no dependencies, so we can just return immediately
++                return node;
++            } // else: we need to lock
++
++            node.parents = parents;
++        }
++
++        while (!node.unlocked) {
++            LockSupport.park(node);
++        }
++
++        return node;
++    }
++
++    public void unlock(final Node node) {
++        List<Node> toUnpark = null;
++
++        final int x = node.x;
++        final int z = node.z;
++        final int radius = node.radius;
++
++        final int minX = (x - radius) >> this.coordinateShift;
++        final int minZ = (z - radius) >> this.coordinateShift;
++        final int maxX = (x + radius) >> this.coordinateShift;
++        final int maxZ = (z + radius) >> this.coordinateShift;
++
++        synchronized (this) {
++            final List<Node> children = node.children;
++            if (children != null) {
++                // try to unlock children
++                for (int i = 0, len = children.size(); i < len; ++i) {
++                    final Node child = children.get(i);
++                    if (!child.parents.remove(node)) {
++                        throw new IllegalStateException();
++                    }
++                    if (child.parents.isEmpty()) {
++                        // we can unlock, as it now has no dependencies in front
++                        child.parents = null;
++                        if (toUnpark == null) {
++                            toUnpark = new ArrayList<>();
++                            toUnpark.add(child);
++                        } else {
++                            toUnpark.add(child);
++                        }
++                    }
++                }
++            }
++
++            // remove node from dependency map
++            for (int currZ = minZ; currZ <= maxZ; ++currZ) {
++                for (int currX = minX; currX <= maxX; ++currX) {
++                    // node: we only remove if we match, as a mismatch indicates a child node which of course has not
++                    // yet been unlocked
++                    this.nodesByPosition.remove(key(currX, currZ), node);
++                }
++            }
++        }
++
++        if (toUnpark == null) {
++            return;
++        }
++
++        // we move the unpark / unlock logic here because we want to avoid performing work while holding the lock
++
++        for (int i = 0, len = toUnpark.size(); i < len; ++i) {
++            final Node toUnlock = toUnpark.get(i);
++            toUnlock.unlocked = true; // must be volatile and before unpark()
++            LockSupport.unpark(toUnlock.thread);
++        }
++    }
++
++    public static final class Node {
++
++        public final int x;
++        public final int z;
++        public final int radius;
++        public final Thread thread;
++
++        private List<Node> children;
++        private ReferenceOpenHashSet<Node> parents;
++
++        private volatile boolean unlocked;
++
++        public Node(final int x, final int z, final int radius, final Thread thread) {
++            this.x = x;
++            this.z = z;
++            this.radius = radius;
++            this.thread = thread;
++        }
++    }
++}
+diff --git a/src/main/java/ca/spottedleaf/concurrentutil/lock/ImproveReentrantLock.java b/src/main/java/ca/spottedleaf/concurrentutil/lock/ImproveReentrantLock.java
+deleted file mode 100644
+index 9df9881396f4a69b51acaae562b12b8ce0a48443..0000000000000000000000000000000000000000
+--- a/src/main/java/ca/spottedleaf/concurrentutil/lock/ImproveReentrantLock.java
++++ /dev/null
+@@ -1,139 +0,0 @@
+-package ca.spottedleaf.concurrentutil.lock;
+-
+-import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
+-import java.lang.invoke.VarHandle;
+-import java.util.concurrent.TimeUnit;
+-import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+-import java.util.concurrent.locks.Condition;
+-import java.util.concurrent.locks.Lock;
+-
+-/**
+- * Implementation of {@link Lock} that should outperform {@link java.util.concurrent.locks.ReentrantLock}.
+- * The lock is considered a non-fair lock, as specified by {@link java.util.concurrent.locks.ReentrantLock},
+- * and additionally does <i>not</i> support the creation of Conditions.
+- *
+- * <p>
+- * Specifically, this implementation is careful to avoid synchronisation penalties when multi-acquiring and
+- * multi-releasing locks from the same thread, and additionally avoids unnecessary synchronisation penalties
+- * when releasing the lock.
+- * </p>
+- */
+-public class ImproveReentrantLock implements Lock {
+-
+-    private final InternalLock lock = new InternalLock();
+-
+-    private static final class InternalLock extends AbstractQueuedSynchronizer {
+-
+-        private volatile Thread owner;
+-        private static final VarHandle OWNER_HANDLE = ConcurrentUtil.getVarHandle(InternalLock.class, "owner", Thread.class);
+-        private int count;
+-
+-        private Thread getOwnerPlain() {
+-            return (Thread)OWNER_HANDLE.get(this);
+-        }
+-
+-        private Thread getOwnerVolatile() {
+-            return (Thread)OWNER_HANDLE.getVolatile(this);
+-        }
+-
+-        private void setOwnerRelease(final Thread to) {
+-            OWNER_HANDLE.setRelease(this, to);
+-        }
+-
+-        private void setOwnerVolatile(final Thread to) {
+-            OWNER_HANDLE.setVolatile(this, to);
+-        }
+-
+-        private Thread compareAndExchangeOwnerVolatile(final Thread expect, final Thread update) {
+-            return (Thread)OWNER_HANDLE.compareAndExchange(this, expect, update);
+-        }
+-
+-        @Override
+-        protected final boolean tryAcquire(int acquires) {
+-            final Thread current = Thread.currentThread();
+-            final Thread owner = this.getOwnerVolatile();
+-
+-            // When trying to blind acquire the lock, using just compare and exchange is faster
+-            // than reading the owner field first - but comes at the cost of performing the compare and exchange
+-            // even if the current thread owns the lock
+-            if ((owner == null && null == this.compareAndExchangeOwnerVolatile(null, current)) || owner == current) {
+-                this.count += acquires;
+-                return true;
+-            }
+-
+-            return false;
+-        }
+-
+-        @Override
+-        protected final boolean tryRelease(int releases) {
+-            if (this.getOwnerPlain() == Thread.currentThread()) {
+-                final int newCount = this.count -= releases;
+-                if (newCount == 0) {
+-                    // When the caller, which is release(), attempts to signal the next node, it will use volatile
+-                    // to retrieve the node and status.
+-                    // Let's say that we have written this field null as release, and then checked for a next node
+-                    // using volatile and then determined there are no waiters.
+-                    // While a call to tryAcquire() can fail for another thread since the write may not
+-                    // publish yet, once the thread adds itself to the waiters list it will synchronise with
+-                    // the write to the field, since the volatile write to put the thread on the waiter list
+-                    // will synchronise with the volatile read we did earlier to check for any
+-                    // waiters.
+-                    this.setOwnerRelease(null);
+-                    return true;
+-                }
+-                return false;
+-            }
+-            throw new IllegalMonitorStateException();
+-        }
+-    }
+-
+-    /**
+-     * Returns the thread that owns the lock, or returns {@code null} if there is no such thread.
+-     */
+-    public Thread getLockOwner() {
+-        return this.lock.getOwnerVolatile();
+-    }
+-
+-    /**
+-     * Returns whether the current thread owns the lock.
+-     */
+-    public boolean isHeldByCurrentThread() {
+-        return this.lock.getOwnerPlain() == Thread.currentThread();
+-    }
+-
+-    @Override
+-    public void lock() {
+-        this.lock.acquire(1);
+-    }
+-
+-    @Override
+-    public void lockInterruptibly() throws InterruptedException {
+-        if (Thread.interrupted()) {
+-            throw new InterruptedException();
+-        }
+-        this.lock.acquireInterruptibly(1);
+-    }
+-
+-    @Override
+-    public boolean tryLock() {
+-        return this.lock.tryAcquire(1);
+-    }
+-
+-    @Override
+-    public boolean tryLock(final long time, final TimeUnit unit) throws InterruptedException {
+-        if (Thread.interrupted()) {
+-            throw new InterruptedException();
+-        }
+-        return this.lock.tryAcquire(1) || this.lock.tryAcquireNanos(1, unit.toNanos(time));
+-    }
+-
+-    @Override
+-    public void unlock() {
+-        this.lock.release(1);
+-    }
+-
+-    @Override
+-    public Condition newCondition() {
+-        throw new UnsupportedOperationException();
+-    }
+-}
+diff --git a/src/main/java/ca/spottedleaf/concurrentutil/lock/RBLock.java b/src/main/java/ca/spottedleaf/concurrentutil/lock/RBLock.java
+deleted file mode 100644
+index 793a7326141b7d83395585b3d32b0a7e8a6238a7..0000000000000000000000000000000000000000
+--- a/src/main/java/ca/spottedleaf/concurrentutil/lock/RBLock.java
++++ /dev/null
+@@ -1,303 +0,0 @@
+-package ca.spottedleaf.concurrentutil.lock;
+-
+-import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
+-import java.lang.invoke.VarHandle;
+-import java.util.concurrent.TimeUnit;
+-import java.util.concurrent.locks.Condition;
+-import java.util.concurrent.locks.Lock;
+-import java.util.concurrent.locks.LockSupport;
+-
+-// ReentrantBiasedLock
+-public final class RBLock implements Lock {
+-
+-    private volatile LockWaiter owner;
+-    private static final VarHandle OWNER_HANDLE = ConcurrentUtil.getVarHandle(RBLock.class, "owner", LockWaiter.class);
+-
+-    private volatile LockWaiter tail;
+-    private static final VarHandle TAIL_HANDLE = ConcurrentUtil.getVarHandle(RBLock.class, "tail", LockWaiter.class);
+-
+-    public RBLock() {
+-        // we can have the initial state as if it was locked by this thread, then unlocked
+-        final LockWaiter dummy = new LockWaiter(null, LockWaiter.STATE_BIASED, null);
+-        this.setOwnerPlain(dummy);
+-        // release ensures correct publishing
+-        this.setTailRelease(dummy);
+-    }
+-
+-    private LockWaiter getOwnerVolatile() {
+-        return (LockWaiter)OWNER_HANDLE.getVolatile(this);
+-    }
+-
+-    private void setOwnerPlain(final LockWaiter value) {
+-        OWNER_HANDLE.set(this, value);
+-    }
+-
+-    private void setOwnerRelease(final LockWaiter value) {
+-        OWNER_HANDLE.setRelease(this, value);
+-    }
+-
+-
+-
+-    private void setTailOpaque(final LockWaiter newTail) {
+-        TAIL_HANDLE.setOpaque(this, newTail);
+-    }
+-
+-    private void setTailRelease(final LockWaiter newTail) {
+-        TAIL_HANDLE.setRelease(this, newTail);
+-    }
+-
+-    private LockWaiter getTailOpaque() {
+-        return (LockWaiter)TAIL_HANDLE.getOpaque(this);
+-    }
+-
+-
+-    private void appendWaiter(final LockWaiter waiter) {
+-        // Similar to MultiThreadedQueue#appendList
+-        int failures = 0;
+-
+-        for (LockWaiter currTail = this.getTailOpaque(), curr = currTail;;) {
+-            /* It has been experimentally shown that placing the read before the backoff results in significantly greater performance */
+-            /* It is likely due to a cache miss caused by another write to the next field */
+-            final LockWaiter next = curr.getNextVolatile();
+-
+-            for (int i = 0; i < failures; ++i) {
+-                Thread.onSpinWait();
+-            }
+-
+-            if (next == null) {
+-                final LockWaiter compared = curr.compareAndExchangeNextVolatile(null, waiter);
+-
+-                if (compared == null) {
+-                    /* Added */
+-                    /* Avoid CASing on tail more than we need to */
+-                    /* CAS to avoid setting an out-of-date tail */
+-                    if (this.getTailOpaque() == currTail) {
+-                        this.setTailOpaque(waiter);
+-                    }
+-                    return;
+-                }
+-
+-                ++failures;
+-                curr = compared;
+-                continue;
+-            }
+-
+-            if (curr == currTail) {
+-                /* Tail is likely not up-to-date */
+-                curr = next;
+-            } else {
+-                /* Try to update to tail */
+-                if (currTail == (currTail = this.getTailOpaque())) {
+-                    curr = next;
+-                } else {
+-                    curr = currTail;
+-                }
+-            }
+-        }
+-    }
+-
+-    // required that expected is already appended to the wait chain
+-    private boolean tryAcquireBiased(final LockWaiter expected) {
+-        final LockWaiter owner = this.getOwnerVolatile();
+-        if (owner.getNextVolatile() == expected && owner.getStateVolatile() == LockWaiter.STATE_BIASED) {
+-            this.setOwnerRelease(expected);
+-            return true;
+-        }
+-        return false;
+-    }
+-
+-    @Override
+-    public void lock() {
+-        final Thread currThread = Thread.currentThread();
+-        final LockWaiter owner = this.getOwnerVolatile();
+-
+-        // try to fast acquire
+-
+-        final LockWaiter acquireObj;
+-        boolean needAppend = true;
+-
+-        if (owner.getNextVolatile() != null) {
+-            // unlikely we are able to fast acquire
+-            acquireObj = new LockWaiter(currThread, 1, null);
+-        } else {
+-            // may be able to fast acquire the lock
+-            if (owner.owner == currThread) {
+-                final int oldState = owner.incrementState();
+-                if (oldState == LockWaiter.STATE_BIASED) {
+-                    // in this case, we may not have the lock.
+-                    final LockWaiter next = owner.getNextVolatile();
+-                    if (next == null) {
+-                        // we win the lock
+-                        return;
+-                    } else {
+-                        // we have incremented the state, which means any tryAcquireBiased() will fail.
+-                        // The next waiter may be waiting for us, so we need to re-set our state and then
+-                        // try to push the lock to them.
+-                        // We cannot simply claim ownership of the lock, since we don't know if the next waiter saw
+-                        // the biased state
+-                        owner.setStateRelease(LockWaiter.STATE_BIASED);
+-                        LockSupport.unpark(next.owner);
+-
+-                        acquireObj = new LockWaiter(currThread, 1, null);
+-                        // fall through to slower lock logic
+-                    }
+-                } else {
+-                    // we already have the lock
+-                    return;
+-                }
+-            } else {
+-                acquireObj = new LockWaiter(currThread, 1, null);
+-                if (owner.getStateVolatile() == LockWaiter.STATE_BIASED) {
+-                    // we may be able to quickly acquire the lock
+-                    if (owner.getNextVolatile() == null && null == owner.compareAndExchangeNextVolatile(null, acquireObj)) {
+-                        if (owner.getStateVolatile() == LockWaiter.STATE_BIASED) {
+-                            this.setOwnerRelease(acquireObj);
+-                            return;
+-                        } else {
+-                            needAppend = false;
+-                            // we failed to acquire, but we can block instead - we did CAS to the next immediate owner
+-                        }
+-                    }
+-                } // else: fall through to append and wait code
+-            }
+-        }
+-
+-        if (needAppend) {
+-            this.appendWaiter(acquireObj); // append to end of waiters
+-        }
+-
+-        // failed to fast acquire, so now we may need to block
+-        final int spinAttempts = 10;
+-        for (int i = 0; i < spinAttempts; ++i) {
+-            for (int k = 0; k <= i; ++i) {
+-                Thread.onSpinWait();
+-            }
+-            if (this.tryAcquireBiased(acquireObj)) {
+-                // acquired
+-                return;
+-            }
+-        }
+-
+-        // slow acquire
+-        while (!this.tryAcquireBiased(acquireObj)) {
+-            LockSupport.park(this);
+-        }
+-    }
+-
+-    /**
+-     * {@inheritDoc}
+-     * @throws IllegalMonitorStateException If the current thread does not own the lock.
+-     */
+-    @Override
+-    public void unlock() {
+-        final LockWaiter owner = this.getOwnerVolatile();
+-
+-        final int oldState;
+-        if (owner.owner != Thread.currentThread() || (oldState = owner.getStatePlain()) <= 0) {
+-            throw new IllegalMonitorStateException();
+-        }
+-
+-        owner.setStateRelease(oldState - 1);
+-
+-        if (oldState != 1) {
+-            return;
+-        }
+-
+-        final LockWaiter next = owner.getNextVolatile();
+-
+-        if (next == null) {
+-            // we can leave the lock in biased state, which will save a CAS
+-            return;
+-        }
+-
+-        // we have TWO cases:
+-        // waiter saw the lock in biased state
+-        // waiter did not see the lock in biased state
+-        // the problem is that if the waiter saw the lock in the biased state, then it now owns the lock. but if it did not,
+-        // then we still own the lock.
+-
+-        // However, by unparking always, the waiter will try to acquire the biased lock from us.
+-        LockSupport.unpark(next.owner);
+-    }
+-
+-    @Override
+-    public void lockInterruptibly() throws InterruptedException {
+-        throw new UnsupportedOperationException();
+-    }
+-
+-    @Override
+-    public boolean tryLock() {
+-        throw new UnsupportedOperationException();
+-    }
+-
+-    @Override
+-    public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+-        throw new UnsupportedOperationException();
+-    }
+-
+-    @Override
+-    public Condition newCondition() {
+-        throw new UnsupportedOperationException();
+-    }
+-
+-    static final class LockWaiter {
+-
+-        static final int STATE_BIASED = 0;
+-
+-        private volatile LockWaiter next;
+-        private volatile int state;
+-        private Thread owner;
+-
+-        private static final VarHandle NEXT_HANDLE = ConcurrentUtil.getVarHandle(LockWaiter.class, "next", LockWaiter.class);
+-        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(LockWaiter.class, "state", int.class);
+-
+-
+-        private LockWaiter compareAndExchangeNextVolatile(final LockWaiter expect, final LockWaiter update) {
+-            return (LockWaiter)NEXT_HANDLE.compareAndExchange((LockWaiter)this, expect, update);
+-        }
+-
+-        private void setNextPlain(final LockWaiter next) {
+-            NEXT_HANDLE.set((LockWaiter)this, next);
+-        }
+-
+-        private LockWaiter getNextOpaque() {
+-            return (LockWaiter)NEXT_HANDLE.getOpaque((LockWaiter)this);
+-        }
+-
+-        private LockWaiter getNextVolatile() {
+-            return (LockWaiter)NEXT_HANDLE.getVolatile((LockWaiter)this);
+-        }
+-
+-
+-
+-        private int getStatePlain() {
+-            return (int)STATE_HANDLE.get((LockWaiter)this);
+-        }
+-
+-        private int getStateVolatile() {
+-            return (int)STATE_HANDLE.getVolatile((LockWaiter)this);
+-        }
+-
+-        private void setStatePlain(final int value) {
+-            STATE_HANDLE.set((LockWaiter)this, value);
+-        }
+-
+-        private void setStateRelease(final int value) {
+-            STATE_HANDLE.setRelease((LockWaiter)this, value);
+-        }
+-
+-        public LockWaiter(final Thread owner, final int initialState, final LockWaiter next) {
+-            this.owner = owner;
+-            this.setStatePlain(initialState);
+-            this.setNextPlain(next);
+-        }
+-
+-        public int incrementState() {
+-            final int old = this.getStatePlain();
+-            // Technically, we DO NOT need release for old != BIASED. But we care about optimising only for x86,
+-            // which is a simple MOV for everything but volatile.
+-            this.setStateRelease(old + 1);
+-            return old;
+-        }
+-    }
+-}
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+index d2386ee333927aedd9235212780fee04630a8510..bb5e5b9d48cb6d459119f66955017cced5af501c 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+@@ -93,7 +93,9 @@ public final class ChunkHolderManager {
+          * Typically for region state we do not need to worry about threading concerns because it is only
+          * accessed by the current region when ticking. But since this contains state (
+          * tickets, and removeTickToChunkExpireTicketCount) that can be written to by any thread holding the
+-         * ticket lock, the merge logic is complicated as merging only holds the region lock.
++         * ticket lock, the merge logic is complicated as merging only holds the region lock. So, Folia has modified
++         * the add and remove ticket functions to acquire the region lock if the current region does not own the target
++         * position.
+          */
+         private final ArrayDeque<NewChunkHolder> pendingFullLoadUpdate = new ArrayDeque<>();
+         private final ObjectRBTreeSet<NewChunkHolder> autoSaveQueue = new ObjectRBTreeSet<>((final NewChunkHolder c1, final NewChunkHolder c2) -> {
+@@ -573,6 +575,13 @@ public final class ChunkHolderManager {
+             return false;
+         }
+ 
++        // Folia start - region threading
++        final ThreadedRegioniser.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currRegion = TickRegionScheduler.getCurrentRegion();
++        final boolean lock = currRegion == null || this.world.regioniser.getRegionAtUnsynchronised(
++            CoordinateUtils.getChunkX(chunk), CoordinateUtils.getChunkZ(chunk)
++        ) != currRegion;
++        // Folia end - region threading
++
+         this.ticketLock.lock();
+         try {
+             // Folia start - region threading
+@@ -585,7 +594,13 @@ public final class ChunkHolderManager {
+                 this.specialCaseUnload.add(holder);
+             }
+ 
+-            final ChunkHolderManager.HolderManagerRegionData targetData = this.getDataFor(chunk);
++            if (lock) {
++                // we just need to prevent merging, so we only need the read lock
++                // additionally, this will prevent deadlock in the remove all tickets function by using the read lock
++                this.world.regioniser.acquireReadLock();
++            }
++            try {
++            final ChunkHolderManager.HolderManagerRegionData targetData = lock ? this.getDataFor(chunk) : currRegion.getData().getHolderManagerRegionData();
+             // Folia end - region threading
+             final long removeTick = removeDelay == 0 ? NO_TIMEOUT_MARKER : targetData.currentTick + removeDelay; // Folia - region threading
+             final Ticket<T> ticket = new Ticket<>(type, level, identifier, removeTick);
+@@ -631,6 +646,11 @@ public final class ChunkHolderManager {
+             }
+ 
+             return current == ticket;
++            } finally { // Folia start - region threading
++                if (lock) {
++                    this.world.regioniser.releaseReadLock();
++                }
++            } // Folia end - region threading
+         } finally {
+             this.ticketLock.unlock();
+         }
+@@ -649,10 +669,24 @@ public final class ChunkHolderManager {
+             return false;
+         }
+ 
++        // Folia start - region threading
++        final ThreadedRegioniser.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currRegion = TickRegionScheduler.getCurrentRegion();
++        final boolean lock = currRegion == null || this.world.regioniser.getRegionAtUnsynchronised(
++            CoordinateUtils.getChunkX(chunk), CoordinateUtils.getChunkZ(chunk)
++        ) != currRegion;
++        // Folia end - region threading
++
+         this.ticketLock.lock();
+         try {
+             // Folia start - region threading
+-            final ChunkHolderManager.HolderManagerRegionData targetData = this.getDataFor(chunk);
++            if (lock) {
++                // we just need to prevent merging, so we only need the read lock
++                // additionally, this will prevent deadlock in the remove all tickets function by using the read lock
++                this.world.regioniser.acquireReadLock();
++            }
++            try {
++            final ChunkHolderManager.HolderManagerRegionData targetData = lock ? this.getDataFor(chunk) : currRegion.getData().getHolderManagerRegionData();
++            // Folia end - region threading
+ 
+             final SortedArraySet<Ticket<?>> ticketsAtChunk = targetData == null ? null : targetData.tickets.get(chunk);
+             // Folia end - region threading
+@@ -667,11 +701,28 @@ public final class ChunkHolderManager {
+                 return false;
+             }
+ 
++            int newLevel = getTicketLevelAt(ticketsAtChunk); // Folia - region threading - moved up from below
++            // Folia start - region threading
++            // we should not change the ticket levels while the target region may be ticking
++            if (newLevel > level) {
++                final long unknownRemoveTick = targetData.currentTick + Math.max(0, TicketType.UNKNOWN.timeout);
++                final Ticket<ChunkPos> unknownTicket = new Ticket<>(TicketType.UNKNOWN, level, new ChunkPos(chunk), unknownRemoveTick);
++                if (ticketsAtChunk.add(unknownTicket)) {
++                    targetData.removeTickToChunkExpireTicketCount.computeIfAbsent(unknownRemoveTick, (final long keyInMap) -> {
++                        return new Long2IntOpenHashMap();
++                    }).addTo(chunk, 1);
++                } else {
++                    throw new IllegalStateException("Should have been able to add " + unknownTicket + " to " + ticketsAtChunk);
++                }
++                newLevel = level;
++            }
++            // Folia end - region threading
++
+             if (ticketsAtChunk.isEmpty()) {
+                 targetData.tickets.remove(chunk); // Folia - region threading
+             }
+ 
+-            final int newLevel = getTicketLevelAt(ticketsAtChunk);
++            // Folia - region threading - move up
+ 
+             final long removeTick = ticket.removalTick;
+             if (removeTick != NO_TIMEOUT_MARKER) {
+@@ -690,14 +741,12 @@ public final class ChunkHolderManager {
+                 this.updateTicketLevel(chunk, newLevel);
+             }
+ 
+-            // Folia start - region threading
+-            // we should not change the ticket levels while the target region may be ticking
+-            if (newLevel > level) {
+-                this.addTicketAtLevel(TicketType.UNKNOWN, chunk, level, new ChunkPos(chunk));
+-            }
+-            // Folia end - region threading
+-
+             return true;
++            } finally { // Folia start - region threading
++                if (lock) {
++                    this.world.regioniser.releaseReadLock();
++                }
++            } // Folia end - region threading
+         } finally {
+             this.ticketLock.unlock();
+         }
+diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
+index f6e41c466ba2501f82fd7916742c5fc045ddf828..2334e62953a4d0a415c4c1fe653b6da063119868 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
++++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegioniser.java
+@@ -130,6 +130,14 @@ public final class ThreadedRegioniser<R extends ThreadedRegioniser.ThreadedRegio
+     }
+      */
+ 
++    public void acquireReadLock() {
++        this.regionLock.readLock();
++    }
++
++    public void releaseReadLock() {
++        this.regionLock.tryUnlockRead();
++    }
++
+     private void acquireWriteLock() {
+         final Thread currentThread = Thread.currentThread();
+         if (this.writeLockOwner == currentThread) {
