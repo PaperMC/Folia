@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sat, 11 Mar 2023 23:27:32 -0800
+Subject: [PATCH] fixup! Threaded Regions
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+index e787c54b8f4be6923370a704d1c414f5f3274bae..d2386ee333927aedd9235212780fee04630a8510 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+@@ -72,6 +72,11 @@ public final class ChunkHolderManager {
+     // Folia start - region threading
+     private static final long NO_TIMEOUT_MARKER = Long.MIN_VALUE;
+     private static final long PROBE_MARKER = Long.MIN_VALUE + 1;
++    // special region threading fields
++    // this field contains chunk holders that were created in addTicketAtLevel
++    // because the chunk holders were created without a reliable unload hook (i.e creation for entity/poi loading,
++    // which always check for unload after their tasks finish) we need to do that ourselves later
++    private final ReferenceOpenHashSet<NewChunkHolder> specialCaseUnload = new ReferenceOpenHashSet<>();
+     // Folia end - region threading
+ 
+     public final ReentrantLock ticketLock = new ReentrantLock(); // Folia - region threading
+@@ -83,6 +88,13 @@ public final class ChunkHolderManager {
+ 
+     // Folia start - region threading
+     public static final class HolderManagerRegionData {
++        /*
++         * This region data is a bit of a mess, because it is part global state and part region state.
++         * Typically for region state we do not need to worry about threading concerns because it is only
++         * accessed by the current region when ticking. But since this contains state (
++         * tickets, and removeTickToChunkExpireTicketCount) that can be written to by any thread holding the
++         * ticket lock, the merge logic is complicated as merging only holds the region lock.
++         */
+         private final ArrayDeque<NewChunkHolder> pendingFullLoadUpdate = new ArrayDeque<>();
+         private final ObjectRBTreeSet<NewChunkHolder> autoSaveQueue = new ObjectRBTreeSet<>((final NewChunkHolder c1, final NewChunkHolder c2) -> {
+             if (c1 == c2) {
+@@ -110,12 +122,6 @@ public final class ChunkHolderManager {
+         // this is a map of removal tick to a map of chunks and the number of tickets a chunk has that are to expire that tick
+         private final Long2ObjectOpenHashMap<Long2IntOpenHashMap> removeTickToChunkExpireTicketCount = new Long2ObjectOpenHashMap<>();
+ 
+-        // special region threading fields
+-        // this field contains chunk holders that were created in addTicketAtLevel
+-        // because the chunk holders were created without a reliable unload hook (i.e creation for entity/poi loading,
+-        // which always check for unload after their tasks finish) we need to do that ourselves later
+-        private final ReferenceOpenHashSet<NewChunkHolder> specialCaseUnload = new ReferenceOpenHashSet<>();
+-
+         public void merge(final HolderManagerRegionData into, final long tickOffset) {
+             // Order doesn't really matter for the pending full update...
+             into.pendingFullLoadUpdate.addAll(this.pendingFullLoadUpdate);
+@@ -156,9 +162,6 @@ public final class ChunkHolderManager {
+                     }
+                 );
+             }
+-
+-            // add them all
+-            into.specialCaseUnload.addAll(this.specialCaseUnload);
+         }
+ 
+         public void split(final int chunkToRegionShift, final Long2ReferenceOpenHashMap<HolderManagerRegionData> regionToData,
+@@ -216,14 +219,6 @@ public final class ChunkHolderManager {
+                     }).put(chunkKey, count);
+                 }
+             }
+-
+-            for (final NewChunkHolder special : this.specialCaseUnload) {
+-                final int regionCoordinateX = CoordinateUtils.getChunkX(special.chunkX) >> chunkToRegionShift;
+-                final int regionCoordinateZ = CoordinateUtils.getChunkZ(special.chunkZ) >> chunkToRegionShift;
+-
+-                // can never be null, since this chunk holder is loaded
+-                regionToData.get(CoordinateUtils.getChunkKey(regionCoordinateX, regionCoordinateZ)).specialCaseUnload.add(special);
+-            }
+         }
+     }
+ 
+@@ -582,20 +577,15 @@ public final class ChunkHolderManager {
+         try {
+             // Folia start - region threading
+             NewChunkHolder holder = this.chunkHolders.get(chunk);
+-            final boolean addToSpecial = holder == null;
+-            if (addToSpecial) {
++            if (holder == null) {
+                 // we need to guarantee that a chunk holder exists for each ticket
+                 // this must be executed before retrieving the holder manager data for a target chunk, to ensure the
+                 // region will exist
+                 this.chunkHolders.put(chunk, holder = this.createChunkHolder(chunk));
++                this.specialCaseUnload.add(holder);
+             }
+ 
+             final ChunkHolderManager.HolderManagerRegionData targetData = this.getDataFor(chunk);
+-            if (addToSpecial) {
+-                // no guarantee checkUnload is called for this chunk holder - by adding to the special case unload,
+-                // the unload chunks call will perform it
+-                targetData.specialCaseUnload.add(holder);
+-            }
+             // Folia end - region threading
+             final long removeTick = removeDelay == 0 ? NO_TIMEOUT_MARKER : targetData.currentTick + removeDelay; // Folia - region threading
+             final Ticket<T> ticket = new Ticket<>(type, level, identifier, removeTick);
+@@ -1119,12 +1109,6 @@ public final class ChunkHolderManager {
+         try {
+             this.taskScheduler.schedulingLock.lock();
+             try {
+-                // Folia start - region threading
+-                for (final NewChunkHolder special : currentData.specialCaseUnload) {
+-                    special.checkUnload();
+-                }
+-                currentData.specialCaseUnload.clear();
+-                // Folia end - region threading
+                 if (this.unloadQueue.isEmpty()) {
+                     return;
+                 }
+@@ -1465,6 +1449,17 @@ public final class ChunkHolderManager {
+                     }
+ 
+                     this.ticketLevelUpdates.clear();
++
++                    // Folia start - region threading
++                    // it is possible that a special case new chunk holder had its ticket removed before it was propagated,
++                    // which means checkUnload was never invoked. By checking unload here, we ensure that either the
++                    // ticket level was propagated (in which case, a later depropagation would check again) or that
++                    // we called checkUnload for it.
++                    for (final NewChunkHolder special : this.specialCaseUnload) {
++                        special.checkUnload();
++                    }
++                    this.specialCaseUnload.clear();
++                    // Folia end - region threading
+                 }
+             }
+         } finally {
