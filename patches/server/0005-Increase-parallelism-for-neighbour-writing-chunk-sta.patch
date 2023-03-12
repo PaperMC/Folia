@@ -196,10 +196,10 @@ index 0b7a2b0ead4f3bc07bfd9a38c2b7cf024bd140c6..36e93fefdfbebddce4c153974c7cd81a
                  final int chunkX = CoordinateUtils.getChunkX(coordinate);
                  final int chunkZ = CoordinateUtils.getChunkZ(coordinate);
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-index 32b88d7902e877e1cce0b7635cbfa67b84b8eac0..e787c54b8f4be6923370a704d1c414f5f3274bae 100644
+index 04d2c42e69ed8ab27d21d3bf038de54675e5a148..bb5e5b9d48cb6d459119f66955017cced5af501c 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-@@ -1306,17 +1306,23 @@ public final class ChunkHolderManager {
+@@ -1339,17 +1339,23 @@ public final class ChunkHolderManager {
      }
  
      public Boolean tryDrainTicketUpdates() {
@@ -341,10 +341,10 @@ index 73ce0909bd89244835a0d0f2030a25871461f1e0..ecc366a4176b2efadc46aa91aa21621f
      @Override
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6648f8cc5c1788ec02a3adbb68cf126372017dd3
+index 0000000000000000000000000000000000000000..3272f73013ea7d4efdd0ae2903925cc543be7075
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java
-@@ -0,0 +1,664 @@
+@@ -0,0 +1,668 @@
 +package io.papermc.paper.chunk.system.scheduling.queue;
 +
 +import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor;
@@ -698,8 +698,6 @@ index 0000000000000000000000000000000000000000..6648f8cc5c1788ec02a3adbb68cf1263
 +                return null;
 +            }
 +
-+            ++this.currentlyExecuting;
-+
 +            // firstAwaiting compared to firstInfinite
 +            final int compare;
 +
@@ -714,10 +712,16 @@ index 0000000000000000000000000000000000000000..6648f8cc5c1788ec02a3adbb68cf1263
 +            }
 +
 +            if (compare >= 0) {
++                if (this.currentlyExecuting != 0) {
++                    // don't queue infinite task while other tasks are executing in parallel
++                    return null;
++                }
++                ++this.currentlyExecuting;
 +                this.pollInfinite();
 +                this.isInfiniteRadiusScheduled = true;
 +                return firstInfinite.task.pushTask(this.executor);
 +            } else {
++                ++this.currentlyExecuting;
 +                this.pollAwaiting();
 +                return firstAwaiting.task.pushTask(this.executor);
 +            }
@@ -771,7 +775,7 @@ index 0000000000000000000000000000000000000000..6648f8cc5c1788ec02a3adbb68cf1263
 +        }
 +
 +        private boolean isFiniteRadius() {
-+            return this.radius > 0;
++            return this.radius >= 0;
 +        }
 +
 +        private PrioritisedExecutor.PrioritisedTask pushTask(final PrioritisedExecutor executor) {
