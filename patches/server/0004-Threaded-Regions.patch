@@ -17714,7 +17714,7 @@ index 42eb78830855d7282b7f3f1bdbe85e632d489784..1e36d889edb6b68d52eae9eee3c13802
  
              while (!flag2 && blockposition.getY() > world.getMinBuildHeight()) {
 diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
-index 49b983064ea810382b6112f5dc7f93ba4e5710bd..ee24904679e37007c38d3eb7095b406f345444f6 100644
+index 49b983064ea810382b6112f5dc7f93ba4e5710bd..90c81bd2ed00450a9b2188e92011e6e4873d0619 100644
 --- a/src/main/java/net/minecraft/world/entity/Mob.java
 +++ b/src/main/java/net/minecraft/world/entity/Mob.java
 @@ -135,6 +135,14 @@ public abstract class Mob extends LivingEntity {
@@ -17732,7 +17732,38 @@ index 49b983064ea810382b6112f5dc7f93ba4e5710bd..ee24904679e37007c38d3eb7095b406f
      protected Mob(EntityType<? extends Mob> type, Level world) {
          super(type, world);
          this.handItems = NonNullList.withSize(2, ItemStack.EMPTY);
-@@ -826,12 +834,7 @@ public abstract class Mob extends LivingEntity {
+@@ -253,9 +261,21 @@ public abstract class Mob extends LivingEntity {
+ 
+     @Nullable
+     public LivingEntity getTarget() {
++        // Folia start - region threading
++        if (!io.papermc.paper.util.TickThread.isTickThreadFor(this.target)) {
++            this.target = null;
++            return null;
++        }
++        // Folia end - region threading
+         return this.target;
+     }
+ 
++    // Folia start - region threading
++    public LivingEntity getTargetRaw() {
++        return this.target;
++    }
++    // Folia end - region threading
++
+     public org.bukkit.craftbukkit.entity.CraftMob getBukkitMob() { return (org.bukkit.craftbukkit.entity.CraftMob) super.getBukkitEntity(); } // Paper
+     public void setTarget(@Nullable LivingEntity target) {
+         // CraftBukkit start - fire event
+@@ -263,7 +283,7 @@ public abstract class Mob extends LivingEntity {
+     }
+ 
+     public boolean setTarget(LivingEntity entityliving, EntityTargetEvent.TargetReason reason, boolean fireEvent) {
+-        if (this.getTarget() == entityliving) return false;
++        if (this.getTargetRaw() == entityliving) return false; // Folia - region threading
+         if (fireEvent) {
+             if (reason == EntityTargetEvent.TargetReason.UNKNOWN && this.getTarget() != null && entityliving == null) {
+                 reason = this.getTarget().isAlive() ? EntityTargetEvent.TargetReason.FORGOT_TARGET : EntityTargetEvent.TargetReason.TARGET_DIED;
+@@ -826,12 +846,7 @@ public abstract class Mob extends LivingEntity {
          if (this.level.getDifficulty() == Difficulty.PEACEFUL && this.shouldDespawnInPeaceful()) {
              this.discard();
          } else if (!this.isPersistenceRequired() && !this.requiresCustomPersistence()) {
