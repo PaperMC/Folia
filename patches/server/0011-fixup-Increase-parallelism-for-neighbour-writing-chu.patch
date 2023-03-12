@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sun, 12 Mar 2023 00:14:32 -0800
+Subject: [PATCH] fixup! Increase parallelism for neighbour writing chunk
+ statuses
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java
+index 6648f8cc5c1788ec02a3adbb68cf126372017dd3..1c8e05d5dde630fdee01900823d26c293f375abc 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/queue/RadiusAwarePrioritisedExecutor.java
+@@ -351,8 +351,6 @@ public class RadiusAwarePrioritisedExecutor {
+                 return null;
+             }
+ 
+-            ++this.currentlyExecuting;
+-
+             // firstAwaiting compared to firstInfinite
+             final int compare;
+ 
+@@ -367,10 +365,16 @@ public class RadiusAwarePrioritisedExecutor {
+             }
+ 
+             if (compare >= 0) {
++                if (this.currentlyExecuting != 0) {
++                    // don't queue infinite task while other tasks are executing in parallel
++                    return null;
++                }
++                ++this.currentlyExecuting;
+                 this.pollInfinite();
+                 this.isInfiniteRadiusScheduled = true;
+                 return firstInfinite.task.pushTask(this.executor);
+             } else {
++                ++this.currentlyExecuting;
+                 this.pollAwaiting();
+                 return firstAwaiting.task.pushTask(this.executor);
+             }
