@@ -17746,6 +17746,23 @@ index 49b983064ea810382b6112f5dc7f93ba4e5710bd..ee24904679e37007c38d3eb7095b406f
  
              if (entityhuman != null) {
                  double d0 = entityhuman.distanceToSqr((Entity) this);
+diff --git a/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java b/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java
+index 8ec07578c1e41997a2e5ef158885ad3f4c2a31b6..6dcacfca6eb4a8a6425f1aaeb57733d29989032a 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java
++++ b/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java
+@@ -17,6 +17,12 @@ public class PoiCompetitorScan {
+             return context.group(context.present(MemoryModuleType.JOB_SITE), context.present(MemoryModuleType.NEAREST_LIVING_ENTITIES)).apply(context, (jobSite, mobs) -> {
+                 return (world, entity, time) -> {
+                     GlobalPos globalPos = context.get(jobSite);
++                    // Folia start - region threading
++                    if (globalPos.dimension() != world.dimension() || !io.papermc.paper.util.TickThread.isTickThreadFor(world, globalPos.pos())) {
++                        entity.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);
++                        return true;
++                    }
++                    // Folia end - region threading
+                     world.getPoiManager().getType(globalPos.pos()).ifPresent((poiType) -> {
+                         context.<List<LivingEntity>>get(mobs).stream().filter((mob) -> {
+                             return mob instanceof Villager && mob != entity;
 diff --git a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
 index 11a101e8ff05fbda5e84018358be02014ca01854..8cfa70e9b07e0f993d172d3e4d3804490a4d9fd5 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
