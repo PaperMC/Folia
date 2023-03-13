@@ -1760,6 +1760,27 @@ index 4f3670b2bdb8b1b252e9f074a6af56a018a8c465..5c1ea572a97b130c3ff77624189b4acf
  
          LevelChunk chunk = chunkPacketInfo.getChunk();
          int x = chunk.getPos().x;
+diff --git a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java b/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
+index 22a2547810d0c029f29685faddf7ac21cde2df0b..30370ad31056437fa3b5bd65357e2e07cb0a6869 100644
+--- a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
++++ b/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
+@@ -832,14 +832,14 @@ public class RedstoneWireTurbo {
+         j = getMaxCurrentStrength(upd, j);
+         int l = 0;
+ 
+-        wire.shouldSignal = false;
++        io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal = false; // Folia - region threading
+         // Unfortunately, World.isBlockIndirectlyGettingPowered is complicated,
+         // and I'm not ready to try to replicate even more functionality from
+         // elsewhere in Minecraft into this accelerator.  So sadly, we must
+         // suffer the performance hit of this very expensive call.  If there
+         // is consistency to what this call returns, we may be able to cache it.
+         final int k = worldIn.getBestNeighborSignal(upd.self);
+-        wire.shouldSignal = true;
++        io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal = true; // Folia - region threading
+ 
+         // The variable 'k' holds the maximum redstone power value of any adjacent blocks.
+         // If 'k' has the highest level of all neighbors, then the power level of this
 diff --git a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
 index 309fe1162db195c7c3c94d785d6aa2700e42b08a..27f8c9b1c56cbf9af400a9ae15c2076a2db8b284 100644
 --- a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
@@ -5086,10 +5107,10 @@ index 0000000000000000000000000000000000000000..a40b88fbee7b92de38b49c4dfa7c2796
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..af875578822408fdc914548409dcb83a247c7c04
+index 0000000000000000000000000000000000000000..d22c6140ee4e34a6cc2dcd110e3cfb1a6566b56d
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionisedWorldData.java
-@@ -0,0 +1,664 @@
+@@ -0,0 +1,665 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.destroystokyo.paper.util.maplist.ReferenceList;
@@ -5457,6 +5478,7 @@ index 0000000000000000000000000000000000000000..af875578822408fdc914548409dcb83a
 +    @Nullable
 +    @VisibleForDebug
 +    public NaturalSpawner.SpawnState lastSpawnState;
++    public boolean shouldSignal = true;
 +
 +    // not transient
 +    public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos;
@@ -20095,9 +20117,18 @@ index e78fdd317d59cfca6a28deb6e0bd02aabe91e930..c2cb07426d22ff0c14dfa24cc2ead785
              super.fallOn(world, state, pos, entity, fallDistance);
          }
 diff --git a/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java b/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
-index 5ea09cc455bd86beb450f0e0275d7c6c8da98084..1c23d52b77fea5f9817b482e2904083237ee58c4 100644
+index 5ea09cc455bd86beb450f0e0275d7c6c8da98084..df433331a9cab9b94d10a1b6f9c83d38bdcb4f93 100644
 --- a/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
+@@ -67,7 +67,7 @@ public class RedStoneWireBlock extends Block {
+     });
+     private static final float PARTICLE_DENSITY = 0.2F;
+     private final BlockState crossState;
+-    public boolean shouldSignal = true;
++    //public boolean shouldSignal = true; // Folia - region threading - move to regionised world data
+ 
+     public RedStoneWireBlock(BlockBehaviour.Properties settings) {
+         super(settings);
 @@ -262,7 +262,7 @@ public class RedStoneWireBlock extends Block {
       * Note: Added 'source' argument so as to help determine direction of information flow
       */
@@ -20107,9 +20138,15 @@ index 5ea09cc455bd86beb450f0e0275d7c6c8da98084..1c23d52b77fea5f9817b482e29040832
              turbo.updateSurroundingRedstone(worldIn, pos, state, source);
              return;
          }
-@@ -286,7 +286,7 @@ public class RedStoneWireBlock extends Block {
+@@ -282,11 +282,11 @@ public class RedStoneWireBlock extends Block {
+         int i = state.getValue(POWER);
+         int j = 0;
+         j = this.getPower(j, worldIn.getBlockState(pos2));
+-        this.shouldSignal = false;
++        io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal = false; // Folia - region threading
          int k = worldIn.getBestNeighborSignal(pos1);
-         this.shouldSignal = true;
+-        this.shouldSignal = true;
++        io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal = true; // Folia - region threading
  
 -        if (worldIn.paperConfig().misc.redstoneImplementation == io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.VANILLA) {
 +        if (io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.VANILLA == io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.VANILLA) { // Folia - region threading
@@ -20134,6 +20171,19 @@ index 5ea09cc455bd86beb450f0e0275d7c6c8da98084..1c23d52b77fea5f9817b482e29040832
              // The old code would decrement the wire value only by 1 at a time.
              if (l > j) {
                  j = l - 1;
+@@ -403,10 +403,10 @@ public class RedStoneWireBlock extends Block {
+     }
+ 
+     private int calculateTargetStrength(Level world, BlockPos pos) {
+-        this.shouldSignal = false;
++        io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal = false; // Folia - region threading
+         int i = world.getBestNeighborSignal(pos);
+ 
+-        this.shouldSignal = true;
++        io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal = true; // Folia - region threading
+         int j = 0;
+ 
+         if (i < 15) {
 @@ -455,7 +455,7 @@ public class RedStoneWireBlock extends Block {
      public void onPlace(BlockState state, Level world, BlockPos pos, BlockState oldState, boolean notify) {
          if (!oldState.is(state.getBlock()) && !world.isClientSide) {
@@ -20161,6 +20211,30 @@ index 5ea09cc455bd86beb450f0e0275d7c6c8da98084..1c23d52b77fea5f9817b482e29040832
                  world.getWireHandler().onWireUpdated(pos);
              } else
              // Paper end
+@@ -545,12 +545,12 @@ public class RedStoneWireBlock extends Block {
+ 
+     @Override
+     public int getDirectSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
+-        return !this.shouldSignal ? 0 : state.getSignal(world, pos, direction);
++        return !io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal ? 0 : state.getSignal(world, pos, direction); // Folia - region threading
+     }
+ 
+     @Override
+     public int getSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
+-        if (this.shouldSignal && direction != Direction.DOWN) {
++        if (io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal && direction != Direction.DOWN) { // Folia - region threading
+             int i = (Integer) state.getValue(RedStoneWireBlock.POWER);
+ 
+             return i == 0 ? 0 : (direction != Direction.UP && !((RedstoneSide) this.getConnectionState(world, state, pos).getValue((Property) RedStoneWireBlock.PROPERTY_BY_DIRECTION.get(direction.getOpposite()))).isConnected() ? 0 : i);
+@@ -577,7 +577,7 @@ public class RedStoneWireBlock extends Block {
+ 
+     @Override
+     public boolean isSignalSource(BlockState state) {
+-        return this.shouldSignal;
++        return io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData().shouldSignal; // Folia - region threading
+     }
+ 
+     public static int getColorForPower(int powerLevel) {
 diff --git a/src/main/java/net/minecraft/world/level/block/RedstoneTorchBlock.java b/src/main/java/net/minecraft/world/level/block/RedstoneTorchBlock.java
 index da07fce0cf7c9fbdb57d2c59e431b59bf583bf50..16e46bb6205c3f7444e864c553e8072f0519746d 100644
 --- a/src/main/java/net/minecraft/world/level/block/RedstoneTorchBlock.java
