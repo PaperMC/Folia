@@ -6,7 +6,7 @@ Subject: [PATCH] Max pending logins
 Should help the floodgates on launch
 
 diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index 626d99c785d2886bce605ba468ee24ce1710beb2..37ca4f314c8f0fdca2927c0b425bda4b959acff8 100644
+index 626d99c785d2886bce605ba468ee24ce1710beb2..7b529beed6c68c5bf81eca1c53b5afe916430724 100644
 --- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 @@ -85,7 +85,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
@@ -14,36 +14,29 @@ index 626d99c785d2886bce605ba468ee24ce1710beb2..37ca4f314c8f0fdca2927c0b425bda4b
              if (this.server.getPlayerList().pushPendingJoin(name, uniqueId, this.connection)) {
                  this.handleAcceptedLogin();
 -            }
-+            } else { --this.tick; }
++            } else { --this.tick; } // Folia - max concurrent logins
              // Folia end - region threading - rewrite login process
          } // Folia - region threading - remove delayed accept
  
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index f60feb0b9101afa24363c438949e1d60ccab0272..fe4d87e08e8910524e6e3413377e3ba9d039bf03 100644
+index f60feb0b9101afa24363c438949e1d60ccab0272..5d205856037032ceb9ea753ff12c3aac01583c2d 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -168,6 +168,8 @@ public abstract class PlayerList {
-     private final Map<String, Connection> connectionByName = new java.util.HashMap<>();
-     private final Map<UUID, Connection> connectionById = new java.util.HashMap<>();
- 
-+    public static int maxConcurrentLogins = 5;
-+
-     public boolean pushPendingJoin(String userName, UUID byId, Connection conn) {
-         userName = userName.toLowerCase(java.util.Locale.ROOT);
-         Connection conflictingName, conflictingId;
-@@ -176,6 +178,15 @@ public abstract class PlayerList {
+@@ -176,6 +176,17 @@ public abstract class PlayerList {
              conflictingId = this.connectionById.get(byId);
  
              if (conflictingName == null && conflictingId == null) {
++                // Folia start - max concurrent login
 +                int loggedInCount = 0;
 +                for (Connection value : this.connectionById.values()) {
 +                    if (value.isPlayerConnected()) {
 +                        ++loggedInCount;
 +                    }
 +                }
-+                if ((this.connectionById.size() - loggedInCount) >= maxConcurrentLogins) {
++                if ((this.connectionById.size() - loggedInCount) >= io.papermc.paper.configuration.GlobalConfiguration.get().misc.maxJoinsPerTick) {
 +                    return false;
 +                }
++                // Folia end - max concurrent login
                  this.connectionByName.put(userName, conn);
                  this.connectionById.put(byId, conn);
              }
