@@ -3,7 +3,8 @@ From: Spottedleaf <Spottedleaf@users.noreply.github.com>
 Date: Sat, 4 Mar 2023 12:48:43 -0800
 Subject: [PATCH] Region scheduler API
 
-Add both a location based scheduler and an entity based scheduler
+Add both a location based scheduler, an entity based scheduler,
+and a global region scheduler.
 
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
 new file mode 100644
@@ -58,6 +59,34 @@ index 0000000000000000000000000000000000000000..4193b13f1f51c2fb8da76f3e03187d85
 +                           final long delay);
 +
 +}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c13c89c87a4e6fd441cac8d3c8cd5b283915467f
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
+@@ -0,0 +1,22 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import org.bukkit.plugin.Plugin;
++import org.jetbrains.annotations.NotNull;
++
++/**
++ * The global region task scheduler may be used to schedule tasks that will execute on the global region.
++ * <p>
++ * The global region is responsible for maintaining world day time, world game time, weather cycle,
++ * sleep night skipping, executing commands for console, and other misc. tasks that do not belong to any specific region.
++ * </p>
++ */
++public interface GlobalRegionScheduler {
++
++    /**
++     * Schedules a task to be executed on the global region.
++     * @param plugin The plugin that owns the task
++     * @param run The task to execute
++     */
++    public void execute(@NotNull final Plugin plugin, @NotNull final Runnable run);
++
++}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionisedScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionisedScheduler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..210a3dce74959efd7ac0ca9a92a2ad8815844246
@@ -91,10 +120,10 @@ index 0000000000000000000000000000000000000000..210a3dce74959efd7ac0ca9a92a2ad88
 +    public void execute(@NotNull final Plugin plugin, @NotNull final Location location, @NotNull final Runnable run);
 +}
 diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
-index ac9b690fcccb60b587e5345f12f1383afd0a73a1..3b8a6d7336b0cb20594de9c6b56f215f1370ce89 100644
+index ac9b690fcccb60b587e5345f12f1383afd0a73a1..4ae25cb199c6e20b51c4a1e7ac4ff55b23ae724f 100644
 --- a/src/main/java/org/bukkit/Bukkit.java
 +++ b/src/main/java/org/bukkit/Bukkit.java
-@@ -2459,6 +2459,22 @@ public final class Bukkit {
+@@ -2459,6 +2459,35 @@ public final class Bukkit {
          return server.getPotionBrewer();
      }
      // Paper end
@@ -113,15 +142,28 @@ index ac9b690fcccb60b587e5345f12f1383afd0a73a1..3b8a6d7336b0cb20594de9c6b56f215f
 +    public static @NotNull io.papermc.paper.threadedregions.scheduler.RegionisedScheduler getRegionScheduler() {
 +        return server.getRegionScheduler();
 +    }
++
++    /**
++     * Returns the global region task scheduler. The global task scheduler can be used to schedule
++     * tasks to execute on the global region.
++     * <p>
++     * The global region is responsible for maintaining world day time, world game time, weather cycle,
++     * sleep night skipping, executing commands for console, and other misc. tasks that do not belong to any specific region.
++     * </p>
++     * @return the global region scheduler
++     */
++    public static @NotNull io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler getGlobalRegionScheduler() {
++        return server.getGlobalRegionScheduler();
++    }
 +    // Folia end - region threading API
  
      @NotNull
      public static Server.Spigot spigot() {
 diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
-index 2204336d8800311b65e894739ab1b27273e7c6f2..135467092eec33a21b171df39267d15bad26003e 100644
+index 2204336d8800311b65e894739ab1b27273e7c6f2..1092ceef77bad421df647d349d997d02b2ba80a9 100644
 --- a/src/main/java/org/bukkit/Server.java
 +++ b/src/main/java/org/bukkit/Server.java
-@@ -2139,4 +2139,18 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+@@ -2139,4 +2139,29 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
       */
      @NotNull org.bukkit.potion.PotionBrewer getPotionBrewer();
      // Paper end
@@ -138,6 +180,17 @@ index 2204336d8800311b65e894739ab1b27273e7c6f2..135467092eec33a21b171df39267d15b
 +     * @return the region task scheduler
 +     */
 +    @NotNull io.papermc.paper.threadedregions.scheduler.RegionisedScheduler getRegionScheduler();
++
++    /**
++     * Returns the global region task scheduler. The global task scheduler can be used to schedule
++     * tasks to execute on the global region.
++     * <p>
++     * The global region is responsible for maintaining world day time, world game time, weather cycle,
++     * sleep night skipping, executing commands for console, and other misc. tasks that do not belong to any specific region.
++     * </p>
++     * @return the global region scheduler
++     */
++    public @NotNull io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler getGlobalRegionScheduler();
 +    // Folia end - region threading API
  }
 diff --git a/src/main/java/org/bukkit/entity/Entity.java b/src/main/java/org/bukkit/entity/Entity.java

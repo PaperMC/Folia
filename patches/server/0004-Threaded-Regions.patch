@@ -8921,6 +8921,39 @@ index 0000000000000000000000000000000000000000..c0b9f43fc53a5c9b3d9788f080e4fd3f
 +        return this.entity.taskScheduler.schedule(runNMS, runRetired, delay);
 +    }
 +}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..cada55accf6c6b882918fe59f82cabe029f7b511
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+@@ -0,0 +1,27 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import ca.spottedleaf.concurrentutil.util.Validate;
++import io.papermc.paper.threadedregions.RegionisedServer;
++import org.bukkit.plugin.Plugin;
++import java.util.logging.Level;
++
++public final class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
++
++    private static Runnable wrap(final Plugin plugin, final Runnable run) {
++        return () -> {
++            try {
++                run.run();
++            } catch (final Throwable throwable) {
++                plugin.getLogger().log(Level.WARNING, "Global region task for " + plugin.getDescription().getFullName() + " generated an exception", throwable);
++            }
++        };
++    }
++
++    @Override
++    public void execute(final Plugin plugin, final Runnable run) {
++        Validate.notNull(plugin, "Plugin may not be null");
++        Validate.notNull(run, "Runnable may not be null");
++
++        RegionisedServer.getInstance().addTaskWithoutNotify(wrap(plugin, run));
++    }
++}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionisedScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionisedScheduler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..e4637086ba0095341da9c2bfe20083375c82bc01
@@ -21688,19 +21721,25 @@ index 7f1ac2cb29eb84833c0895442d611dfa0504527e..c79cfebc65fd04994735dabcf5bb6e6c
          LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
          if (levelChunkTicks == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c970a9165657636f1a442df8aa3f566eea46a290 100644
+index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..38d508b7a198df39de6d8ddc1b2aa6b8284f2d1b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -307,6 +307,69 @@ public final class CraftServer implements Server {
+@@ -307,6 +307,75 @@ public final class CraftServer implements Server {
          CraftItemFactory.instance();
      }
  
 +    // Folia start - region threading API
 +    private final io.papermc.paper.threadedregions.scheduler.FoliaRegionisedScheduler regionisedScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaRegionisedScheduler();
++    private final io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler globalRegionScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler();
 +
 +    @Override
 +    public final io.papermc.paper.threadedregions.scheduler.RegionisedScheduler getRegionScheduler() {
 +        return this.regionisedScheduler;
++    }
++
++    @Override
++    public final io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler getGlobalRegionScheduler() {
++        return this.globalRegionScheduler;
 +    }
 +
 +    @Override
@@ -21761,7 +21800,7 @@ index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c970a9165657636f1a442df8aa3f566e
      public CraftServer(DedicatedServer console, PlayerList playerList) {
          this.console = console;
          this.playerList = (DedicatedPlayerList) playerList;
-@@ -879,6 +942,9 @@ public final class CraftServer implements Server {
+@@ -879,6 +948,9 @@ public final class CraftServer implements Server {
  
      // NOTE: Should only be called from DedicatedServer.ah()
      public boolean dispatchServerCommand(CommandSender sender, ConsoleInput serverCommand) {
@@ -21771,7 +21810,7 @@ index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c970a9165657636f1a442df8aa3f566e
          if (sender instanceof Conversable) {
              Conversable conversable = (Conversable) sender;
  
-@@ -898,12 +964,44 @@ public final class CraftServer implements Server {
+@@ -898,12 +970,44 @@ public final class CraftServer implements Server {
          }
      }
  
@@ -21816,7 +21855,7 @@ index 2ea3778ee1348e5d06b15a2c5dc5d9bd4136dbe3..c970a9165657636f1a442df8aa3f566e
          // Paper Start
          if (!org.spigotmc.AsyncCatcher.shuttingDown && !Bukkit.isPrimaryThread()) {
              final CommandSender fSender = sender;
-@@ -2913,7 +3011,7 @@ public final class CraftServer implements Server {
+@@ -2913,7 +3017,7 @@ public final class CraftServer implements Server {
  
      @Override
      public int getCurrentTick() {
