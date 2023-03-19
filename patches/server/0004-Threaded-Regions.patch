@@ -9526,13 +9526,14 @@ index 6898c704e60d89d53c8ed114e5e12f73ed63605a..594ada3cdec25784c7bd6abb9ad42d3f
       * Converts an NMS entity's current location to a Bukkit Location
       * @param entity
 diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
-index fc57850b80303fcade89ca95794f63910404a407..2e3b030aced80803a544a9c836b00086b767da7a 100644
+index fc57850b80303fcade89ca95794f63910404a407..6182ba2a03ea8fd5acc527ea068560fecaa68763 100644
 --- a/src/main/java/io/papermc/paper/util/TickThread.java
 +++ b/src/main/java/io/papermc/paper/util/TickThread.java
-@@ -1,8 +1,19 @@
+@@ -1,8 +1,21 @@
  package io.papermc.paper.util;
  
 +import io.papermc.paper.threadedregions.RegionShutdownThread;
++import io.papermc.paper.threadedregions.RegionisedServer;
 +import io.papermc.paper.threadedregions.RegionisedWorldData;
 +import io.papermc.paper.threadedregions.ThreadedRegioniser;
 +import io.papermc.paper.threadedregions.TickRegionScheduler;
@@ -9541,6 +9542,7 @@ index fc57850b80303fcade89ca95794f63910404a407..2e3b030aced80803a544a9c836b00086
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.server.network.ServerGamePacketListenerImpl;
 +import net.minecraft.util.Mth;
  import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.ChunkPos;
@@ -9549,7 +9551,7 @@ index fc57850b80303fcade89ca95794f63910404a407..2e3b030aced80803a544a9c836b00086
  import org.bukkit.Bukkit;
  import java.util.concurrent.atomic.AtomicInteger;
  
-@@ -38,6 +49,20 @@ public class TickThread extends Thread {
+@@ -38,6 +51,20 @@ public class TickThread extends Thread {
          }
      }
  
@@ -9570,7 +9572,7 @@ index fc57850b80303fcade89ca95794f63910404a407..2e3b030aced80803a544a9c836b00086
      public static void ensureTickThread(final ServerLevel world, final int chunkX, final int chunkZ, final String reason) {
          if (!isTickThreadFor(world, chunkX, chunkZ)) {
              MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
-@@ -77,11 +102,96 @@ public class TickThread extends Thread {
+@@ -77,11 +104,112 @@ public class TickThread extends Thread {
          return Thread.currentThread() instanceof TickThread;
      }
  
@@ -9654,6 +9656,13 @@ index fc57850b80303fcade89ca95794f63910404a407..2e3b030aced80803a544a9c836b00086
 +        final ThreadedRegioniser.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region =
 +            TickRegionScheduler.getCurrentRegion();
 +        if (region == null) {
++            if (RegionisedServer.isGlobalTickThread()) {
++                if (entity instanceof ServerPlayer serverPlayer) {
++                    return serverPlayer.connection == null;
++                } else {
++                    return false;
++                }
++            }
 +            return isShutdownThread();
 +        }
 +
@@ -9666,7 +9675,16 @@ index fc57850b80303fcade89ca95794f63910404a407..2e3b030aced80803a544a9c836b00086
 +        final RegionisedWorldData worldData = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionisedWorldData();
 +
 +        // pass through the check if the entity is removed and we own its chunk
-+        return worldData.hasEntity(entity) || ((entity.hasNullCallback() || entity.isRemoved()) && !(entity instanceof ServerPlayer) && isTickThreadFor((ServerLevel)level, entity.chunkPosition()));
++        if (worldData.hasEntity(entity)) {
++            return true;
++        }
++        
++        if (entity instanceof ServerPlayer serverPlayer) {
++            ServerGamePacketListenerImpl conn = serverPlayer.connection;
++            return conn != null && worldData.connections.contains(conn.connection);
++        } else {
++            return ((entity.hasNullCallback() || entity.isRemoved())) && isTickThreadFor((ServerLevel)level, entity.chunkPosition());
++        }
      }
  }
 diff --git a/src/main/java/io/papermc/paper/util/set/LinkedSortedSet.java b/src/main/java/io/papermc/paper/util/set/LinkedSortedSet.java
@@ -14828,7 +14846,7 @@ index 714637cdd9dcdbffa344b19e77944fb3c7541ff7..80ff2f28521f3d6d00ff21fbe76ab4e9
                  for (ServerPlayer player : ServerLevel.this.players) {
                      player.getBukkitEntity().onEntityRemove(entity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 869daafbc236b3ff63f878e5fe28427fde75afe5..8cceb1031763bee4b791795534130112a24a613e 100644
+index 869daafbc236b3ff63f878e5fe28427fde75afe5..c9ffb72c5d39a46ce9cbd41cd49da92ece1ddfce 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -181,7 +181,7 @@ import org.bukkit.inventory.MainHand;
@@ -15062,11 +15080,6 @@ index 869daafbc236b3ff63f878e5fe28427fde75afe5..8cceb1031763bee4b791795534130112
 +
 +        // set up post spawn location logic
 +        spawnPosComplete.addWaiter((spawnLoc, throwable) -> {
-+            // reset player if needed
-+            if (!alive) {
-+                ServerPlayer.this.reset();
-+            }
-+
 +            // update pos and velocity
 +            ServerPlayer.this.setPosRaw(spawnLoc.getX(), spawnLoc.getY(), spawnLoc.getZ());
 +            ServerPlayer.this.setYRot(spawnLoc.getYaw());
@@ -15083,6 +15096,11 @@ index 869daafbc236b3ff63f878e5fe28427fde75afe5..8cceb1031763bee4b791795534130112
 +                TELEPORT_FLAG_LOAD_CHUNK | TELEPORT_FLAGS_PLAYER_RESPAWN | TELEPORT_FLAGS_AVOID_SUFFOCATION,
 +                passengerTree, // note: we expect this to just be the player, no passengers
 +                (entity) -> {
++                    // reset player if needed
++                    // only after placing, so that we don't trip thread checks
++                    if (!alive) {
++                        ServerPlayer.this.reset();
++                    }
 +                    // now the player is in the world, and can receive sound
 +                    if (usedRespawnAnchor[0]) {
 +                        ServerPlayer.this.connection.send(
@@ -16656,7 +16674,7 @@ index 6b5fd3e2e19c2d3d694df94f90fce0d310a1a86c..a7a48cf40db1e31ab03e0f42028b617b
  
              itemstack = entityliving1.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 1eaab1f6923e6aa34b643293347348e5cc19af3c..56d8a63fa576e6e325a10bedd320fb85aa51b891 100644
+index 1eaab1f6923e6aa34b643293347348e5cc19af3c..58d39268a2608901a14696d36f3c59d8d6ac06e7 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -165,7 +165,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17123,11 +17141,11 @@ index 1eaab1f6923e6aa34b643293347348e5cc19af3c..56d8a63fa576e6e325a10bedd320fb85
 +    }
 +
 +    protected Entity transformForAsyncTeleport(ServerLevel destination, Vec3 pos, Float yaw, Float pitch, Vec3 speedDirectionUpdate) {
++        this.removeAfterChangingDimensions(); // remove before so that any CBEntity#getHandle call affects this entity before copying
++
 +        Entity copy = this.getType().create(destination);
 +        copy.restoreFrom(this);
 +        copy.transform(pos, yaw, pitch, speedDirectionUpdate);
-+
-+        this.removeAfterChangingDimensions();
 +
 +        return copy;
 +    }
