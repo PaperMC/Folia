@@ -51,45 +51,41 @@ index d9687722e02dfd4088c7030abbf5008eb0a092c8..62484ebf4550b05182f693a3180bbac5
          TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
          final List<ScheduledTask> toRun;
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 58d39268a2608901a14696d36f3c59d8d6ac06e7..5b0f8e68b5e72a48119dd2cbe41e2d500fe6ccc8 100644
+index 58d39268a2608901a14696d36f3c59d8d6ac06e7..021177d19384ef898667b8a374cd3838f6bd311c 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -2757,7 +2757,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2756,6 +2756,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             // CraftBukkit start
              com.google.common.base.Preconditions.checkState(!entity.passengers.contains(this), "Circular entity riding! %s %s", this, entity);
  
++            if (this.valid) { // Folia - region threading - suppress entire event logic during worldgen
              CraftEntity craft = (CraftEntity) entity.getBukkitEntity().getVehicle();
--            Entity orig = craft == null ? null : craft.getHandle();
-+            Entity orig = craft == null ? null : craft.getHandleRaw(); // Folia - region threading
+             Entity orig = craft == null ? null : craft.getHandle();
              if (this.getBukkitEntity() instanceof Vehicle && entity.getBukkitEntity() instanceof LivingEntity) {
-                 VehicleEnterEvent event = new VehicleEnterEvent(
-                         (Vehicle) this.getBukkitEntity(),
-@@ -2768,7 +2768,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-                     Bukkit.getPluginManager().callEvent(event);
-                 }
-                 CraftEntity craftn = (CraftEntity) entity.getBukkitEntity().getVehicle();
--                Entity n = craftn == null ? null : craftn.getHandle();
-+                Entity n = craftn == null ? null : craftn.getHandleRaw(); // Folia - region threading
-                 if (event.isCancelled() || n != orig) {
-                     return false;
-                 }
-@@ -2811,7 +2811,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2783,6 +2784,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             if (event.isCancelled()) {
+                 return false;
+             }
++            } // Folia - region threading - suppress entire event logic during worldgen
+             // Spigot end
+             if (this.passengers.isEmpty()) {
+                 this.passengers = ImmutableList.of(entity);
+@@ -2810,6 +2812,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             throw new IllegalStateException("Use x.stopRiding(y), not y.removePassenger(x)");
          } else {
              // CraftBukkit start
++            if (this.valid) { // Folia - region threading - suppress entire event logic during worldgen
              CraftEntity craft = (CraftEntity) entity.getBukkitEntity().getVehicle();
--            Entity orig = craft == null ? null : craft.getHandle();
-+            Entity orig = craft == null ? null : craft.getHandleRaw(); // Folia - region threading
+             Entity orig = craft == null ? null : craft.getHandle();
              if (this.getBukkitEntity() instanceof Vehicle && entity.getBukkitEntity() instanceof LivingEntity) {
-                 VehicleExitEvent event = new VehicleExitEvent(
-                         (Vehicle) this.getBukkitEntity(),
-@@ -2822,7 +2822,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-                     Bukkit.getPluginManager().callEvent(event);
-                 }
-                 CraftEntity craftn = (CraftEntity) entity.getBukkitEntity().getVehicle();
--                Entity n = craftn == null ? null : craftn.getHandle();
-+                Entity n = craftn == null ? null : craftn.getHandleRaw(); // Folia - region threading
-                 if (event.isCancelled() || n != orig) {
-                     return false;
-                 }
+@@ -2837,6 +2840,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             if (event.isCancelled()) {
+                 return false;
+             }
++            } // Folia - region threading - suppress entire event logic during worldgen
+             // Spigot end
+             if (this.passengers.size() == 1 && this.passengers.get(0) == entity) {
+                 this.passengers = ImmutableList.of();
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java b/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
 index 825fdc6162797ade8e76e1ca3a863ed5fb48f936..f812ad4a4d6c640c3f3f2d5766ee2b5882583cc5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
