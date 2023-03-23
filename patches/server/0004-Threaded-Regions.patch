@@ -3358,6 +3358,32 @@ index 51cf0014c4229fc8671804d885b6381996810130..ee7b26d80ad3b4f76196492b9ffc11b3
              public boolean scanForLegacyEnderDragon = true;
              @MergeMap
              public Reference2IntMap<MobCategory> spawnLimits = Util.make(new Reference2IntOpenHashMap<>(NaturalSpawner.SPAWNING_CATEGORIES.length), map -> Arrays.stream(NaturalSpawner.SPAWNING_CATEGORIES).forEach(mobCategory -> map.put(mobCategory, -1)));
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+index c0e896343c22badd97c774c4ed1daa4e274f5d44..1bca4a629fe986e5afa47d8884dc44b2be800f32 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
+@@ -243,10 +243,19 @@ class PaperPluginInstanceManager {
+                 + pluginName + " (Is it up to date?)", ex, plugin); // Paper
+         }
+ 
++        // Folia start - region threading
+         try {
+-            this.server.getScheduler().cancelTasks(plugin);
++            this.server.getGlobalRegionScheduler().cancelTasks(plugin);
+         } catch (Throwable ex) {
+-            this.handlePluginException("Error occurred (in the plugin loader) while cancelling tasks for "
++            this.handlePluginException("Error occurred (in the plugin loader) while cancelling global tasks for "
++                + pluginName + " (Is it up to date?)", ex, plugin); // Paper
++        }
++        // Folia end - region threading
++
++        try {
++            this.server.getAsyncScheduler().cancelTasks(plugin); // Folia - region threading
++        } catch (Throwable ex) {
++            this.handlePluginException("Error occurred (in the plugin loader) while cancelling async tasks for " // Folia - region threading
+                 + pluginName + " (Is it up to date?)", ex, plugin); // Paper
+         }
+ 
 diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d9687722e02dfd4088c7030abbf5008eb0a092c8
@@ -15647,7 +15673,7 @@ index e57cf6a74a129ea0919a4ad5e84b615cd5aa141e..5c20a7c090baed582a3351163520d37b
                  for (ServerPlayer player : ServerLevel.this.players) {
                      player.getBukkitEntity().onEntityRemove(entity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 8a80b222456c2e4818cada3a9248ab2f9b76a983..c49e1e15e6878b1a5670988b89e2e50fe2d7aca8 100644
+index 8a80b222456c2e4818cada3a9248ab2f9b76a983..71ee635aa84d61c63835b02e4fb7ea8580e697fb 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -187,7 +187,7 @@ import org.bukkit.inventory.MainHand;
@@ -15982,7 +16008,7 @@ index 8a80b222456c2e4818cada3a9248ab2f9b76a983..c49e1e15e6878b1a5670988b89e2e50f
 +        if (speedDirectionUpdate != null) {
 +            this.setDeltaMovement(speedDirectionUpdate.normalize().scale(this.getDeltaMovement().length()));
 +        }
-+        this.connection.internalTeleport(pos.x, pos.y, pos.z, this.getYRot(), this.getXRot(), java.util.Collections.emptySet(), !this.isPassenger());
++        this.connection.internalTeleport(pos.x, pos.y, pos.z, this.getYRot(), this.getXRot(), java.util.Collections.emptySet());
 +        this.connection.resetPosition();
 +    }
 +
@@ -16021,7 +16047,7 @@ index 8a80b222456c2e4818cada3a9248ab2f9b76a983..c49e1e15e6878b1a5670988b89e2e50f
 +            // the player's position clientside
 +            this.connection.internalTeleport(
 +                this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot(),
-+                java.util.Collections.emptySet(), treeNode.parent == null
++                java.util.Collections.emptySet()
 +            );
 +            this.connection.resetPosition();
 +
@@ -16081,7 +16107,7 @@ index 8a80b222456c2e4818cada3a9248ab2f9b76a983..c49e1e15e6878b1a5670988b89e2e50f
 +            // the player's position clientside
 +            this.connection.internalTeleport(
 +                this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot(),
-+                java.util.Collections.emptySet(), treeNode.parent == null
++                java.util.Collections.emptySet()
 +            );
 +            this.connection.resetPosition();
 +
@@ -17444,7 +17470,7 @@ index 93a1e990b0a6caae4143c2f9d09bfb368fa1d6db..ad3166481dd37f4b5380f8bf28653bb4
  
                  itemstack = entityliving2.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 9a1e8589e6b371869b2199650172d61ae186c907..0f958731923c7ac7093b47c11ceb1eda7c79e0de 100644
+index 9a1e8589e6b371869b2199650172d61ae186c907..030139f939fe870a163eb4e0e1a50798fde96094 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -165,7 +165,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17925,7 +17951,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..0f958731923c7ac7093b47c11ceb1eda
 +                                       java.util.function.Consumer<Entity> teleportComplete) {
 +        io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot teleport entity async");
 +
-+        if (!ServerLevel.isInSpawnableBounds(new BlockPos(pos))) {
++        if (!ServerLevel.isInSpawnableBounds(new BlockPos(io.papermc.paper.util.CoordinateUtils.getBlockX(pos), io.papermc.paper.util.CoordinateUtils.getBlockY(pos), io.papermc.paper.util.CoordinateUtils.getBlockZ(pos)))) {
 +            return false;
 +        }
 +
@@ -21409,7 +21435,7 @@ index 902f2b39104bf059849228829bfe93b6dbc757d4..9a6c51652bd2dbb3d474809372df0303
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
-index c73024cc62490c336ffe26313580e88d25ca7078..197f9f54fc0cf61cf55528d9215bc6001805e398 100644
+index c73024cc62490c336ffe26313580e88d25ca7078..4f2258e3a2bf91e4c9d7f3ffc72aa5eb7696d319 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 @@ -51,9 +51,12 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
@@ -21548,7 +21574,7 @@ index c73024cc62490c336ffe26313580e88d25ca7078..197f9f54fc0cf61cf55528d9215bc600
              ServerLevel worldserver = (ServerLevel) world;
  
              blockEntity.teleportCooldown = 100;
-@@ -281,6 +388,125 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+@@ -281,6 +388,129 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
          return TheEndGatewayBlockEntity.findTallestBlock(world, blockposition1, 16, true);
      }
  
@@ -21561,7 +21587,11 @@ index c73024cc62490c336ffe26313580e88d25ca7078..197f9f54fc0cf61cf55528d9215bc600
 +            LevelChunk chunk = TheEndGatewayBlockEntity.getChunk(world, vec3d);
 +            BlockPos blockposition1 = TheEndGatewayBlockEntity.findValidSpawnInChunk(chunk);
 +            if (blockposition1 == null) {
-+                BlockPos blockposition2 = new BlockPos(vec3d.x + 0.5D, 75.0D, vec3d.z + 0.5D);
++                BlockPos blockposition2 = new BlockPos(
++                    io.papermc.paper.util.CoordinateUtils.getBlockCoordinate(vec3d.x + 0.5D),
++                    io.papermc.paper.util.CoordinateUtils.getBlockCoordinate(75.0D),
++                    io.papermc.paper.util.CoordinateUtils.getBlockCoordinate(vec3d.z + 0.5D)
++                );
 +
 +                TheEndGatewayBlockEntity.LOGGER.debug("Failed to find a suitable block to teleport to, spawning an island on {}", blockposition2);
 +                world.registryAccess().registry(Registries.CONFIGURED_FEATURE).flatMap((iregistry) -> {
@@ -22981,7 +23011,7 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..5fa6b219b90bcf3f583eb64cf5eecf09
  
      @Override
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index ff6559bf563f2fdcc0f2843d4f4aa24d7ddfb6db..b760e7c6608f991fc1fded531778904deab32ea4 100644
+index ff6559bf563f2fdcc0f2843d4f4aa24d7ddfb6db..fe73d712ad79451fc3edbc70088e9736de05e70c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -180,7 +180,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
@@ -23088,6 +23118,15 @@ index ff6559bf563f2fdcc0f2843d4f4aa24d7ddfb6db..b760e7c6608f991fc1fded531778904d
          ClientboundSoundEntityPacket packet = new ClientboundSoundEntityPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(CraftSound.getSoundEffect(sound)), net.minecraft.sounds.SoundSource.valueOf(category.name()), craftEntity.getHandle(), volume, pitch, this.getHandle().getRandom().nextLong());
 -        ChunkMap.TrackedEntity entityTracker = this.getHandle().getChunkSource().chunkMap.entityMap.get(entity.getEntityId());
 +        ChunkMap.TrackedEntity entityTracker = ((CraftEntity) entity).getHandle().tracker; // Folia - region threading
+         if (entityTracker != null) {
+             entityTracker.broadcastAndSend(packet);
+         }
+@@ -1869,7 +1872,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         if (!(entity instanceof CraftEntity craftEntity) || entity.getWorld() != this || sound == null || category == null) return;
+ 
+         ClientboundSoundEntityPacket packet = new ClientboundSoundEntityPacket(Holder.direct(SoundEvent.createVariableRangeEvent(new ResourceLocation(sound))), net.minecraft.sounds.SoundSource.valueOf(category.name()), craftEntity.getHandle(), volume, pitch, this.getHandle().getRandom().nextLong());
+-        ChunkMap.TrackedEntity entityTracker = this.getHandle().getChunkSource().chunkMap.entityMap.get(entity.getEntityId());
++        ChunkMap.TrackedEntity entityTracker = ((CraftEntity)entity).getHandle().tracker; // Folia - region threading
          if (entityTracker != null) {
              entityTracker.broadcastAndSend(packet);
          }
