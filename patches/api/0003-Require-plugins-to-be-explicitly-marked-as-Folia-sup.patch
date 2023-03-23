@@ -14,45 +14,60 @@ more helpful than some random error log caused by
 a breakage.
 
 diff --git a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
-index 0c9f4d1e9104fa6951114c1f9ec954dfcc749196..fc11577083672f127335613459436167d339efa4 100644
+index 028805bcdb1d2bb0d11387db165b7376579e5f60..51bc04571f75a4ccf05c3d080531a29fe35817d1 100644
 --- a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
 +++ b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
-@@ -254,6 +254,17 @@ public final class PluginDescriptionFile {
+@@ -255,6 +255,20 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
      private Set<PluginAwareness> awareness = ImmutableSet.of();
      private String apiVersion = null;
      private List<String> libraries = ImmutableList.of();
++
 +    // Folia start - block plugins not marked as supported
-+    private boolean foliaSupported;
++    private String foliaSupported;
++    private static final String FOLIA_SUPPORTED_KEY = "folia-supported";
 +
 +    /**
 +     * Returns whether the plugin has been marked to be compatible with regionised threading as provided
 +     * by Folia
 +     */
 +    public boolean isFoliaSupported() {
-+        return foliaSupported;
++        return this.foliaSupported != null && this.foliaSupported.equalsIgnoreCase("true");
 +    }
 +    // Folia end - block plugins not marked as supported
- 
-     public PluginDescriptionFile(@NotNull final InputStream stream) throws InvalidDescriptionException {
-         loadMap(asMap(YAML.get().load(stream)));
-@@ -1173,6 +1184,11 @@ public final class PluginDescriptionFile {
++
+     // Paper start - oh my goddddd
+     /**
+      * Don't use this.
+@@ -1238,6 +1252,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
          if (map.get("prefix") != null) {
              prefix = map.get("prefix").toString();
          }
 +        // Folia start - block plugins not marked as supported
-+        if (map.get("folia-supported") != null) {
-+            foliaSupported = map.get("folia-supported").toString().equalsIgnoreCase("true");
++        if (map.get(FOLIA_SUPPORTED_KEY) != null) {
++            foliaSupported = map.get(FOLIA_SUPPORTED_KEY).toString();
 +        }
 +        // Folia end - block plugins not marked as supported
      }
  
      @NotNull
+@@ -1314,6 +1333,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+         if (prefix != null) {
+             map.put("prefix", prefix);
+         }
++        // Folia start - block plugins not marked as supported
++        if (foliaSupported != null) {
++            map.put(FOLIA_SUPPORTED_KEY, foliaSupported);
++        }
++        // Folia end - block plugins not marked as supported
+ 
+         return map;
+     }
 diff --git a/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
-index 057fa5dc78734520224af5031250b6be101ce3cb..ec838d1c7850f0d07980b051dff7c88db0aa6dbf 100644
+index 800f954161886ca4f6332f8e0cbc4d4e8f9cbb74..e0026c938aa369d6d9797852324437456d3c4ed9 100644
 --- a/src/main/java/org/bukkit/plugin/SimplePluginManager.java
 +++ b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
-@@ -163,6 +163,12 @@ public final class SimplePluginManager implements PluginManager {
-                     server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + file.getParentFile().getPath() + "': uses the space-character (0x20) in its name"); // Paper
+@@ -173,6 +173,12 @@ public final class SimplePluginManager implements PluginManager {
+                     server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + directory.getPath() + "': uses the space-character (0x20) in its name");
                      continue;
                  }
 +                // Folia start - block plugins not marked as supported
@@ -62,5 +77,5 @@ index 057fa5dc78734520224af5031250b6be101ce3cb..ec838d1c7850f0d07980b051dff7c88d
 +                }
 +                // Folia end - block plugins not marked as supported
              } catch (InvalidDescriptionException ex) {
-                 server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + file.getParentFile().getPath() + "'", ex); // Paper
+                 server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + directory.getPath() + "'", ex);
                  continue;
