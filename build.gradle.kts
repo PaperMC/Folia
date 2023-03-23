@@ -52,7 +52,7 @@ subprojects {
 }
 
 paperweight {
-    serverProject.set(project(":Folia-Server"))
+    serverProject.set(project(":folia-server"))
 
     remapRepo.set(paperMavenPublicUrl)
     decompileRepo.set(paperMavenPublicUrl)

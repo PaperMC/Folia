@@ -5,6 +5,6 @@ pluginManagement {
     }
 }
 
-rootProject.name = "Folia"
+rootProject.name = "folia"
 
-include("Folia-API", "Folia-Server")
+include("folia-api", "folia-server")
