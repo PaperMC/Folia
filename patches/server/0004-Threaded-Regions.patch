@@ -10848,7 +10848,7 @@ index 7b6b51392b123d34382233adcf4c3d4867bdaa32..c6a28a1ff59a352b647f5f6c1e04f623
  
      protected CommandSourceStack(CommandSource output, Vec3 pos, Vec2 rot, ServerLevel world, int level, String name, Component displayName, MinecraftServer server, @Nullable Entity entity, boolean silent, @Nullable ResultConsumer<CommandSourceStack> consumer, EntityAnchorArgument.Anchor entityAnchor, CommandSigningContext signedArguments, TaskChainer messageChainTaskQueue) {
 diff --git a/src/main/java/net/minecraft/commands/Commands.java b/src/main/java/net/minecraft/commands/Commands.java
-index 87cc7562e4a166d078fe11b7f6980497fc0bd33e..2ad80b9afdebfd40a8ed542480b60dc4eed758f7 100644
+index 87cc7562e4a166d078fe11b7f6980497fc0bd33e..e970a9807f1497b8b9f4155f558f4fcb719cb368 100644
 --- a/src/main/java/net/minecraft/commands/Commands.java
 +++ b/src/main/java/net/minecraft/commands/Commands.java
 @@ -143,13 +143,13 @@ public class Commands {
@@ -10895,7 +10895,8 @@ index 87cc7562e4a166d078fe11b7f6980497fc0bd33e..2ad80b9afdebfd40a8ed542480b60dc4
 -        ReloadCommand.register(this.dispatcher);
 +        //ReloadCommand.register(this.dispatcher); // Folia - region threading
          RecipeCommand.register(this.dispatcher);
-         RideCommand.register(this.dispatcher);
+-        RideCommand.register(this.dispatcher);
++        //RideCommand.register(this.dispatcher); // Folia - region threading - TODO later
          SayCommand.register(this.dispatcher);
 -        ScheduleCommand.register(this.dispatcher);
 -        ScoreboardCommand.register(this.dispatcher);
@@ -12326,6 +12327,42 @@ index 74623df731de543d3ef5832e818b10adec7b0f01..74a5e35c66e4d6aeae61733ad3ef1e51
          }
  
          if (i == 0) {
+diff --git a/src/main/java/net/minecraft/server/commands/DamageCommand.java b/src/main/java/net/minecraft/server/commands/DamageCommand.java
+index 95d11f48d201ccf5d9f73a3fcf78782669612f75..c96355360a379849a2f2285e41d7bd7ee6a22fa8 100644
+--- a/src/main/java/net/minecraft/server/commands/DamageCommand.java
++++ b/src/main/java/net/minecraft/server/commands/DamageCommand.java
+@@ -34,12 +34,28 @@ public class DamageCommand {
+         })))))))));
+     }
+ 
++    // Folia start - region threading
++    private static void sendMessage(CommandSourceStack src, CommandSyntaxException ex) {
++        src.sendFailure((Component)ex.getRawMessage());
++    }
++    // Folia end - region threading
++
+     private static int damage(CommandSourceStack source, Entity target, float amount, DamageSource damageSource) throws CommandSyntaxException {
+-        if (target.hurt(damageSource, amount)) {
+-            source.sendSuccess(Component.translatable("commands.damage.success", amount, target.getDisplayName()), true);
+-            return 1;
++        // Folia start - region threading
++        target.getBukkitEntity().taskScheduler.schedule((Entity t) -> {
++        try { // Folia end - region threading
++        if (t.hurt(damageSource, amount)) { // Folia - region threading
++            source.sendSuccess(Component.translatable("commands.damage.success", amount, t.getDisplayName()), true); // Folia - region threading
++            return; // Folia - region threading
+         } else {
+             throw ERROR_INVULNERABLE.create();
+         }
++        // Folia start - region threading
++        } catch (CommandSyntaxException ex) {
++            sendMessage(source, ex);
++        }
++        }, null, 1L);
++        return 0;
++        // Folia end - region threading
+     }
+ }
 diff --git a/src/main/java/net/minecraft/server/commands/DefaultGameModeCommands.java b/src/main/java/net/minecraft/server/commands/DefaultGameModeCommands.java
 index 1bf4c5b36f53ef1e71d50d1a9af8e1410e5dff60..fd455c794fa52b565a5741b376bc394ac8dda07c 100644
 --- a/src/main/java/net/minecraft/server/commands/DefaultGameModeCommands.java
