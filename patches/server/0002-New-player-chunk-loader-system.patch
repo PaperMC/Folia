@@ -22,7 +22,7 @@ index 06bff37e4c1fddd3be6343049a66787c63fb420c..1be1fe766401221b6adb417175312007
              ));
          }));
 diff --git a/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java b/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
-index 0e45a340ae534caf676b7f9d0adcbcee5829925e..6df1948b1204a7288ecb7238b6fc2a733f7d25b3 100644
+index 0e45a340ae534caf676b7f9d0adcbcee5829925e..61d03808c8d1ab822d9b2f31fab0de14089a3b15 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
 @@ -129,15 +129,15 @@ public final class ChunkSystem {
@@ -30,25 +30,25 @@ index 0e45a340ae534caf676b7f9d0adcbcee5829925e..6df1948b1204a7288ecb7238b6fc2a73
  
      public static int getSendViewDistance(final ServerPlayer player) {
 -        return io.papermc.paper.chunk.PlayerChunkLoader.getSendViewDistance(player);
-+        return io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.getAPISendViewDistance(player);
++        return io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.getAPISendViewDistance(player);
      }
  
      public static int getLoadViewDistance(final ServerPlayer player) {
 -        return io.papermc.paper.chunk.PlayerChunkLoader.getLoadViewDistance(player);
-+        return io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.getLoadViewDistance(player);
++        return io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.getLoadViewDistance(player);
      }
  
      public static int getTickViewDistance(final ServerPlayer player) {
 -        return io.papermc.paper.chunk.PlayerChunkLoader.getTickViewDistance(player);
-+        return io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.getAPITickViewDistance(player);
++        return io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.getAPITickViewDistance(player);
      }
  
      private ChunkSystem() {
-diff --git a/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java
+diff --git a/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7e2176f343160b299e7d4a2817c8f6c9ba7dba7b
+index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff541d3a85
 --- /dev/null
-+++ b/src/main/java/io/papermc/paper/chunk/system/RegionisedPlayerChunkLoader.java
++++ b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
 @@ -0,0 +1,1304 @@
 +package io.papermc.paper.chunk.system;
 +
@@ -87,7 +87,7 @@ index 0000000000000000000000000000000000000000..7e2176f343160b299e7d4a2817c8f6c9
 +import java.util.concurrent.TimeUnit;
 +import java.util.concurrent.atomic.AtomicLong;
 +
-+public class RegionisedPlayerChunkLoader {
++public class RegionizedPlayerChunkLoader {
 +
 +    public static final TicketType<Long> REGION_PLAYER_TICKET = TicketType.create("region_player_ticket", Long::compareTo);
 +
@@ -169,7 +169,7 @@ index 0000000000000000000000000000000000000000..7e2176f343160b299e7d4a2817c8f6c9
 +
 +    private final ServerLevel world;
 +
-+    public RegionisedPlayerChunkLoader(final ServerLevel world) {
++    public RegionizedPlayerChunkLoader(final ServerLevel world) {
 +        this.world = world;
 +    }
 +
@@ -1954,22 +1954,22 @@ index ca84eddbdb1e198b899750e5f6b3eafd25ce970f..736f37979c882e41e7571202df38eb6a
                  return true;
              }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 5a5ff40df37db9cbd53c584ed26a3ce4888b29c0..e57cf6a74a129ea0919a4ad5e84b615cd5aa141e 100644
+index 5a5ff40df37db9cbd53c584ed26a3ce4888b29c0..bf1a77cf9bbea4e2104b2a8c61309e740f28d51b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -521,6 +521,48 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
      // Paper end - optimise get nearest players for entity AI
  
-+    public final io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader playerChunkLoader = new io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader(this);
-+    private final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances> viewDistances = new java.util.concurrent.atomic.AtomicReference<>(new io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances(-1, -1, -1));
++    public final io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader playerChunkLoader = new io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader(this);
++    private final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances> viewDistances = new java.util.concurrent.atomic.AtomicReference<>(new io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances(-1, -1, -1));
 +
-+    public io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances getViewDistances() {
++    public io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances getViewDistances() {
 +        return this.viewDistances.get();
 +    }
 +
-+    private void updateViewDistance(final java.util.function.Function<io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances, io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances> update) {
-+        for (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances curr = this.viewDistances.get();;) {
++    private void updateViewDistance(final java.util.function.Function<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances, io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances> update) {
++        for (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances curr = this.viewDistances.get();;) {
 +            if (this.viewDistances.compareAndSet(curr, update.apply(curr))) {
 +                return;
 +            }
@@ -1977,8 +1977,8 @@ index 5a5ff40df37db9cbd53c584ed26a3ce4888b29c0..e57cf6a74a129ea0919a4ad5e84b615c
 +    }
 +
 +    public void setTickViewDistance(final int distance) {
-+        if ((distance < io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE)) {
-+            throw new IllegalArgumentException("Tick view distance must be a number between " + io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE) + ", got: " + distance);
++        if ((distance < io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE)) {
++            throw new IllegalArgumentException("Tick view distance must be a number between " + io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE) + ", got: " + distance);
 +        }
 +        this.updateViewDistance((input) -> {
 +            return input.setTickViewDistance(distance);
@@ -1986,8 +1986,8 @@ index 5a5ff40df37db9cbd53c584ed26a3ce4888b29c0..e57cf6a74a129ea0919a4ad5e84b615c
 +    }
 +
 +    public void setLoadViewDistance(final int distance) {
-+        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
-+            throw new IllegalArgumentException("Load view distance must be a number between " + io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
++        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
++            throw new IllegalArgumentException("Load view distance must be a number between " + io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
 +        }
 +        this.updateViewDistance((input) -> {
 +            return input.setLoadViewDistance(distance);
@@ -1995,8 +1995,8 @@ index 5a5ff40df37db9cbd53c584ed26a3ce4888b29c0..e57cf6a74a129ea0919a4ad5e84b615c
 +    }
 +
 +    public void setSendViewDistance(final int distance) {
-+        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
-+            throw new IllegalArgumentException("Send view distance must be a number between " + io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
++        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
++            throw new IllegalArgumentException("Send view distance must be a number between " + io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
 +        }
 +        this.updateViewDistance((input) -> {
 +            return input.setSendViewDistance(distance);
@@ -2007,22 +2007,22 @@ index 5a5ff40df37db9cbd53c584ed26a3ce4888b29c0..e57cf6a74a129ea0919a4ad5e84b615c
      public ServerLevel(MinecraftServer minecraftserver, Executor executor, LevelStorageSource.LevelStorageAccess convertable_conversionsession, PrimaryLevelData iworlddataserver, ResourceKey<Level> resourcekey, LevelStem worlddimension, ChunkProgressListener worldloadlistener, boolean flag, long i, List<CustomSpawner> list, boolean flag1, org.bukkit.World.Environment env, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider) {
          // IRegistryCustom.Dimension iregistrycustom_dimension = minecraftserver.registryAccess(); // CraftBukkit - decompile error
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index ca5291a9573a62cb5c19539cf5c7aceff11f9829..8a80b222456c2e4818cada3a9248ab2f9b76a983 100644
+index ca5291a9573a62cb5c19539cf5c7aceff11f9829..a3cef477646abf6172d4e50a28ed30f04c30d667 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -275,6 +275,48 @@ public class ServerPlayer extends Player {
      public PlayerNaturallySpawnCreaturesEvent playerNaturallySpawnedEvent; // Paper
      public org.bukkit.event.player.PlayerQuitEvent.QuitReason quitReason = null; // Paper - there are a lot of changes to do if we change all methods leading to the event
  
-+    private final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances> viewDistances = new java.util.concurrent.atomic.AtomicReference<>(new io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances(-1, -1, -1));
-+    public io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.PlayerChunkLoaderData chunkLoader;
++    private final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances> viewDistances = new java.util.concurrent.atomic.AtomicReference<>(new io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances(-1, -1, -1));
++    public io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.PlayerChunkLoaderData chunkLoader;
 +
-+    public io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances getViewDistances() {
++    public io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances getViewDistances() {
 +        return this.viewDistances.get();
 +    }
 +
-+    private void updateViewDistance(final java.util.function.Function<io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances, io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances> update) {
-+        for (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.ViewDistances curr = this.viewDistances.get();;) {
++    private void updateViewDistance(final java.util.function.Function<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances, io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances> update) {
++        for (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.ViewDistances curr = this.viewDistances.get();;) {
 +            if (this.viewDistances.compareAndSet(curr, update.apply(curr))) {
 +                return;
 +            }
@@ -2030,8 +2030,8 @@ index ca5291a9573a62cb5c19539cf5c7aceff11f9829..8a80b222456c2e4818cada3a9248ab2f
 +    }
 +
 +    public void setTickViewDistance(final int distance) {
-+        if ((distance < io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE)) {
-+            throw new IllegalArgumentException("Tick view distance must be a number between " + io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE) + ", got: " + distance);
++        if ((distance < io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE)) {
++            throw new IllegalArgumentException("Tick view distance must be a number between " + io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE) + ", got: " + distance);
 +        }
 +        this.updateViewDistance((input) -> {
 +            return input.setTickViewDistance(distance);
@@ -2039,8 +2039,8 @@ index ca5291a9573a62cb5c19539cf5c7aceff11f9829..8a80b222456c2e4818cada3a9248ab2f
 +    }
 +
 +    public void setLoadViewDistance(final int distance) {
-+        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
-+            throw new IllegalArgumentException("Load view distance must be a number between " + io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
++        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
++            throw new IllegalArgumentException("Load view distance must be a number between " + io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
 +        }
 +        this.updateViewDistance((input) -> {
 +            return input.setLoadViewDistance(distance);
@@ -2048,8 +2048,8 @@ index ca5291a9573a62cb5c19539cf5c7aceff11f9829..8a80b222456c2e4818cada3a9248ab2f
 +    }
 +
 +    public void setSendViewDistance(final int distance) {
-+        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
-+            throw new IllegalArgumentException("Send view distance must be a number between " + io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
++        if (distance != -1 && (distance < io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE || distance > io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1)) {
++            throw new IllegalArgumentException("Send view distance must be a number between " + io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MIN_VIEW_DISTANCE + " and " + (io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.MAX_VIEW_DISTANCE + 1) + " or -1, got: " + distance);
 +        }
 +        this.updateViewDistance((input) -> {
 +            return input.setSendViewDistance(distance);
@@ -2203,7 +2203,7 @@ index 5e9055fdf411029ea2fed91acd6b981f79156418..ff6559bf563f2fdcc0f2843d4f4aa24d
      // Paper end - view distance api
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 1bada55af5d16437da4d16f9ded55f88a6121eb4..100f057f98b2f15972afe32fade22a7a320cf300 100644
+index 1bada55af5d16437da4d16f9ded55f88a6121eb4..e769c1c2a99a13941124c7442d44a509e7859666 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -189,44 +189,22 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
@@ -2216,7 +2216,7 @@ index 1bada55af5d16437da4d16f9ded55f88a6121eb4..100f057f98b2f15972afe32fade22a7a
 -            return chunkMap.playerChunkManager.getTargetNoTickViewDistance();
 -        }
 -        return data.getTargetNoTickViewDistance();
-+        return io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.getAPIViewDistance(this);
++        return io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.getAPIViewDistance(this);
      }
  
      @Override
@@ -2239,7 +2239,7 @@ index 1bada55af5d16437da4d16f9ded55f88a6121eb4..100f057f98b2f15972afe32fade22a7a
 -            return chunkMap.playerChunkManager.getTargetTickViewDistance();
 -        }
 -        return data.getTargetTickViewDistance();
-+        return io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.getAPITickViewDistance(this);
++        return io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.getAPITickViewDistance(this);
      }
  
      @Override
@@ -2265,7 +2265,7 @@ index 1bada55af5d16437da4d16f9ded55f88a6121eb4..100f057f98b2f15972afe32fade22a7a
 -            return chunkMap.playerChunkManager.getTargetSendDistance();
 -        }
 -        return data.getTargetSendViewDistance();
-+        return io.papermc.paper.chunk.system.RegionisedPlayerChunkLoader.getAPISendViewDistance(this);
++        return io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.getAPISendViewDistance(this);
      }
  
      @Override
