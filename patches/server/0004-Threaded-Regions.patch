@@ -22946,10 +22946,10 @@ index 1d7c663fa0e550bd0cfb9a4b83ccd7e2968666f0..f3df9c9b6cff85565514f990597f3fe5
          LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
          if (levelChunkTicks == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c63702ba792f9 100644
+index e0b6c737f9de2b6e692d6813d8dea4c35f038573..851937baff90177e648d970cf1c462b897aaf9f5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -303,6 +303,81 @@ public final class CraftServer implements Server {
+@@ -303,6 +303,76 @@ public final class CraftServer implements Server {
          CraftItemFactory.instance();
      }
  
@@ -22974,16 +22974,16 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c6370
 +    }
 +
 +    @Override
-+    public final boolean isOwnedByCurrentRegion(World world, org.bukkit.util.Vector position) {
++    public final boolean isOwnedByCurrentRegion(World world, io.papermc.paper.math.Position position) {
 +        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld)world).getHandle(), position.getBlockX() >> 4, position.getBlockZ() >> 4
++            ((CraftWorld) world).getHandle(), position.blockX() >> 4, position.blockZ() >> 4
 +        );
 +    }
 +
 +    @Override
-+    public final boolean isOwnedByCurrentRegion(World world, org.bukkit.util.Vector position, int squareRadiusChunks) {
++    public final boolean isOwnedByCurrentRegion(World world, io.papermc.paper.math.Position position, int squareRadiusChunks) {
 +        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld)world).getHandle(), position.getBlockX() >> 4, position.getBlockZ() >> 4, squareRadiusChunks
++            ((CraftWorld) world).getHandle(), position.blockX() >> 4, position.blockZ() >> 4, squareRadiusChunks
 +        );
 +    }
 +
@@ -22991,7 +22991,7 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c6370
 +    public final boolean isOwnedByCurrentRegion(Location location) {
 +        World world = location.getWorld();
 +        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld)world).getHandle(), location.getBlockX() >> 4, location.getBlockZ() >> 4
++            ((CraftWorld) world).getHandle(), location.getBlockX() >> 4, location.getBlockZ() >> 4
 +        );
 +    }
 +
@@ -22999,26 +22999,21 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c6370
 +    public final boolean isOwnedByCurrentRegion(Location location, int squareRadiusChunks) {
 +        World world = location.getWorld();
 +        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld)world).getHandle(), location.getBlockX() >> 4, location.getBlockZ() >> 4, squareRadiusChunks
++            ((CraftWorld) world).getHandle(), location.getBlockX() >> 4, location.getBlockZ() >> 4, squareRadiusChunks
 +        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(org.bukkit.block.Block block) {
-+        return this.isOwnedByCurrentRegion(block.getLocation());
 +    }
 +
 +    @Override
 +    public final boolean isOwnedByCurrentRegion(World world, int chunkX, int chunkZ) {
 +        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld)world).getHandle(), chunkX, chunkZ
++            ((CraftWorld) world).getHandle(), chunkX, chunkZ
 +        );
 +    }
 +
 +    @Override
 +    public final boolean isOwnedByCurrentRegion(World world, int chunkX, int chunkZ, int squareRadiusChunks) {
 +        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld)world).getHandle(), chunkX, chunkZ, squareRadiusChunks
++            ((CraftWorld) world).getHandle(), chunkX, chunkZ, squareRadiusChunks
 +        );
 +    }
 +
@@ -23031,7 +23026,7 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c6370
      public CraftServer(DedicatedServer console, PlayerList playerList) {
          this.console = console;
          this.playerList = (DedicatedPlayerList) playerList;
-@@ -856,6 +931,9 @@ public final class CraftServer implements Server {
+@@ -856,6 +926,9 @@ public final class CraftServer implements Server {
  
      // NOTE: Should only be called from DedicatedServer.ah()
      public boolean dispatchServerCommand(CommandSender sender, ConsoleInput serverCommand) {
@@ -23041,7 +23036,7 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c6370
          if (sender instanceof Conversable) {
              Conversable conversable = (Conversable) sender;
  
-@@ -875,12 +953,44 @@ public final class CraftServer implements Server {
+@@ -875,12 +948,44 @@ public final class CraftServer implements Server {
          }
      }
  
@@ -23086,7 +23081,7 @@ index e0b6c737f9de2b6e692d6813d8dea4c35f038573..71663e4f16fb59c36c53badfd19c6370
          // Paper Start
          if (!org.spigotmc.AsyncCatcher.shuttingDown && !Bukkit.isPrimaryThread()) {
              final CommandSender fSender = sender;
-@@ -2894,7 +3004,7 @@ public final class CraftServer implements Server {
+@@ -2894,7 +2999,7 @@ public final class CraftServer implements Server {
  
      @Override
      public int getCurrentTick() {

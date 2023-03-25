@@ -11,7 +11,7 @@ the schedulers depending on the result of the ownership
 check.
 
 diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
-index 7986b9fcaf256e9042f6d9ddc38e8bd76645cbb7..16043d6f7894182e8ff75a8faf57dedf8db50d84 100644
+index 7986b9fcaf256e9042f6d9ddc38e8bd76645cbb7..a1295698beee025120beb3d151e77646bb44723b 100644
 --- a/src/main/java/org/bukkit/Bukkit.java
 +++ b/src/main/java/org/bukkit/Bukkit.java
 @@ -2496,6 +2496,100 @@ public final class Bukkit {
@@ -25,7 +25,7 @@ index 7986b9fcaf256e9042f6d9ddc38e8bd76645cbb7..16043d6f7894182e8ff75a8faf57dedf
 +     * @param world Specified world.
 +     * @param position Specified block position.
 +     */
-+    public static boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull org.bukkit.util.Vector position) {
++    public static boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull io.papermc.paper.math.Position position) {
 +        return server.isOwnedByCurrentRegion(world, position);
 +    }
 +
@@ -39,7 +39,7 @@ index 7986b9fcaf256e9042f6d9ddc38e8bd76645cbb7..16043d6f7894182e8ff75a8faf57dedf
 +     * @param squareRadiusChunks Specified square radius. Must be >= 0. Note that this parameter is <i>not</i> a <i>squared</i>
 +     *                           radius, but rather a <i>Chebyshev Distance</i>.
 +     */
-+    public static boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull org.bukkit.util.Vector position, int squareRadiusChunks) {
++    public static boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull io.papermc.paper.math.Position position, int squareRadiusChunks) {
 +        return server.isOwnedByCurrentRegion(world, position, squareRadiusChunks);
 +    }
 +
@@ -72,7 +72,7 @@ index 7986b9fcaf256e9042f6d9ddc38e8bd76645cbb7..16043d6f7894182e8ff75a8faf57dedf
 +     * @param block Specified block position.
 +     */
 +    public static boolean isOwnedByCurrentRegion(@NotNull org.bukkit.block.Block block) {
-+        return server.isOwnedByCurrentRegion(block);
++        return server.isOwnedByCurrentRegion(block.getLocation());
 +    }
 +
 +    /**
@@ -116,10 +116,10 @@ index 7986b9fcaf256e9042f6d9ddc38e8bd76645cbb7..16043d6f7894182e8ff75a8faf57dedf
  
      @NotNull
 diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
-index 5caa00a413450dee18739f6430ffaf5095ea3036..c72eee72401e275af57d4fd67a04df1eac13954c 100644
+index 5caa00a413450dee18739f6430ffaf5095ea3036..b04742bafbb4045d5842ac96761a941cfd3fc758 100644
 --- a/src/main/java/org/bukkit/Server.java
 +++ b/src/main/java/org/bukkit/Server.java
-@@ -2170,5 +2170,83 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+@@ -2170,5 +2170,85 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
       * @return the global region scheduler
       */
      public @NotNull io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler getGlobalRegionScheduler();
@@ -130,7 +130,7 @@ index 5caa00a413450dee18739f6430ffaf5095ea3036..c72eee72401e275af57d4fd67a04df1e
 +     * @param world Specified world.
 +     * @param position Specified block position.
 +     */
-+    public boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull org.bukkit.util.Vector position);
++    public boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull io.papermc.paper.math.Position position);
 +
 +    /**
 +     * Returns whether the current thread is ticking a region and that the region being ticked
@@ -142,7 +142,7 @@ index 5caa00a413450dee18739f6430ffaf5095ea3036..c72eee72401e275af57d4fd67a04df1e
 +     * @param squareRadiusChunks Specified square radius. Must be >= 0. Note that this parameter is <i>not</i> a <i>squared</i>
 +     *                           radius, but rather a <i>Chebyshev Distance</i>.
 +     */
-+    public boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull org.bukkit.util.Vector position, int squareRadiusChunks);
++    public boolean isOwnedByCurrentRegion(@NotNull World world, @NotNull io.papermc.paper.math.Position position, int squareRadiusChunks);
 +
 +    /**
 +     * Returns whether the current thread is ticking a region and that the region being ticked
@@ -168,7 +168,9 @@ index 5caa00a413450dee18739f6430ffaf5095ea3036..c72eee72401e275af57d4fd67a04df1e
 +     * owns the chunk at the specified block position.
 +     * @param block Specified block position.
 +     */
-+    public boolean isOwnedByCurrentRegion(@NotNull org.bukkit.block.Block block);
++    default boolean isOwnedByCurrentRegion(@NotNull org.bukkit.block.Block block) {
++        return isOwnedByCurrentRegion(block.getLocation());
++    }
 +
 +    /**
 +     * Returns whether the current thread is ticking a region and that the region being ticked
