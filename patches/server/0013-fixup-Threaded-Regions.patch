@@ -1,0 +1,612 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sat, 25 Mar 2023 16:08:46 -0700
+Subject: [PATCH] fixup! Threaded Regions
+
+
+diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
+index ed2c5099f73a4df5200d2ac490db712e8e299c96..aa2924f4bb6ada1e722c4ce181c22d720fb61dca 100644
+--- a/src/main/java/io/papermc/paper/util/TickThread.java
++++ b/src/main/java/io/papermc/paper/util/TickThread.java
+@@ -15,6 +15,7 @@ import net.minecraft.util.Mth;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.Level;
++import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.bukkit.Bukkit;
+ import java.util.concurrent.atomic.AtomicInteger;
+@@ -79,6 +80,20 @@ public class TickThread extends Thread {
+         }
+     }
+ 
++    public static void ensureTickThread(final ServerLevel world, final AABB aabb, final String reason) {
++        if (!isTickThreadFor(world, aabb)) {
++            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
++            throw new IllegalStateException(reason);
++        }
++    }
++
++    public static void ensureTickThread(final ServerLevel world, final double blockX, final double blockZ, final String reason) {
++        if (!isTickThreadFor(world, blockX, blockZ)) {
++            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
++            throw new IllegalStateException(reason);
++        }
++    }
++
+     public final int id; /* We don't override getId as the spec requires that it be unique (with respect to all other threads) */
+ 
+     private static final AtomicInteger ID_GENERATOR = new AtomicInteger();
+@@ -129,6 +144,18 @@ public class TickThread extends Thread {
+         return world.regioniser.getRegionAtUnsynchronised(chunkX, chunkZ) == region;
+     }
+ 
++    public static boolean isTickThreadFor(final ServerLevel world, final AABB aabb) {
++        return isTickThreadFor(
++            world,
++            CoordinateUtils.getChunkCoordinate(aabb.minX), CoordinateUtils.getChunkCoordinate(aabb.minZ),
++            CoordinateUtils.getChunkCoordinate(aabb.maxX), CoordinateUtils.getChunkCoordinate(aabb.maxZ)
++        );
++    }
++
++    public static boolean isTickThreadFor(final ServerLevel world, final double blockX, final double blockZ) {
++        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(blockX), CoordinateUtils.getBlockCoordinate(blockZ));
++    }
++
+     public static boolean isTickThreadFor(final ServerLevel world, final Vec3 position, final Vec3 deltaMovement, final int buffer) {
+         final int fromChunkX = CoordinateUtils.getChunkX(position);
+         final int fromChunkZ = CoordinateUtils.getChunkZ(position);
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 6c615f4f5d47f7d9cc31274800dc25824faa4a66..acc8af33ad8534d812908b0feb9a1963ee2c64fb 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -2237,6 +2237,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     }
+ 
+     public boolean setChunkForced(int x, int z, boolean forced) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify force loaded chunks off of the global region"); // Folia - region threading
+         ForcedChunksSavedData forcedchunk = (ForcedChunksSavedData) this.getDataStorage().computeIfAbsent(ForcedChunksSavedData::load, ForcedChunksSavedData::new, "chunks");
+         ChunkPos chunkcoordintpair = new ChunkPos(x, z);
+         long k = chunkcoordintpair.toLong();
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index c274f80de7184db0a89722ee2dd6d1a5af9b3c0a..c7c682cd2d1498e6d6521ddd62acdc1168bfe152 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -1154,6 +1154,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+ 
+     @Override
+     public List<Entity> getEntities(@Nullable Entity except, AABB box, Predicate<? super Entity> predicate) {
++        io.papermc.paper.util.TickThread.ensureTickThread((ServerLevel)this, box, "Cannot getEntities asynchronously"); // Folia - region threading
+         this.getProfiler().incrementCounter("getEntities");
+         List<Entity> list = Lists.newArrayList();
+         ((ServerLevel)this).getEntityLookup().getEntities(except, box, list, predicate); // Paper - optimise this call
+@@ -1173,6 +1174,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+     }
+ 
+     public <T extends Entity> void getEntities(EntityTypeTest<Entity, T> filter, AABB box, Predicate<? super T> predicate, List<? super T> result, int limit) {
++        io.papermc.paper.util.TickThread.ensureTickThread((ServerLevel)this, box, "Cannot getEntities asynchronously"); // Folia - region threading
+         this.getProfiler().incrementCounter("getEntities");
+         // Paper start - optimise this call
+         //TODO use limit
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index aaeb1bdbf3f2f719f08777b2c2cc2196c49dee89..4ca5157149af223ef270ed84059ef4b968c62e39 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -419,7 +419,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     }
+ 
+     private boolean unloadChunk0(int x, int z, boolean save) {
+-        org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, x, z, "Cannot unload chunk asynchronously"); // Folia - region threading
+         if (!this.isChunkLoaded(x, z)) {
+             return true;
+         }
+@@ -434,7 +434,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public boolean regenerateChunk(int x, int z) {
+-        org.spigotmc.AsyncCatcher.catchOp("chunk regenerate"); // Spigot
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, x, z, "Cannot regenerate chunk asynchronously"); // Folia - region threading
+         warnUnsafeChunk("regenerating a faraway chunk", x, z); // Paper
+         // Paper start - implement regenerateChunk method
+         final ServerLevel serverLevel = this.world;
+@@ -496,6 +496,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public boolean refreshChunk(int x, int z) {
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, x, z, "Cannot refresh chunk asynchronously"); // Folia - region threading
+         ChunkHolder playerChunk = this.world.getChunkSource().chunkMap.getVisibleChunkIfPresent(ChunkPos.asLong(x, z));
+         if (playerChunk == null) return false;
+ 
+@@ -532,7 +533,6 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     public boolean loadChunk(int x, int z, boolean generate) {
+         io.papermc.paper.util.TickThread.ensureTickThread(this.getHandle(), x, z, "May not sync load chunks asynchronously"); // Folia - region threading
+-        org.spigotmc.AsyncCatcher.catchOp("chunk load"); // Spigot
+         warnUnsafeChunk("loading a faraway chunk", x, z); // Paper
+         // Paper start - Optimize this method
+         ChunkPos chunkPos = new ChunkPos(x, z);
+@@ -790,6 +790,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public boolean generateTree(Location loc, TreeType type, BlockChangeDelegate delegate) {
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, loc.getBlockX() >> 4, loc.getBlockZ() >> 4, "Cannot generate tree asynchronously"); // Folia - region threading
+         io.papermc.paper.threadedregions.RegionizedWorldData worldData = world.getCurrentWorldData(); // Folia - region threading
+         worldData.captureTreeGeneration = true; // Folia - region threading
+         worldData.captureBlockStates = true; // Folia - region threading
+@@ -842,6 +843,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setTime(long time) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify time off of the global region"); // Folia - region threading
+         long margin = (time - this.getFullTime()) % 24000;
+         if (margin < 0) margin += 24000;
+         this.setFullTime(this.getFullTime() + margin);
+@@ -854,6 +856,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setFullTime(long time) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify time off of the global region"); // Folia - region threading
+         // Notify anyone who's listening
+         TimeSkipEvent event = new TimeSkipEvent(this, TimeSkipEvent.SkipReason.CUSTOM, time - this.world.getDayTime());
+         this.server.getPluginManager().callEvent(event);
+@@ -901,11 +904,13 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public boolean createExplosion(double x, double y, double z, float power, boolean setFire, boolean breakBlocks, Entity source) {
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, x, z, "Cannot create explosion asynchronously");
+         return !this.world.explode(source == null ? null : ((CraftEntity) source).getHandle(), x, y, z, power, setFire, breakBlocks ? net.minecraft.world.level.Level.ExplosionInteraction.MOB : net.minecraft.world.level.Level.ExplosionInteraction.NONE).wasCanceled;
+     }
+     // Paper start
+     @Override
+     public boolean createExplosion(Entity source, Location loc, float power, boolean setFire, boolean breakBlocks) {
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, loc.getX(), loc.getZ(), "Cannot create explosion asynchronously");
+         return !world.explode(source != null ? ((org.bukkit.craftbukkit.entity.CraftEntity) source).getHandle() : null, loc.getX(), loc.getY(), loc.getZ(), power, setFire, breakBlocks ? net.minecraft.world.level.Level.ExplosionInteraction.MOB : net.minecraft.world.level.Level.ExplosionInteraction.NONE).wasCanceled;
+     }
+     // Paper end
+@@ -980,6 +985,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public int getHighestBlockYAt(int x, int z, org.bukkit.HeightMap heightMap) {
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, x, z, "Cannot retrieve chunk asynchronously"); // Folia - region threading
+         warnUnsafeChunk("getting a faraway chunk", x >> 4, z >> 4); // Paper
+         // Transient load for this tick
+         return this.world.getChunk(x >> 4, z >> 4).getHeight(CraftHeightMap.toNMS(heightMap), x, z);
+@@ -1015,6 +1021,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     public void setBiome(int x, int y, int z, Holder<net.minecraft.world.level.biome.Biome> bb) {
+         BlockPos pos = new BlockPos(x, 0, z);
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, pos, "Cannot retrieve chunk asynchronously"); // Folia - region threading
+         if (this.world.hasChunkAt(pos)) {
+             net.minecraft.world.level.chunk.LevelChunk chunk = this.world.getChunkAt(pos);
+ 
+@@ -1290,6 +1297,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setStorm(boolean hasStorm) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify weather off of the global region"); // Folia - region threading
+         world.serverLevelData.setRaining(hasStorm, org.bukkit.event.weather.WeatherChangeEvent.Cause.PLUGIN); // Paper
+         this.setWeatherDuration(0); // Reset weather duration (legacy behaviour)
+         this.setClearWeatherDuration(0); // Reset clear weather duration (reset "/weather clear" commands)
+@@ -1302,6 +1310,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setWeatherDuration(int duration) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify weather off of the global region"); // Folia - region threading
+         world.serverLevelData.setRainTime(duration);
+     }
+ 
+@@ -1312,6 +1321,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setThundering(boolean thundering) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify weather off of the global region"); // Folia - region threading
+         world.serverLevelData.setThundering(thundering, org.bukkit.event.weather.ThunderChangeEvent.Cause.PLUGIN); // Paper
+         this.setThunderDuration(0); // Reset weather duration (legacy behaviour)
+         this.setClearWeatherDuration(0); // Reset clear weather duration (reset "/weather clear" commands)
+@@ -1324,6 +1334,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setThunderDuration(int duration) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify weather off of the global region"); // Folia - region threading
+         world.serverLevelData.setThunderTime(duration);
+     }
+ 
+@@ -1334,6 +1345,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setClearWeatherDuration(int duration) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify weather off of the global region"); // Folia - region threading
+         world.serverLevelData.setClearWeatherTime(duration);
+     }
+ 
+@@ -1527,6 +1539,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setKeepSpawnInMemory(boolean keepLoaded) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify keep spawn in memory off of the global region"); // Folia - region threading
+         // Paper start - Configurable spawn radius
+         if (keepLoaded == world.keepSpawnInMemory) {
+             // do nothing, nothing has changed
+@@ -1605,6 +1618,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setHardcore(boolean hardcore) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         world.serverLevelData.settings.hardcore = hardcore;
+     }
+ 
+@@ -1617,6 +1631,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setTicksPerAnimalSpawns(int ticksPerAnimalSpawns) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setTicksPerSpawns(SpawnCategory.ANIMAL, ticksPerAnimalSpawns);
+     }
+ 
+@@ -1629,6 +1644,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setTicksPerMonsterSpawns(int ticksPerMonsterSpawns) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setTicksPerSpawns(SpawnCategory.MONSTER, ticksPerMonsterSpawns);
+     }
+ 
+@@ -1641,6 +1657,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setTicksPerWaterSpawns(int ticksPerWaterSpawns) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setTicksPerSpawns(SpawnCategory.WATER_ANIMAL, ticksPerWaterSpawns);
+     }
+ 
+@@ -1653,6 +1670,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setTicksPerWaterAmbientSpawns(int ticksPerWaterAmbientSpawns) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setTicksPerSpawns(SpawnCategory.WATER_AMBIENT, ticksPerWaterAmbientSpawns);
+     }
+ 
+@@ -1665,6 +1683,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setTicksPerWaterUndergroundCreatureSpawns(int ticksPerWaterUndergroundCreatureSpawns) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setTicksPerSpawns(SpawnCategory.WATER_UNDERGROUND_CREATURE, ticksPerWaterUndergroundCreatureSpawns);
+     }
+ 
+@@ -1677,11 +1696,13 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setTicksPerAmbientSpawns(int ticksPerAmbientSpawns) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setTicksPerSpawns(SpawnCategory.AMBIENT, ticksPerAmbientSpawns);
+     }
+ 
+     @Override
+     public void setTicksPerSpawns(SpawnCategory spawnCategory, int ticksPerCategorySpawn) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         Validate.notNull(spawnCategory, "SpawnCategory cannot be null");
+         Validate.isTrue(CraftSpawnCategory.isValidForLimits(spawnCategory), "SpawnCategory." + spawnCategory + " are not supported.");
+ 
+@@ -1698,21 +1719,25 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setMetadata(String metadataKey, MetadataValue newMetadataValue) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify metadata off of the global region"); // Folia - region threading
+         this.server.getWorldMetadata().setMetadata(this, metadataKey, newMetadataValue);
+     }
+ 
+     @Override
+     public List<MetadataValue> getMetadata(String metadataKey) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot retrieve metadata off of the global region"); // Folia - region threading
+         return this.server.getWorldMetadata().getMetadata(this, metadataKey);
+     }
+ 
+     @Override
+     public boolean hasMetadata(String metadataKey) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot retrieve metadata off of the global region"); // Folia - region threading
+         return this.server.getWorldMetadata().hasMetadata(this, metadataKey);
+     }
+ 
+     @Override
+     public void removeMetadata(String metadataKey, Plugin owningPlugin) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify metadata off of the global region"); // Folia - region threading
+         this.server.getWorldMetadata().removeMetadata(this, metadataKey, owningPlugin);
+     }
+ 
+@@ -1725,6 +1750,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setMonsterSpawnLimit(int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setSpawnLimit(SpawnCategory.MONSTER, limit);
+     }
+ 
+@@ -1737,6 +1763,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setAnimalSpawnLimit(int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setSpawnLimit(SpawnCategory.ANIMAL, limit);
+     }
+ 
+@@ -1749,6 +1776,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setWaterAnimalSpawnLimit(int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setSpawnLimit(SpawnCategory.WATER_ANIMAL, limit);
+     }
+ 
+@@ -1761,6 +1789,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setWaterAmbientSpawnLimit(int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setSpawnLimit(SpawnCategory.WATER_AMBIENT, limit);
+     }
+ 
+@@ -1773,6 +1802,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setWaterUndergroundCreatureSpawnLimit(int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setSpawnLimit(SpawnCategory.WATER_UNDERGROUND_CREATURE, limit);
+     }
+ 
+@@ -1785,6 +1815,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     @Override
+     @Deprecated
+     public void setAmbientSpawnLimit(int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         this.setSpawnLimit(SpawnCategory.AMBIENT, limit);
+     }
+ 
+@@ -1807,6 +1838,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void setSpawnLimit(SpawnCategory spawnCategory, int limit) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         Validate.notNull(spawnCategory, "SpawnCategory cannot be null");
+         Validate.isTrue(CraftSpawnCategory.isValidForLimits(spawnCategory), "SpawnCategory." + spawnCategory + " are not supported.");
+ 
+@@ -1925,6 +1957,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public boolean setGameRuleValue(String rule, String value) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         // No null values allowed
+         if (rule == null || value == null) return false;
+ 
+@@ -1966,6 +1999,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public <T> boolean setGameRule(GameRule<T> rule, T newValue) {
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("Cannot modify server settings off of the global region"); // Folia - region threading
+         Validate.notNull(rule, "GameRule cannot be null");
+         Validate.notNull(newValue, "GameRule value cannot be null");
+ 
+@@ -2231,6 +2265,12 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+ 
+     @Override
+     public void sendGameEvent(Entity sourceEntity, org.bukkit.GameEvent gameEvent, Vector position) {
++        // Folia start - region threading
++        if (sourceEntity != null && !Bukkit.isOwnedByCurrentRegion(sourceEntity)) {
++            throw new IllegalStateException("Cannot send game event asynchronously");
++        }
++        io.papermc.paper.util.TickThread.ensureTickThread(this.world, position.getX(), position.getZ(), "Cannot send game event asynchronously");
++        // Folia end - region threading
+         getHandle().gameEvent(sourceEntity != null ? ((CraftEntity) sourceEntity).getHandle(): null, net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.get(org.bukkit.craftbukkit.util.CraftNamespacedKey.toMinecraft(gameEvent.getKey())), org.bukkit.craftbukkit.util.CraftVector.toBlockPos(position));
+     }
+     // Paper end
+diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
+index ed7c725aa4a5be4d3583dcd17bc57b5d7631e562..2f0ee1fa2a250e1edc2a33e0bb91009a5bb945f1 100644
+--- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
++++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
+@@ -81,6 +81,11 @@ public class CraftBlock implements Block {
+     }
+ 
+     public net.minecraft.world.level.block.state.BlockState getNMS() {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         return this.world.getBlockState(position);
+     }
+ 
+@@ -157,6 +162,11 @@ public class CraftBlock implements Block {
+     }
+ 
+     private void setData(final byte data, int flag) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         this.world.setBlock(position, CraftMagicNumbers.getBlock(this.getType(), data), flag);
+     }
+ 
+@@ -198,6 +208,11 @@ public class CraftBlock implements Block {
+     }
+ 
+     public static boolean setTypeAndData(LevelAccessor world, BlockPos position, net.minecraft.world.level.block.state.BlockState old, net.minecraft.world.level.block.state.BlockState blockData, boolean applyPhysics) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         // SPIGOT-611: need to do this to prevent glitchiness. Easier to handle this here (like /setblock) than to fix weirdness in tile entity cleanup
+         if (old.hasBlockEntity() && blockData.getBlock() != old.getBlock()) { // SPIGOT-3725 remove old tile entity if block changes
+             // SPIGOT-4612: faster - just clear tile
+@@ -340,18 +355,33 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public Biome getBiome() {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         return this.getWorld().getBiome(this.getX(), this.getY(), this.getZ());
+     }
+ 
+     // Paper start
+     @Override
+     public Biome getComputedBiome() {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         return this.getWorld().getComputedBiome(this.getX(), this.getY(), this.getZ());
+     }
+     // Paper end
+ 
+     @Override
+     public void setBiome(Biome bio) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         this.getWorld().setBiome(this.getX(), this.getY(), this.getZ(), bio);
+     }
+ 
+@@ -422,6 +452,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public boolean isBlockFaceIndirectlyPowered(BlockFace face) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         int power = this.world.getMinecraftWorld().getSignal(position, CraftBlock.blockFaceToNotch(face));
+ 
+         Block relative = this.getRelative(face);
+@@ -434,6 +469,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public int getBlockPower(BlockFace face) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         int power = 0;
+         net.minecraft.world.level.Level world = this.world.getMinecraftWorld();
+         int x = this.getX();
+@@ -520,6 +560,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public boolean breakNaturally(ItemStack item, boolean triggerEffect, boolean dropExperience) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         // Paper end
+         // Order matters here, need to drop before setting to air so skulls can get their data
+         net.minecraft.world.level.block.state.BlockState iblockdata = this.getNMS();
+@@ -563,6 +608,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public boolean applyBoneMeal(BlockFace face) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         Direction direction = CraftBlock.blockFaceToNotch(face);
+         BlockFertilizeEvent event = null;
+         ServerLevel world = this.getCraftWorld().getHandle();
+@@ -664,6 +714,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public RayTraceResult rayTrace(Location start, Vector direction, double maxDistance, FluidCollisionMode fluidCollisionMode) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         Validate.notNull(start, "Start location is null!");
+         Validate.isTrue(this.getWorld().equals(start.getWorld()), "Start location is from different world!");
+         start.checkFinite();
+@@ -705,6 +760,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public boolean canPlace(BlockData data) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         Preconditions.checkArgument(data != null, "Provided block data is null!");
+         net.minecraft.world.level.block.state.BlockState iblockdata = ((CraftBlockData) data).getState();
+         net.minecraft.world.level.Level world = this.world.getMinecraftWorld();
+@@ -735,6 +795,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public float getDestroySpeed(ItemStack itemStack, boolean considerEnchants) {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot read world asynchronously");
++        }
++        // Folia end - region threading
+         net.minecraft.world.item.ItemStack nmsItemStack;
+         if (itemStack instanceof CraftItemStack) {
+             nmsItemStack = ((CraftItemStack) itemStack).handle;
+@@ -760,6 +825,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public void tick() {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         net.minecraft.world.level.block.state.BlockState blockData = this.getNMS();
+         net.minecraft.server.level.ServerLevel level = this.world.getMinecraftWorld();
+ 
+@@ -768,6 +838,11 @@ public class CraftBlock implements Block {
+ 
+     @Override
+     public void randomTick() {
++        // Folia start - region threading
++        if (world instanceof ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
+         net.minecraft.world.level.block.state.BlockState blockData = this.getNMS();
+         net.minecraft.server.level.ServerLevel level = this.world.getMinecraftWorld();
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java
+index a8ab1d3ee81664193be39d2735d6495136e0e310..462493e2caf576f9dbfcffd1d9a8ca696febf83e 100644
+--- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java
++++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java
+@@ -206,6 +206,12 @@ public class CraftBlockState implements BlockState {
+         LevelAccessor access = this.getWorldHandle();
+         CraftBlock block = this.getBlock();
+ 
++        // Folia start - region threading
++        if (access instanceof net.minecraft.server.level.ServerLevel serverWorld) {
++            io.papermc.paper.util.TickThread.ensureTickThread(serverWorld, position, "Cannot modify world asynchronously");
++        }
++        // Folia end - region threading
++
+         if (block.getType() != this.getType()) {
+             if (!force) {
+                 return false;
+@@ -343,6 +349,9 @@ public class CraftBlockState implements BlockState {
+ 
+     @Override
+     public java.util.Collection<org.bukkit.inventory.ItemStack> getDrops(org.bukkit.inventory.ItemStack item, org.bukkit.entity.Entity entity) {
++        // Folia start - region threading
++        io.papermc.paper.util.TickThread.ensureTickThread(world.getHandle(), position, "Cannot modify world asynchronously");
++        // Folia end - region threading
+         net.minecraft.world.item.ItemStack nms = org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(item);
+ 
+         // Modelled off EntityHuman#hasBlock
