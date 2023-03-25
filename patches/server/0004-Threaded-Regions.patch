@@ -9818,10 +9818,10 @@ index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b47b868f2c
+index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954dcc4308c
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
-@@ -0,0 +1,430 @@
+@@ -0,0 +1,422 @@
 +package io.papermc.paper.threadedregions.scheduler;
 +
 +import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
@@ -9840,7 +9840,6 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +import net.minecraft.server.level.TicketType;
 +import net.minecraft.util.Unit;
 +import org.bukkit.Bukkit;
-+import org.bukkit.Location;
 +import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import org.bukkit.plugin.IllegalPluginAccessException;
@@ -9854,12 +9853,13 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +
 +public final class FoliaRegionScheduler implements RegionScheduler {
 +
-+    private static Runnable wrap(final Plugin plugin, final Location location, final Runnable run) {
++    private static Runnable wrap(final Plugin plugin, final World world, final int chunkX, final int chunkZ, final Runnable run) {
 +        return () -> {
 +            try {
 +                run.run();
 +            } catch (final Throwable throwable) {
-+                plugin.getLogger().log(Level.WARNING, "Location task for " + plugin.getDescription().getFullName() + " at location " + location + " generated an exception", throwable);
++                plugin.getLogger().log(Level.WARNING, "Location task for " + plugin.getDescription().getFullName()
++                    + " in world " + world + " at " + chunkX + ", " + chunkZ + " generated an exception", throwable);
 +            }
 +        };
 +    }
@@ -9871,50 +9871,40 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +    }
 +
 +    private static void scheduleInternalOffRegion(final LocationScheduledTask task, final int delay) {
-+        final Location location = task.location;
-+        if (location == null) {
++        final World world = task.world;
++        if (world == null) {
 +            // cancelled
 +            return;
 +        }
 +
-+        final World world = Validate.notNull(location.getWorld(), "Location world may not be null");
-+
-+        final int chunkX = location.getBlockX() >> 4;
-+        final int chunkZ = location.getBlockZ() >> 4;
-+
 +        RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
-+            ((CraftWorld)world).getHandle(), chunkX, chunkZ, () -> {
++            ((CraftWorld) world).getHandle(), task.chunkX, task.chunkZ, () -> {
 +                scheduleInternalOnRegion(task, delay);
 +            }
 +        );
 +    }
 +
 +    @Override
-+    public void execute(final Plugin plugin, final Location location, final Runnable run) {
++    public void execute(final Plugin plugin, final World world, final int chunkX, final int chunkZ, final Runnable run) {
 +        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(location, "Location may not be null");
++        Validate.notNull(world, "World may not be null");
 +        Validate.notNull(run, "Runnable may not be null");
 +
-+        final World world = Validate.notNull(location.getWorld(), "Location world may not be null");
-+
-+        final int chunkX = location.getBlockX() >> 4;
-+        final int chunkZ = location.getBlockZ() >> 4;
-+
 +        RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
-+            ((CraftWorld)world).getHandle(), chunkX, chunkZ, wrap(plugin, location.clone(), run)
++            ((CraftWorld) world).getHandle(), chunkX, chunkZ, wrap(plugin, world, chunkX, chunkZ, run)
 +        );
 +    }
 +
 +    @Override
-+    public ScheduledTask run(final Plugin plugin, final Location location, final Consumer<ScheduledTask> task) {
-+        return this.runDelayed(plugin, location, task, 1);
++    public ScheduledTask run(final Plugin plugin, final World world, final int chunkX, final int chunkZ, final Consumer<ScheduledTask> task) {
++        return this.runDelayed(plugin, world, chunkX, chunkZ, task, 1);
 +    }
 +
 +    @Override
-+    public ScheduledTask runDelayed(final Plugin plugin, Location location, final Consumer<ScheduledTask> task,
-+                                    final int delayTicks) {
++    public ScheduledTask runDelayed(final Plugin plugin, final World world, final int chunkX, final int chunkZ,
++                                    final Consumer<ScheduledTask> task, final int delayTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(location, "Location may not be null");
++        Validate.notNull(world, "World may not be null");
 +        Validate.notNull(task, "Task may not be null");
 +        if (delayTicks <= 0) {
 +            throw new IllegalArgumentException("Delay ticks may not be <= 0");
@@ -9924,11 +9914,9 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
 +        }
 +
-+        location = location.clone();
++        final LocationScheduledTask ret = new LocationScheduledTask(plugin, world, chunkX, chunkZ, -1, task);
 +
-+        final LocationScheduledTask ret = new LocationScheduledTask(plugin, location, -1, task);
-+
-+        if (Bukkit.isOwnedByCurrentRegion(location)) {
++        if (Bukkit.isOwnedByCurrentRegion(world, chunkX, chunkZ)) {
 +            scheduleInternalOnRegion(ret, delayTicks);
 +        } else {
 +            scheduleInternalOffRegion(ret, delayTicks);
@@ -9943,10 +9931,10 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +    }
 +
 +    @Override
-+    public ScheduledTask runAtFixedRate(final Plugin plugin, Location location, final Consumer<ScheduledTask> task,
-+                                        final int initialDelayTicks, final int periodTicks) {
++    public ScheduledTask runAtFixedRate(final Plugin plugin, final World world, final int chunkX, final int chunkZ,
++                                        final Consumer<ScheduledTask> task, final int initialDelayTicks, final int periodTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(location, "Location may not be null");
++        Validate.notNull(world, "World may not be null");
 +        Validate.notNull(task, "Task may not be null");
 +        if (initialDelayTicks <= 0) {
 +            throw new IllegalArgumentException("Initial delay ticks may not be <= 0");
@@ -9959,11 +9947,9 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
 +        }
 +
-+        location = location.clone();
++        final LocationScheduledTask ret = new LocationScheduledTask(plugin, world, chunkX, chunkZ, periodTicks, task);
 +
-+        final LocationScheduledTask ret = new LocationScheduledTask(plugin, location, periodTicks, task);
-+
-+        if (Bukkit.isOwnedByCurrentRegion(location)) {
++        if (Bukkit.isOwnedByCurrentRegion(world, chunkX, chunkZ)) {
 +            scheduleInternalOnRegion(ret, initialDelayTicks);
 +        } else {
 +            scheduleInternalOffRegion(ret, initialDelayTicks);
@@ -10054,14 +10040,14 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +            // note: must be on the thread that owns this scheduler
 +            // note: delay > 0
 +
-+            final Location location = task.location;
-+            if (location == null) {
++            final World world = task.world;
++            if (world == null) {
 +                // cancelled
 +                return;
 +            }
 +
-+            final int sectionX = (location.getBlockX() >> 4) >> TickRegions.getRegionChunkShift();
-+            final int sectionZ = (location.getBlockZ() >> 4) >> TickRegions.getRegionChunkShift();
++            final int sectionX = task.chunkX >> TickRegions.getRegionChunkShift();
++            final int sectionZ = task.chunkZ >> TickRegions.getRegionChunkShift();
 +
 +            final Long2ObjectOpenHashMap<List<LocationScheduledTask>> section =
 +                this.tasksByDeadlineBySection.computeIfAbsent(CoordinateUtils.getChunkKey(sectionX, sectionZ), (final long keyInMap) -> {
@@ -10119,16 +10105,21 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +        private static final int STATE_CANCELLED           = 4;
 +
 +        private final Plugin plugin;
-+        private Location location;
++        private final int chunkX;
++        private final int chunkZ;
 +        private final int repeatDelay; // in ticks
++        private World world;
 +        private Consumer<ScheduledTask> run;
 +
 +        private volatile int state;
 +        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(LocationScheduledTask.class, "state", int.class);
 +
-+        private LocationScheduledTask(final Plugin plugin, final Location location, final int repeatDelay, final Consumer<ScheduledTask> run) {
++        private LocationScheduledTask(final Plugin plugin, final World world, final int chunkX, final int chunkZ,
++                                      final int repeatDelay, final Consumer<ScheduledTask> run) {
 +            this.plugin = plugin;
-+            this.location = location;
++            this.world = world;
++            this.chunkX = chunkX;
++            this.chunkZ = chunkZ;
 +            this.repeatDelay = repeatDelay;
 +            this.run = run;
 +        }
@@ -10161,7 +10152,8 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +            try {
 +                this.run.accept(this);
 +            } catch (final Throwable throwable) {
-+                this.plugin.getLogger().log(Level.WARNING, "Location task for " + this.plugin.getDescription().getFullName() + " at location " + this.location + " generated an exception", throwable);
++                this.plugin.getLogger().log(Level.WARNING, "Location task for " + this.plugin.getDescription().getFullName()
++                    + " in world " + world + " at " + chunkX + ", " + chunkZ + " generated an exception", throwable);
 +            } finally {
 +                boolean reschedule = false;
 +                 if (!repeating) {
@@ -10174,7 +10166,7 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +
 +                if (!reschedule) {
 +                    this.run = null;
-+                    this.location = null;
++                    this.world = null;
 +                } else {
 +                    FoliaRegionScheduler.scheduleInternalOnRegion(this, this.repeatDelay);
 +                }
@@ -10199,7 +10191,7 @@ index 0000000000000000000000000000000000000000..b699e20df7a98b0dd8f783b293f4c4b4
 +                        if (STATE_IDLE == (curr = this.compareAndExchangeStateVolatile(STATE_IDLE, STATE_CANCELLED))) {
 +                            this.state = STATE_CANCELLED;
 +                            this.run = null;
-+                            this.location = null;
++                            this.world = null;
 +                            return CancelledState.CANCELLED_BY_CALLER;
 +                        }
 +                        // try again
