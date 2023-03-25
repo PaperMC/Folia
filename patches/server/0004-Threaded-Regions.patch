@@ -5165,10 +5165,10 @@ index 0000000000000000000000000000000000000000..ac043fbc74874c205b821c3d2d011b92
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd434d5347
+index 0000000000000000000000000000000000000000..82788131d513c1cc23de93fd4e3c44ea610ca66c
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
-@@ -0,0 +1,665 @@
+@@ -0,0 +1,649 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.destroystokyo.paper.util.maplist.ReferenceList;
@@ -5203,6 +5203,7 @@ index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd
 +import net.minecraft.world.entity.item.ItemEntity;
 +import net.minecraft.world.level.BlockEventData;
 +import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.Level;
 +import net.minecraft.world.level.NaturalSpawner;
 +import net.minecraft.world.level.block.Block;
 +import net.minecraft.world.level.block.entity.BlockEntity;
@@ -5280,9 +5281,6 @@ index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd
 +            // ticking chunks
 +            for (final Iterator<LevelChunk> iterator = from.entityTickingChunks.unsafeIterator(); iterator.hasNext();) {
 +                into.entityTickingChunks.add(iterator.next());
-+            }
-+            for (final ChunkHolder holder : from.needsChangeBroadcasting) {
-+                into.needsChangeBroadcasting.add(holder);
 +            }
 +            // redstone torches
 +            if (from.redstoneUpdateInfos != null && !from.redstoneUpdateInfos.isEmpty()) {
@@ -5409,13 +5407,6 @@ index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd
 +                regionToData.get(CoordinateUtils.getChunkKey(pos.x >> chunkToRegionShift, pos.z >> chunkToRegionShift))
 +                    .entityTickingChunks.add(levelChunk);
 +            }
-+
-+            for (final ChunkHolder holder : from.needsChangeBroadcasting) {
-+                final ChunkPos pos = holder.pos;
-+
-+                regionToData.get(CoordinateUtils.getChunkKey(pos.x >> chunkToRegionShift, pos.z >> chunkToRegionShift))
-+                    .needsChangeBroadcasting.add(holder);
-+            }
 +            // redstone torches
 +            if (from.redstoneUpdateInfos != null && !from.redstoneUpdateInfos.isEmpty()) {
 +                for (final net.minecraft.world.level.block.RedstoneTorchBlock.Toggle info : from.redstoneUpdateInfos) {
@@ -5501,7 +5492,6 @@ index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd
 +
 +    // ticking chunks
 +    private final IteratorSafeOrderedReferenceSet<LevelChunk> entityTickingChunks = new IteratorSafeOrderedReferenceSet<>();
-+    private final ReferenceOpenHashSet<ChunkHolder> needsChangeBroadcasting = new ReferenceOpenHashSet<>();
 +
 +    // Paper/CB api hook misc
 +    // don't bother to merge/split these, no point
@@ -5601,6 +5591,12 @@ index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd
 +
 +        // tasks may be drained before the region ticks, so we must set up the tick data early just in case
 +        this.updateTickData();
++    }
++
++    public void checkWorld(final Level against) {
++        if (this.world != against) {
++            throw new IllegalStateException("World mismatch: expected " + this.world.getWorld().getName() + " but got " + (against == null ? "null" : against.getWorld().getName()));
++        }
 +    }
 +
 +    public RegionizedServer.WorldLevelData getTickData() {
@@ -5820,18 +5816,6 @@ index 0000000000000000000000000000000000000000..f55c28bbee70e8418dd0555d50c43ddd
 +
 +    public IteratorSafeOrderedReferenceSet<LevelChunk> getEntityTickingChunks() {
 +        return this.entityTickingChunks;
-+    }
-+
-+    public void addChunkHolderNeedsBroadcasting(final ChunkHolder holder) {
-+        this.needsChangeBroadcasting.add(holder);
-+    }
-+
-+    public void removeChunkHolderNeedsBroadcasting(final ChunkHolder holder) {
-+        this.needsChangeBroadcasting.remove(holder);
-+    }
-+
-+    public ReferenceOpenHashSet<ChunkHolder> getNeedsChangeBroadcasting() {
-+        return this.needsChangeBroadcasting;
 +    }
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/Schedule.java b/src/main/java/io/papermc/paper/threadedregions/Schedule.java
@@ -13408,7 +13392,7 @@ index a7e133f3495e9132a5fdae2c24f225e7b026295a..7abd4f38ae59a6019137345af960fd60
          this.rconConsoleSource.prepareForCommand();
          this.executeBlocking(() -> {
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index 6fce2a9bce051e21eba8f331007a9752607f69f2..f899ba0580418895f534b8751e31a36915499a7c 100644
+index 6fce2a9bce051e21eba8f331007a9752607f69f2..a880cbd4afdf2e540bbe6b62587091c9b5a76ef0 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -85,18 +85,18 @@ public class ChunkHolder {
@@ -13423,7 +13407,7 @@ index 6fce2a9bce051e21eba8f331007a9752607f69f2..f899ba0580418895f534b8751e31a369
          // Paper start - optimise chunk tick iteration
          if (this.needsBroadcastChanges()) {
 -            this.chunkMap.needsChangeBroadcasting.add(this);
-+            this.chunkMap.level.getCurrentWorldData().addChunkHolderNeedsBroadcasting(this); // Folia - region threading
++            this.chunkMap.level.needsChangeBroadcasting.add(this); // Folia - region threading
          }
          // Paper end - optimise chunk tick iteration
          // Paper start - optimise checkDespawn
@@ -13439,7 +13423,7 @@ index 6fce2a9bce051e21eba8f331007a9752607f69f2..f899ba0580418895f534b8751e31a369
          // Paper start - optimise chunk tick iteration
          if (this.needsBroadcastChanges()) {
 -            this.chunkMap.needsChangeBroadcasting.remove(this);
-+            this.chunkMap.level.getCurrentWorldData().removeChunkHolderNeedsBroadcasting(this); // Folia - region threading
++            this.chunkMap.level.needsChangeBroadcasting.remove(this); // Folia - region threading
          }
          // Paper end - optimise chunk tick iteration
          // Paper start - optimise checkDespawn
@@ -13450,12 +13434,14 @@ index 6fce2a9bce051e21eba8f331007a9752607f69f2..f899ba0580418895f534b8751e31a369
          }
          // Paper end - optimise checkDespawn
      }
-@@ -303,7 +303,7 @@ public class ChunkHolder {
+@@ -302,8 +302,8 @@ public class ChunkHolder {
+     }
  
      private void addToBroadcastMap() {
-         org.spigotmc.AsyncCatcher.catchOp("ChunkHolder update");
+-        org.spigotmc.AsyncCatcher.catchOp("ChunkHolder update");
 -        this.chunkMap.needsChangeBroadcasting.add(this);
-+        this.chunkMap.level.getCurrentWorldData().addChunkHolderNeedsBroadcasting(this); // Folia - region threading
++        io.papermc.paper.util.TickThread.ensureTickThread(this.chunkMap.level, this.pos, "Cannot update chunk holder asynchronously"); // Folia - region threading
++        this.chunkMap.level.needsChangeBroadcasting.add(this); // Folia - region threading
      }
      // Paper end - optimise chunk tick iteration
  
@@ -14153,7 +14139,7 @@ index 88fca8b160df6804f30ed2cf8cf1f645085434e2..341650384498eebe3f7a3315c398bec9
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index 736f37979c882e41e7571202df38eb6a2923fcb0..8ac74958a982586d3701ffceda24bb7b7cefe1e9 100644
+index 736f37979c882e41e7571202df38eb6a2923fcb0..a493d8f2677c776951fbc20ebf1e61c91b9864ee 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -61,73 +61,42 @@ public class ServerChunkCache extends ChunkSource {
@@ -14401,26 +14387,33 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..8ac74958a982586d3701ffceda24bb7b
                  while (iterator1.hasNext()) {
                      shuffled.add(iterator1.next());
                  }
-@@ -791,14 +738,14 @@ public class ServerChunkCache extends ChunkSource {
+@@ -791,14 +738,19 @@ public class ServerChunkCache extends ChunkSource {
              // Paper start - use set of chunks requiring updates, rather than iterating every single one loaded
              gameprofilerfiller.popPush("broadcast");
              this.level.timings.broadcastChunkUpdates.startTiming(); // Paper - timing
 -            if (!this.chunkMap.needsChangeBroadcasting.isEmpty()) {
 -                ReferenceOpenHashSet<ChunkHolder> copy = this.chunkMap.needsChangeBroadcasting.clone();
 -                this.chunkMap.needsChangeBroadcasting.clear();
-+            if (!regionizedWorldData.getNeedsChangeBroadcasting().isEmpty()) { // Folia - region threading
-+                ReferenceOpenHashSet<ChunkHolder> copy = regionizedWorldData.getNeedsChangeBroadcasting().clone(); // Folia - region threading
-+                regionizedWorldData.getNeedsChangeBroadcasting().clear(); // Folia - region threading
-                 for (ChunkHolder holder : copy) {
+-                for (ChunkHolder holder : copy) {
++            // Folia start - region threading
++            if (!this.level.needsChangeBroadcasting.isEmpty()) {
++                for (Iterator<ChunkHolder> iterator = this.level.needsChangeBroadcasting.iterator(); iterator.hasNext();) {
++                    ChunkHolder holder = iterator.next();
++                    if (!io.papermc.paper.util.TickThread.isTickThreadFor(holder.newChunkHolder.world, holder.pos)) {
++                        continue;
++                    }
++                    // don't need to worry about chunk holder remove, as that can only be done by this tick thread
++                    // Folia end - region threading
                      holder.broadcastChanges(holder.getFullChunkNowUnchecked()); // LevelChunks are NEVER unloaded
-                     if (holder.needsBroadcastChanges()) {
+-                    if (holder.needsBroadcastChanges()) {
++                    if (!holder.needsBroadcastChanges()) { // Folia - region threading
                          // I DON'T want to KNOW what DUMB plugins might be doing.
 -                        this.chunkMap.needsChangeBroadcasting.add(holder);
-+                        regionizedWorldData.getNeedsChangeBroadcasting().add(holder); // Folia - region threading
++                        iterator.remove(); // Folia - region threading
                      }
                  }
              }
-@@ -806,8 +753,8 @@ public class ServerChunkCache extends ChunkSource {
+@@ -806,8 +758,8 @@ public class ServerChunkCache extends ChunkSource {
              gameprofilerfiller.pop();
              // Paper end - use set of chunks requiring updates, rather than iterating every single one loaded
              // Paper start - controlled flush for entity tracker packets
@@ -14431,7 +14424,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..8ac74958a982586d3701ffceda24bb7b
                  net.minecraft.server.network.ServerGamePacketListenerImpl connection = player.connection;
                  if (connection != null) {
                      connection.connection.disableAutomaticFlush();
-@@ -880,14 +827,19 @@ public class ServerChunkCache extends ChunkSource {
+@@ -880,14 +832,19 @@ public class ServerChunkCache extends ChunkSource {
  
      @Override
      public void onLightUpdate(LightLayer type, SectionPos pos) {
@@ -14453,7 +14446,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..8ac74958a982586d3701ffceda24bb7b
      }
  
      public <T> void addRegionTicket(TicketType<T> ticketType, ChunkPos pos, int radius, T argument) {
-@@ -959,7 +911,8 @@ public class ServerChunkCache extends ChunkSource {
+@@ -959,7 +916,8 @@ public class ServerChunkCache extends ChunkSource {
      @Nullable
      @VisibleForDebug
      public NaturalSpawner.SpawnState getLastSpawnState() {
@@ -14463,7 +14456,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..8ac74958a982586d3701ffceda24bb7b
      }
  
      public void removeTicketsOnClosing() {
-@@ -992,8 +945,43 @@ public class ServerChunkCache extends ChunkSource {
+@@ -992,8 +950,43 @@ public class ServerChunkCache extends ChunkSource {
              return ServerChunkCache.this.mainThread;
          }
  
@@ -14507,7 +14500,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..8ac74958a982586d3701ffceda24bb7b
              ServerChunkCache.this.level.getProfiler().incrementCounter("runTask");
              super.doRunTask(task);
          }
-@@ -1001,11 +989,16 @@ public class ServerChunkCache extends ChunkSource {
+@@ -1001,11 +994,16 @@ public class ServerChunkCache extends ChunkSource {
          @Override
          // CraftBukkit start - process pending Chunk loadCallback() and unloadCallback() after each run task
          public boolean pollTask() {
@@ -17555,7 +17548,7 @@ index 93a1e990b0a6caae4143c2f9d09bfb368fa1d6db..ad3166481dd37f4b5380f8bf28653bb4
  
                  itemstack = entityliving2.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a696128807f 100644
+index 9a1e8589e6b371869b2199650172d61ae186c907..29df951426d344885c1bded236f03c059c7878a3 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -165,7 +165,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17738,7 +17731,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
              return;
          }
          // CraftBukkit end
-@@ -3380,6 +3406,750 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3380,6 +3406,751 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -18269,7 +18262,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
 +                        : BlockUtil.getLargestRectangleAround(
 +                            this.portalEntrancePos, originalPortalDirection, 21, Direction.Axis.Y, 21,
 +                            (blockpos) -> {
-+                                return this.level.getBlockStateIfLoaded(blockpos) == originalPortalBlock;
++                                return origin.getBlockStateFromEmptyChunkIfLoaded(blockpos) == originalPortalBlock;
 +                            }
 +                        );
 +
@@ -18315,6 +18308,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
 +                destination.loadChunksAsync(
 +                    // add 32 so that the final search for a portal frame doesn't load any chunks
 +                    targetPos, portalSearchRadius + 32,
++                    net.minecraft.world.level.chunk.ChunkStatus.EMPTY,
 +                    ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
 +                    (chunks) -> {
 +                        BlockUtil.FoundRectangle portal =
@@ -18329,7 +18323,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
 +                        for (net.minecraft.world.level.chunk.ChunkAccess chunk : chunks) {
 +                            destination.chunkSource.addTicketAtLevel(
 +                                TicketType.NETHER_PORTAL_DOUBLE_CHECK, chunk.getPos(),
-+                                io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.FULL_LOADED_TICKET_LEVEL,
++                                io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
 +                                ticketId
 +                            );
 +                        }
@@ -18345,7 +18339,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
 +                                for (net.minecraft.world.level.chunk.ChunkAccess chunk : chunks) {
 +                                    destination.chunkSource.removeTicketAtLevel(
 +                                        TicketType.NETHER_PORTAL_DOUBLE_CHECK, chunk.getPos(),
-+                                        io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.FULL_LOADED_TICKET_LEVEL,
++                                        io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
 +                                        ticketId
 +                                    );
 +                                }
@@ -18489,7 +18483,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3904,17 +4674,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3904,17 +4675,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // Paper start
      public void startSeenByPlayer(ServerPlayer player) {
@@ -18509,7 +18503,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
      }
      // Paper end
  
-@@ -4405,7 +5171,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4405,7 +5172,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
          // Paper end - fix MC-4
@@ -18519,7 +18513,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4426,7 +5193,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4426,7 +5194,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          // Paper start - never allow AABB to become desynced from position
          // hanging has its own special logic
@@ -18528,7 +18522,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4513,6 +5280,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4513,6 +5281,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return this.removalReason != null;
      }
  
@@ -18541,7 +18535,7 @@ index 9a1e8589e6b371869b2199650172d61ae186c907..006695237ddd0cc5f1910c307d4e8a69
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4537,7 +5310,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4537,7 +5311,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
          this.levelCallback.onRemove(reason);
@@ -19294,9 +19288,18 @@ index 5f407535298a31a34cfe114dd863fd6a9b977707..cb0f75fb32836efa50f0a86dfae7907b
                      return 0;
                  } else {
 diff --git a/src/main/java/net/minecraft/world/entity/npc/Villager.java b/src/main/java/net/minecraft/world/entity/npc/Villager.java
-index 6023b9eb3001e1a98ab8b970d853c4e7c7603f4d..e782da365bf45e3e20673b5ab70422e1b9c36027 100644
+index 6023b9eb3001e1a98ab8b970d853c4e7c7603f4d..0d16b7ea1e2c7d430b09721d50ea199aaa58bc89 100644
 --- a/src/main/java/net/minecraft/world/entity/npc/Villager.java
 +++ b/src/main/java/net/minecraft/world/entity/npc/Villager.java
+@@ -201,7 +201,7 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+         brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+         brain.setDefaultActivity(Activity.IDLE);
+         brain.setActiveActivityIfPossible(Activity.IDLE);
+-        brain.updateActivityFromSchedule(this.level.getDayTime(), this.level.getGameTime());
++        brain.updateActivityFromSchedule(this.level.getLevelData().getDayTime(), this.level.getLevelData().getGameTime()); // Folia - region threading
+     }
+ 
+     @Override
 @@ -722,6 +722,8 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
                  ServerLevel worldserver = minecraftserver.getLevel(globalpos.dimension());
  
@@ -20232,7 +20235,7 @@ index 59837144c2c0460aca6e8c349eb3d6528111d1dc..7f32d5d5b709e8bb0395ccbeada2322c
  
      static class CacheKey {
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e495597578 100644
+index 944da18bcc993ab0488a34cbbe9df134c355301a..c274f80de7184db0a89722ee2dd6d1a5af9b3c0a 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -118,10 +118,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -20323,7 +20326,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
              double distanceSquared = player.distanceToSqr(sourceX, sourceY, sourceZ);
              if (distanceSquared < closestRangeSquared && (predicate == null || predicate.test(player))) {
                  closest = player;
-@@ -274,6 +264,24 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -274,6 +264,33 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      public abstract ResourceKey<LevelStem> getTypeKey();
  
@@ -20334,9 +20337,18 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
 +        io.papermc.paper.threadedregions.RegionizedWorldData.REGION_CALLBACK
 +    );
 +    public volatile io.papermc.paper.threadedregions.RegionizedServer.WorldLevelData tickData;
++    public final java.util.concurrent.ConcurrentHashMap.KeySetView<ChunkHolder, Boolean> needsChangeBroadcasting = java.util.concurrent.ConcurrentHashMap.newKeySet();
 +
 +    public io.papermc.paper.threadedregions.RegionizedWorldData getCurrentWorldData() {
-+        return io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionizedWorldData();
++        final io.papermc.paper.threadedregions.RegionizedWorldData ret = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegionizedWorldData();
++        if (ret == null) {
++            return ret;
++        }
++        Level world = ret.world;
++        if (world != this) {
++            throw new IllegalStateException("World mismatch: expected " + this.getWorld().getName() + " but got " + world.getWorld().getName());
++        }
++        return ret;
 +    }
 +
 +    @Override
@@ -20348,7 +20360,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
      protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, RegistryAccess iregistrycustom, Holder<DimensionType> holder, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, int j, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env, java.util.function.Function<org.spigotmc.SpigotWorldConfig, io.papermc.paper.configuration.WorldConfiguration> paperWorldConfigCreator, java.util.concurrent.Executor executor) { // Paper - Async-Anti-Xray - Pass executor
          this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName()); // Spigot
          this.paperConfig = paperWorldConfigCreator.apply(this.spigotConfig); // Paper
-@@ -317,7 +325,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -317,7 +334,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          this.thread = Thread.currentThread();
          this.biomeManager = new BiomeManager(this, i);
          this.isDebug = flag1;
@@ -20357,7 +20369,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
          this.registryAccess = iregistrycustom;
          this.damageSources = new DamageSources(iregistrycustom);
          // CraftBukkit start
-@@ -458,8 +466,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -458,8 +475,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      @Nullable
      public final BlockState getBlockStateIfLoaded(BlockPos pos) {
          // CraftBukkit start - tree generation
@@ -20368,7 +20380,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
              if (previous != null) {
                  return previous.getHandle();
              }
-@@ -521,16 +529,17 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -521,16 +538,17 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public boolean setBlock(BlockPos pos, BlockState state, int flags, int maxUpdateDepth) {
@@ -20389,7 +20401,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
              }
              blockstate.setFlag(flags); // Paper - update the flag also
              blockstate.setData(state);
-@@ -547,10 +556,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -547,10 +565,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
              // CraftBukkit start - capture blockstates
              boolean captured = false;
@@ -20402,7 +20414,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
                  captured = true;
              }
              // CraftBukkit end
-@@ -560,8 +569,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -560,8 +578,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
              if (iblockdata1 == null) {
                  // CraftBukkit start - remove blockstate if failed (or the same)
@@ -20413,7 +20425,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
                  }
                  // CraftBukkit end
                  return false;
-@@ -604,7 +613,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -604,7 +622,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  */
  
                  // CraftBukkit start
@@ -20422,7 +20434,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
                      // Modularize client and physic updates
                      // Spigot start
                      try {
-@@ -653,7 +662,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -653,7 +671,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  // CraftBukkit start
                  iblockdata1.updateIndirectNeighbourShapes(this, blockposition, k, j - 1); // Don't call an event for the old block to limit event spam
                  CraftWorld world = ((ServerLevel) this).getWorld();
@@ -20431,7 +20443,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
                      BlockPhysicsEvent event = new BlockPhysicsEvent(world.getBlockAt(blockposition.getX(), blockposition.getY(), blockposition.getZ()), CraftBlockData.fromData(iblockdata));
                      this.getCraftServer().getPluginManager().callEvent(event);
  
-@@ -667,7 +676,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -667,7 +685,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              }
  
              // CraftBukkit start - SPIGOT-5710
@@ -20440,7 +20452,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
                  this.onBlockStateChange(blockposition, iblockdata1, iblockdata2);
              }
              // CraftBukkit end
-@@ -746,7 +755,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -746,7 +764,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public void neighborShapeChanged(Direction direction, BlockState neighborState, BlockPos pos, BlockPos neighborPos, int flags, int maxUpdateDepth) {
@@ -20449,11 +20461,21 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
      }
  
      @Override
-@@ -771,11 +780,24 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -771,11 +789,34 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          return this.getChunkSource().getLightEngine();
      }
  
 +    // Folia start - region threading
++    @Nullable
++    public BlockState getBlockStateFromEmptyChunkIfLoaded(BlockPos pos) {
++        net.minecraft.server.level.ServerChunkCache chunkProvider = (net.minecraft.server.level.ServerChunkCache)this.getChunkSource();
++        ChunkAccess chunk = chunkProvider.getChunkAtImmediately(pos.getX() >> 4, pos.getZ() >> 4);
++        if (chunk != null) {
++            return chunk.getBlockState(pos);
++        }
++        return null;
++    }
++
 +    @Nullable
 +    public BlockState getBlockStateFromEmptyChunk(BlockPos pos) {
 +        net.minecraft.server.level.ServerChunkCache chunkProvider = (net.minecraft.server.level.ServerChunkCache)this.getChunkSource();
@@ -20476,7 +20498,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
              if (previous != null) {
                  return previous.getHandle();
              }
-@@ -866,7 +888,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -866,7 +907,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      }
  
      public void addBlockEntityTicker(TickingBlockEntity ticker) {
@@ -20485,7 +20507,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
      }
  
      protected void tickBlockEntities() {
-@@ -874,11 +896,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -874,11 +915,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
          gameprofilerfiller.push("blockEntities");
          timings.tileEntityPending.startTiming(); // Spigot
@@ -20501,7 +20523,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
          timings.tileEntityPending.stopTiming(); // Spigot
  
          timings.tileEntityTick.startTiming(); // Spigot
-@@ -887,9 +908,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -887,9 +927,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          int tilesThisCycle = 0;
          var toRemove = new it.unimi.dsi.fastutil.objects.ObjectOpenCustomHashSet<TickingBlockEntity>(net.minecraft.Util.identityStrategy()); // Paper - use removeAll
          toRemove.add(null);
@@ -20513,7 +20535,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
              // Spigot start
              if (tickingblockentity == null) {
                  this.getCraftServer().getLogger().severe("Spigot has detected a null entity and has removed it, preventing a crash");
-@@ -906,19 +926,19 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -906,19 +945,19 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              } else if (this.shouldTickBlocksAt(tickingblockentity.getPos())) {
                  tickingblockentity.tick();
                  // Paper start - execute chunk tasks during tick
@@ -20538,7 +20560,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
      }
  
      public <T extends Entity> void guardEntityTick(Consumer<T> tickConsumer, T entity) {
-@@ -1014,9 +1034,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1014,9 +1053,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Nullable
      public BlockEntity getBlockEntity(BlockPos blockposition, boolean validate) {
@@ -20554,7 +20576,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
              return blockEntity;
          }
          // Paper end
-@@ -1029,8 +1054,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1029,8 +1073,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
          if (!this.isOutsideBuildHeight(blockposition)) {
              // CraftBukkit start
@@ -20565,7 +20587,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
                  return;
              }
              // CraftBukkit end
-@@ -1234,13 +1259,30 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1234,13 +1278,30 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      public void disconnect() {}
  
@@ -20598,7 +20620,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
  
      public boolean mayInteract(Player player, BlockPos pos) {
          return true;
-@@ -1442,8 +1484,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1442,8 +1503,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      }
      public final BlockPos.MutableBlockPos getRandomBlockPosition(int x, int y, int z, int l, BlockPos.MutableBlockPos out) {
          // Paper end
@@ -20608,7 +20630,7 @@ index 944da18bcc993ab0488a34cbbe9df134c355301a..dcc00d7b8535ff3671d8c710518584e4
  
          out.set(x + (i1 & 15), y + (i1 >> 16 & l), z + (i1 >> 8 & 15)); // Paper - change to setValues call
          return out; // Paper
-@@ -1474,7 +1515,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1474,7 +1534,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public long nextSubTickCount() {
