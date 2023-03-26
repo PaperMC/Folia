@@ -64,7 +64,7 @@ index 0000000000000000000000000000000000000000..66232a9f5cea31dc8046817c3c2a9169
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..017dbb27f66cbf744a67189e91c476f8d971d1e7
+index 0000000000000000000000000000000000000000..01fc5d440ee96a2b00fadaf304cedf418a946b21
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
 @@ -0,0 +1,103 @@
@@ -149,7 +149,7 @@ index 0000000000000000000000000000000000000000..017dbb27f66cbf744a67189e91c476f8
 +     * @return The {@link ScheduledTask} that represents the scheduled task, or {@code null} if the entity has been removed.
 +     */
 +    @Nullable ScheduledTask runDelayed(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task,
-+                                              @Nullable Runnable retired, int delayTicks);
++                                              @Nullable Runnable retired, long delayTicks);
 +
 +    /**
 +     * Schedules a repeating task with the given delay and period. If the task failed to schedule because the scheduler
@@ -169,11 +169,11 @@ index 0000000000000000000000000000000000000000..017dbb27f66cbf744a67189e91c476f8
 +     * @return The {@link ScheduledTask} that represents the scheduled task, or {@code null} if the entity has been removed.
 +     */
 +    @Nullable ScheduledTask runAtFixedRate(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task,
-+                                                  @Nullable Runnable retired, int initialDelayTicks, int periodTicks);
++                                                  @Nullable Runnable retired, long initialDelayTicks, long periodTicks);
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..45713139678cd2bcb9a370c947a124d8f5e2e36b
+index 0000000000000000000000000000000000000000..712af8218d5a81f731a227bcaccd7a1dc54628be
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
 @@ -0,0 +1,57 @@
@@ -214,7 +214,7 @@ index 0000000000000000000000000000000000000000..45713139678cd2bcb9a370c947a124d8
 +     * @param delayTicks The delay, in ticks.
 +     * @return The {@link ScheduledTask} that represents the scheduled task.
 +     */
-+    @NotNull ScheduledTask runDelayed(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task, int delayTicks);
++    @NotNull ScheduledTask runDelayed(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task, long delayTicks);
 +
 +    /**
 +     * Schedules a repeating task to be executed on the global region after the initial delay with the
@@ -226,7 +226,7 @@ index 0000000000000000000000000000000000000000..45713139678cd2bcb9a370c947a124d8
 +     * @return The {@link ScheduledTask} that represents the scheduled task.
 +     */
 +    @NotNull ScheduledTask runAtFixedRate(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task,
-+                                                 int initialDelayTicks, int periodTicks);
++                                                 long initialDelayTicks, long periodTicks);
 +
 +    /**
 +     * Attempts to cancel all tasks scheduled by the specified plugin.
@@ -236,7 +236,7 @@ index 0000000000000000000000000000000000000000..45713139678cd2bcb9a370c947a124d8
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..87a267ca2cd7a751acdd1fbbfbf9c664640a9805
+index 0000000000000000000000000000000000000000..7a7afd4ffb323dd55db13ef1a49c6594aeb5ffea
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
 @@ -0,0 +1,126 @@
@@ -318,7 +318,7 @@ index 0000000000000000000000000000000000000000..87a267ca2cd7a751acdd1fbbfbf9c664
 +     * @return The {@link ScheduledTask} that represents the scheduled task.
 +     */
 +    @NotNull ScheduledTask runDelayed(@NotNull Plugin plugin, @NotNull World world, int chunkX, int chunkZ, @NotNull Consumer<ScheduledTask> task,
-+                                      int delayTicks);
++                                      long delayTicks);
 +
 +    /**
 +     * Schedules a task to be executed on the region which owns the location after the specified delay in ticks.
@@ -330,7 +330,7 @@ index 0000000000000000000000000000000000000000..87a267ca2cd7a751acdd1fbbfbf9c664
 +     * @return The {@link ScheduledTask} that represents the scheduled task.
 +     */
 +    default @NotNull ScheduledTask runDelayed(@NotNull Plugin plugin, @NotNull Location location, @NotNull Consumer<ScheduledTask> task,
-+                                              int delayTicks) {
++                                              long delayTicks) {
 +        return this.runDelayed(plugin, location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4, task, delayTicks);
 +    }
 +
@@ -348,7 +348,7 @@ index 0000000000000000000000000000000000000000..87a267ca2cd7a751acdd1fbbfbf9c664
 +     * @return The {@link ScheduledTask} that represents the scheduled task.
 +     */
 +    @NotNull ScheduledTask runAtFixedRate(@NotNull Plugin plugin, @NotNull World world, int chunkX, int chunkZ, @NotNull Consumer<ScheduledTask> task,
-+                                          int initialDelayTicks, int periodTicks);
++                                          long initialDelayTicks, long periodTicks);
 +
 +    /**
 +     * Schedules a repeating task to be executed on the region which owns the location after the initial delay with the
@@ -362,7 +362,7 @@ index 0000000000000000000000000000000000000000..87a267ca2cd7a751acdd1fbbfbf9c664
 +     * @return The {@link ScheduledTask} that represents the scheduled task.
 +     */
 +    default @NotNull ScheduledTask runAtFixedRate(@NotNull Plugin plugin, @NotNull Location location, @NotNull Consumer<ScheduledTask> task,
-+                                                  int initialDelayTicks, int periodTicks) {
++                                                  long initialDelayTicks, long periodTicks) {
 +        return this.runAtFixedRate(plugin, location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4, task, initialDelayTicks, periodTicks);
 +    }
 +}
