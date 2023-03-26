@@ -9257,7 +9257,7 @@ index 0000000000000000000000000000000000000000..4874ca2ddf6b7bf7b818f97cfbc59d34
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..60862f43a4469bccf3cf1b565de2956ba50396f6
+index 0000000000000000000000000000000000000000..2899d2fc3b9bd620ee838e24bcecc4587c9bd65c
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
 @@ -0,0 +1,267 @@
@@ -9315,7 +9315,7 @@ index 0000000000000000000000000000000000000000..60862f43a4469bccf3cf1b565de2956b
 +
 +    @Override
 +    public @Nullable ScheduledTask runDelayed(final Plugin plugin, final Consumer<ScheduledTask> task, final Runnable retired,
-+                                              final int delayTicks) {
++                                              final long delayTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
 +        Validate.notNull(task, "Task may not be null");
 +        if (delayTicks <= 0) {
@@ -9342,7 +9342,7 @@ index 0000000000000000000000000000000000000000..60862f43a4469bccf3cf1b565de2956b
 +
 +    @Override
 +    public @Nullable ScheduledTask runAtFixedRate(final Plugin plugin, final Consumer<ScheduledTask> task,
-+                                                  final Runnable retired, final int initialDelayTicks, final int periodTicks) {
++                                                  final Runnable retired, final long initialDelayTicks, final long periodTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
 +        Validate.notNull(task, "Task may not be null");
 +        if (initialDelayTicks <= 0) {
@@ -9370,7 +9370,7 @@ index 0000000000000000000000000000000000000000..60862f43a4469bccf3cf1b565de2956b
 +        return ret;
 +    }
 +
-+    private boolean scheduleInternal(final EntityScheduledTask ret, final int delay) {
++    private boolean scheduleInternal(final EntityScheduledTask ret, final long delay) {
 +        return this.entity.taskScheduler.schedule(ret, ret, delay);
 +    }
 +
@@ -9383,14 +9383,14 @@ index 0000000000000000000000000000000000000000..60862f43a4469bccf3cf1b565de2956b
 +        private static final int STATE_CANCELLED           = 4;
 +
 +        private final Plugin plugin;
-+        private final int repeatDelay; // in ticks
++        private final long repeatDelay; // in ticks
 +        private Consumer<ScheduledTask> run;
 +        private Runnable retired;
 +        private volatile int state;
 +
 +        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(FoliaEntityScheduler.EntityScheduledTask.class, "state", int.class);
 +
-+        private EntityScheduledTask(final Plugin plugin, final int repeatDelay, final Consumer<ScheduledTask> run, final Runnable retired) {
++        private EntityScheduledTask(final Plugin plugin, final long repeatDelay, final Consumer<ScheduledTask> run, final Runnable retired) {
 +            this.plugin = plugin;
 +            this.repeatDelay = repeatDelay;
 +            this.run = run;
@@ -9530,7 +9530,7 @@ index 0000000000000000000000000000000000000000..60862f43a4469bccf3cf1b565de2956b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb16560f6d
+index 0000000000000000000000000000000000000000..eac8bc531dc11aa652bafd73e50d7930cbca19e5
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
 @@ -0,0 +1,266 @@
@@ -9589,7 +9589,7 @@ index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb
 +    }
 +
 +    @Override
-+    public ScheduledTask runDelayed(final Plugin plugin, final Consumer<ScheduledTask> task, final int delayTicks) {
++    public ScheduledTask runDelayed(final Plugin plugin, final Consumer<ScheduledTask> task, final long delayTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
 +        Validate.notNull(task, "Task may not be null");
 +        if (delayTicks <= 0) {
@@ -9613,7 +9613,7 @@ index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb
 +    }
 +
 +    @Override
-+    public ScheduledTask runAtFixedRate(final Plugin plugin, final Consumer<ScheduledTask> task, final int initialDelayTicks, final int periodTicks) {
++    public ScheduledTask runAtFixedRate(final Plugin plugin, final Consumer<ScheduledTask> task, final long initialDelayTicks, final long periodTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
 +        Validate.notNull(task, "Task may not be null");
 +        if (initialDelayTicks <= 0) {
@@ -9660,7 +9660,7 @@ index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb
 +        }
 +    }
 +
-+    private void scheduleInternal(final GlobalScheduledTask task, final int delay) {
++    private void scheduleInternal(final GlobalScheduledTask task, final long delay) {
 +        // note: delay > 0
 +        synchronized (this.stateLock) {
 +            this.tasksByDeadline.computeIfAbsent(this.tickCount + delay, (final long keyInMap) -> {
@@ -9678,13 +9678,13 @@ index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb
 +        private static final int STATE_CANCELLED           = 4;
 +
 +        private final Plugin plugin;
-+        private final int repeatDelay; // in ticks
++        private final long repeatDelay; // in ticks
 +        private Consumer<ScheduledTask> run;
 +        private volatile int state;
 +
 +        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(GlobalScheduledTask.class, "state", int.class);
 +
-+        private GlobalScheduledTask(final Plugin plugin, final int repeatDelay, final Consumer<ScheduledTask> run) {
++        private GlobalScheduledTask(final Plugin plugin, final long repeatDelay, final Consumer<ScheduledTask> run) {
 +            this.plugin = plugin;
 +            this.repeatDelay = repeatDelay;
 +            this.run = run;
@@ -9802,7 +9802,7 @@ index 0000000000000000000000000000000000000000..505329d601d56e42daa0b794092590cb
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954dcc4308c
+index 0000000000000000000000000000000000000000..aa10f3273e3bb35cf59d324644c269893cc12e99
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
 @@ -0,0 +1,422 @@
@@ -9850,11 +9850,11 @@ index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954
 +
 +    private static final RegionizedData<Scheduler> SCHEDULER_DATA = new RegionizedData<>(null, Scheduler::new, Scheduler.REGIONISER_CALLBACK);
 +
-+    private static void scheduleInternalOnRegion(final LocationScheduledTask task, final int delay) {
++    private static void scheduleInternalOnRegion(final LocationScheduledTask task, final long delay) {
 +        SCHEDULER_DATA.get().queueTask(task, delay);
 +    }
 +
-+    private static void scheduleInternalOffRegion(final LocationScheduledTask task, final int delay) {
++    private static void scheduleInternalOffRegion(final LocationScheduledTask task, final long delay) {
 +        final World world = task.world;
 +        if (world == null) {
 +            // cancelled
@@ -9886,7 +9886,7 @@ index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954
 +
 +    @Override
 +    public ScheduledTask runDelayed(final Plugin plugin, final World world, final int chunkX, final int chunkZ,
-+                                    final Consumer<ScheduledTask> task, final int delayTicks) {
++                                    final Consumer<ScheduledTask> task, final long delayTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
 +        Validate.notNull(world, "World may not be null");
 +        Validate.notNull(task, "Task may not be null");
@@ -9916,7 +9916,7 @@ index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954
 +
 +    @Override
 +    public ScheduledTask runAtFixedRate(final Plugin plugin, final World world, final int chunkX, final int chunkZ,
-+                                        final Consumer<ScheduledTask> task, final int initialDelayTicks, final int periodTicks) {
++                                        final Consumer<ScheduledTask> task, final long initialDelayTicks, final long periodTicks) {
 +        Validate.notNull(plugin, "Plugin may not be null");
 +        Validate.notNull(world, "World may not be null");
 +        Validate.notNull(task, "Task may not be null");
@@ -10020,7 +10020,7 @@ index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954
 +            );
 +        }
 +
-+        private void queueTask(final LocationScheduledTask task, final int delay) {
++        private void queueTask(final LocationScheduledTask task, final long delay) {
 +            // note: must be on the thread that owns this scheduler
 +            // note: delay > 0
 +
@@ -10091,7 +10091,7 @@ index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954
 +        private final Plugin plugin;
 +        private final int chunkX;
 +        private final int chunkZ;
-+        private final int repeatDelay; // in ticks
++        private final long repeatDelay; // in ticks
 +        private World world;
 +        private Consumer<ScheduledTask> run;
 +
@@ -10099,7 +10099,7 @@ index 0000000000000000000000000000000000000000..7ee75fe44507f79362f15d6445e32954
 +        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(LocationScheduledTask.class, "state", int.class);
 +
 +        private LocationScheduledTask(final Plugin plugin, final World world, final int chunkX, final int chunkZ,
-+                                      final int repeatDelay, final Consumer<ScheduledTask> run) {
++                                      final long repeatDelay, final Consumer<ScheduledTask> run) {
 +            this.plugin = plugin;
 +            this.world = world;
 +            this.chunkX = chunkX;
