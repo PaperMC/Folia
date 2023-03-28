@@ -3405,7 +3405,7 @@ index 9f5f0d8ddc8f480b48079c70e38c9c08eff403f6..3b83f25a24d6f9cdbf131d5a4432fb4a
  
      public class ChunkLoadingBasic extends ConfigurationPart {
 diff --git a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
-index 51cf0014c4229fc8671804d885b6381996810130..ee7b26d80ad3b4f76196492b9ffc11b33f15b9ad 100644
+index 51cf0014c4229fc8671804d885b6381996810130..f13d2e2174b3be0b0d4462406a1e00255867a790 100644
 --- a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
 +++ b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
 @@ -128,7 +128,7 @@ public class WorldConfiguration extends ConfigurationPart {
@@ -3417,6 +3417,22 @@ index 51cf0014c4229fc8671804d885b6381996810130..ee7b26d80ad3b4f76196492b9ffc11b3
              public boolean scanForLegacyEnderDragon = true;
              @MergeMap
              public Reference2IntMap<MobCategory> spawnLimits = Util.make(new Reference2IntOpenHashMap<>(NaturalSpawner.SPAWNING_CATEGORIES.length), map -> Arrays.stream(NaturalSpawner.SPAWNING_CATEGORIES).forEach(mobCategory -> map.put(mobCategory, -1)));
+@@ -405,7 +405,14 @@ public class WorldConfiguration extends ConfigurationPart {
+ 
+     public Chunks chunks;
+ 
+-    public class Chunks extends ConfigurationPart {
++    // Folia start - region threading - force prevent moving into unloaded chunks
++    public class Chunks extends Post {
++        @Override
++        public void postProcess() {
++            this.preventMovingIntoUnloadedChunks = true;
++        }
++        // Folia end - region threading - force prevent moving into unloaded chunks
++
+         public AutosavePeriod autoSaveInterval = AutosavePeriod.def();
+         public int maxAutoSaveChunksPerTick = 24;
+         public int fixedChunkInhabitedTime = -1;
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
 index c0e896343c22badd97c774c4ed1daa4e274f5d44..1bca4a629fe986e5afa47d8884dc44b2be800f32 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java
