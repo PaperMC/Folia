@@ -5977,10 +5977,10 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ff290d9dcd3494215ce7e41945ef47f00e8c9489
+index 0000000000000000000000000000000000000000..5170b43743ea27a5c2aaee37d76f4e7e730fd808
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
-@@ -0,0 +1,1211 @@
+@@ -0,0 +1,1309 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.map.SWMRLong2ObjectHashTable;
@@ -5990,6 +5990,7 @@ index 0000000000000000000000000000000000000000..ff290d9dcd3494215ce7e41945ef47f0
 +import io.papermc.paper.util.CoordinateUtils;
 +import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 +import it.unimi.dsi.fastutil.longs.LongArrayList;
++import it.unimi.dsi.fastutil.longs.LongComparator;
 +import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.server.level.ServerLevel;
@@ -6656,13 +6657,78 @@ index 0000000000000000000000000000000000000000..ff290d9dcd3494215ce7e41945ef47f0
 +            }
 +        }
 +
-+        public ChunkPos getCenterChunk() {
++        public LongArrayList getOwnedChunks() {
++            final boolean lock = this.regioniser.writeLockOwner != Thread.currentThread();
++            if (lock) {
++                this.regioniser.regionLock.readLock();
++            }
++            try {
++                final LongArrayList ret = new LongArrayList();
++                for (final ThreadedRegionSection<R, S> section : this.sectionByKey.values()) {
++                    ret.addAll(section.getChunks());
++                }
++
++                return ret;
++            } finally {
++                if (lock) {
++                    this.regioniser.regionLock.tryUnlockRead();
++                }
++            }
++        }
++
++        public Long getCenterSection() {
 +            final LongArrayList sections = this.getOwnedSections();
 +
-+            sections.sort(null);
++            final LongComparator comparator = (final long k1, final long k2) -> {
++                final int x1 = CoordinateUtils.getChunkX(k1);
++                final int x2 = CoordinateUtils.getChunkX(k2);
 +
-+            // note: regions always have at least one section
-+            final long middle = sections.getLong(sections.size() >> 1);
++                final int z1 = CoordinateUtils.getChunkZ(x1);
++                final int z2 = CoordinateUtils.getChunkZ(x2);
++
++                final int zCompare = Integer.compare(z1, z2);
++                if (zCompare != 0) {
++                    return zCompare;
++                }
++
++                return Integer.compare(x1, x2);
++            };
++
++            // note: regions don't always have a chunk section at this point, because the region may have been killed
++            if (sections.isEmpty()) {
++                return null;
++            }
++
++            sections.sort(comparator);
++
++            return Long.valueOf(sections.getLong(sections.size() >> 1));
++        }
++
++        public ChunkPos getCenterChunk() {
++            final LongArrayList chunks = this.getOwnedChunks();
++
++            final LongComparator comparator = (final long k1, final long k2) -> {
++                final int x1 = CoordinateUtils.getChunkX(k1);
++                final int x2 = CoordinateUtils.getChunkX(k2);
++
++                final int z1 = CoordinateUtils.getChunkZ(k1);
++                final int z2 = CoordinateUtils.getChunkZ(k2);
++
++                final int zCompare = Integer.compare(z1, z2);
++                if (zCompare != 0) {
++                    return zCompare;
++                }
++
++                return Integer.compare(x1, x2);
++            };
++            chunks.sort(comparator);
++
++            // note: regions don't always have a chunk at this point, because the region may have been killed
++            if (chunks.isEmpty()) {
++                return null;
++            }
++
++            final long middle = chunks.getLong(chunks.size() >> 1);
 +
 +            return new ChunkPos(CoordinateUtils.getChunkX(middle), CoordinateUtils.getChunkZ(middle));
 +        }
@@ -6931,6 +6997,38 @@ index 0000000000000000000000000000000000000000..ff290d9dcd3494215ce7e41945ef47f0
 +            this(sectionX, sectionZ, regioniser);
 +
 +            this.nonEmptyNeighbours = nonEmptyNeighbours;
++        }
++
++        public LongArrayList getChunks() {
++            final LongArrayList ret = new LongArrayList();
++
++            if (this.chunkCount == 0) {
++                return ret;
++            }
++
++            final int shift = this.regionChunkShift;
++            final int mask = this.regionChunkMask;
++            final int offsetX = this.sectionX << shift;
++            final int offsetZ = this.sectionZ << shift;
++
++            final long[] bitset = this.chunksBitset;
++            for (int arrIdx = 0, arrLen = bitset.length; arrIdx < arrLen; ++arrIdx) {
++                long value = bitset[arrIdx];
++
++                for (int i = 0, bits = Long.bitCount(value); i < bits; ++i) {
++                    final int valueIdx = Long.numberOfTrailingZeros(value);
++                    value ^= io.papermc.paper.util.IntegerUtil.getTrailingBit(value);
++
++                    final int idx = valueIdx | (arrIdx << 6);
++
++                    final int localX = idx & mask;
++                    final int localZ = (idx >>> shift) & mask;
++
++                    ret.add(CoordinateUtils.getChunkKey(localX | offsetX, localZ | offsetZ));
++                }
++            }
++
++            return ret;
 +        }
 +
 +        private boolean isEmpty() {
@@ -8459,10 +8557,10 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a3fb013ef00cb0e4069c8ef8a4044c1fa9e58602
+index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059abeb23db
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
-@@ -0,0 +1,326 @@
+@@ -0,0 +1,330 @@
 +package io.papermc.paper.threadedregions.commands;
 +
 +import io.papermc.paper.threadedregions.RegionizedServer;
@@ -8672,6 +8770,10 @@ index 0000000000000000000000000000000000000000..a3fb013ef00cb0e4069c8ef8a4044c1f
 +
 +            final ServerLevel world = region.regioniser.world;
 +            final ChunkPos chunkCenter = region.getCenterChunk();
++            if (chunkCenter == null) {
++                // region does not exist anymore
++                continue;
++            }
 +            final int centerBlockX = ((chunkCenter.x << 4) | 7);
 +            final int centerBlockZ = ((chunkCenter.z << 4) | 7);
 +            final double util = report.utilisation();
