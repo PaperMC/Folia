@@ -202,7 +202,26 @@ even though there is no main thread anymore.
   required to prevent plugin devs from shipping code that may randomly
   break random parts of the server in entirely _undiagnosable_ manners.
 - More to come here
-- 
+
+### Maven information
+* Maven Repo (for folia-api):
+```xml
+<repository>
+    <id>papermc</id>
+    <url>https://repo.papermc.io/repository/maven-public/</url>
+</repository>
+```
+* Artifact Information:
+```xml
+<dependency>
+    <groupId>dev.folia</groupId>
+    <artifactId>folia-api</artifactId>
+    <version>1.19.4-R0.1-SNAPSHOT</version>
+    <scope>provided</scope>
+</dependency>
+ ```
+
+
 ## License
 The PATCHES-LICENSE file describes the license for api & server patches,
 found in `./patches` and its subdirectories except when noted otherwise.
