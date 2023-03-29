@@ -68,32 +68,20 @@ paperweight {
     }
 }
 
-//
-// Everything below here is optional if you don't care about publishing API or dev bundles to your repository
-//
-
 tasks.generateDevelopmentBundle {
     apiCoordinates.set("dev.folia:folia-api")
     mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
-    libraryRepositories.set(
-        listOf(
-            "https://repo.maven.apache.org/maven2/",
-            paperMavenPublicUrl,
-            // "https://my.repo/", // This should be a repo hosting your API (in this example, 'dev.folia:folia-api')
-        )
+    libraryRepositories.addAll(
+        "https://repo.maven.apache.org/maven2/",
+        paperMavenPublicUrl,
     )
 }
 
 allprojects {
-    // Publishing API:
-    // ./gradlew :folia-API:publish[ToMavenLocal]
     publishing {
         repositories {
-            maven {
-                name = "myRepoSnapshots"
-                url = uri("https://my.repo/")
-                // See Gradle docs for how to provide credentials to PasswordCredentials
-                // https://docs.gradle.org/current/samples/sample_publishing_credentials.html
+            maven("https://repo.papermc.io/repository/maven-snapshots/") {
+                name = "paperSnapshots"
                 credentials(PasswordCredentials::class)
             }
         }
@@ -101,8 +89,6 @@ allprojects {
 }
 
 publishing {
-    // Publishing dev bundle:
-    // ./gradlew publishDevBundlePublicationTo(MavenLocal|MyRepoSnapshotsRepository) -PpublishDevBundle
     if (project.hasProperty("publishDevBundle")) {
         publications.create<MavenPublication>("devBundle") {
             artifact(tasks.generateDevelopmentBundle) {
@@ -111,7 +97,6 @@ publishing {
         }
     }
 }
-
 
 tasks.withType<RebuildGitPatches> {
     filterPatches.set(false)
