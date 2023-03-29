@@ -103,7 +103,7 @@ issues, which then become near impossible to debug.
 ### Current API additions
 
 - RegionisedScheduler and EntityScheduler acting as a replacement for 
-  the BukkitScheduler, however they are not yet fully featured.
+  the BukkitScheduler.
 
 ### Current broken API
 
@@ -123,7 +123,6 @@ issues, which then become near impossible to debug.
   to implement some things like spawn position select, as asynchronous
   chunk loads are required when accessing chunk data out-of-region.
 - World loading/unloading
-- TickThread#isTickThread overloads to API
 - More to come here
 
 ### Planned API changes
