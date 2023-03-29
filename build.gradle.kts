@@ -101,3 +101,15 @@ publishing {
 tasks.withType<RebuildGitPatches> {
     filterPatches.set(false)
 }
+
+tasks.register("printMinecraftVersion") {
+    doLast {
+        println(providers.gradleProperty("mcVersion").get().trim())
+    }
+}
+
+tasks.register("printPaperVersion") {
+    doLast {
+        println(project.version)
+    }
+}
