@@ -13,11 +13,28 @@ and provide a log indicating why - which will be much
 more helpful than some random error log caused by
 a breakage.
 
+diff --git a/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java b/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java
+index ef393f1f93ca48264fc1b6e3a27787f6a9152e1b..1325f9fed80731b74b80145dadc843b1a34b851b 100644
+--- a/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java
++++ b/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java
+@@ -200,4 +200,12 @@ public interface PluginMeta {
+     @Nullable
+     String getAPIVersion();
+ 
++    // Folia start - block plugins not marked as supported
++    /**
++     * Returns whether the plugin has been marked to be compatible with regionised threading as provided
++     * by Folia
++     */
++    public boolean isFoliaSupported();
++    // Folia end - block plugins not marked as supported
++
+ }
 diff --git a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
-index 028805bcdb1d2bb0d11387db165b7376579e5f60..51bc04571f75a4ccf05c3d080531a29fe35817d1 100644
+index 028805bcdb1d2bb0d11387db165b7376579e5f60..7bc31036a612df6088a7bb190ed16d0cdbfeaccc 100644
 --- a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
 +++ b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
-@@ -255,6 +255,20 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+@@ -255,6 +255,21 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
      private Set<PluginAwareness> awareness = ImmutableSet.of();
      private String apiVersion = null;
      private List<String> libraries = ImmutableList.of();
@@ -30,6 +47,7 @@ index 028805bcdb1d2bb0d11387db165b7376579e5f60..51bc04571f75a4ccf05c3d080531a29f
 +     * Returns whether the plugin has been marked to be compatible with regionised threading as provided
 +     * by Folia
 +     */
++    @Override
 +    public boolean isFoliaSupported() {
 +        return this.foliaSupported != null && this.foliaSupported.equalsIgnoreCase("true");
 +    }
@@ -38,7 +56,7 @@ index 028805bcdb1d2bb0d11387db165b7376579e5f60..51bc04571f75a4ccf05c3d080531a29f
      // Paper start - oh my goddddd
      /**
       * Don't use this.
-@@ -1238,6 +1252,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+@@ -1238,6 +1253,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
          if (map.get("prefix") != null) {
              prefix = map.get("prefix").toString();
          }
@@ -50,7 +68,7 @@ index 028805bcdb1d2bb0d11387db165b7376579e5f60..51bc04571f75a4ccf05c3d080531a29f
      }
  
      @NotNull
-@@ -1314,6 +1333,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+@@ -1314,6 +1334,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
          if (prefix != null) {
              map.put("prefix", prefix);
          }
@@ -62,20 +80,3 @@ index 028805bcdb1d2bb0d11387db165b7376579e5f60..51bc04571f75a4ccf05c3d080531a29f
  
          return map;
      }
-diff --git a/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
-index 800f954161886ca4f6332f8e0cbc4d4e8f9cbb74..e0026c938aa369d6d9797852324437456d3c4ed9 100644
---- a/src/main/java/org/bukkit/plugin/SimplePluginManager.java
-+++ b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
-@@ -173,6 +173,12 @@ public final class SimplePluginManager implements PluginManager {
-                     server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + directory.getPath() + "': uses the space-character (0x20) in its name");
-                     continue;
-                 }
-+                // Folia start - block plugins not marked as supported
-+                if (!description.isFoliaSupported()) {
-+                    server.getLogger().log(Level.SEVERE, "Could not load plugin '" + name + "' as it is not marked as supporting Folia!");
-+                    continue;
-+                }
-+                // Folia end - block plugins not marked as supported
-             } catch (InvalidDescriptionException ex) {
-                 server.getLogger().log(Level.SEVERE, "Could not load '" + file.getPath() + "' in folder '" + directory.getPath() + "'", ex);
-                 continue;
