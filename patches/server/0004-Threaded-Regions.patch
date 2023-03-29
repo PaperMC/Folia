@@ -24187,7 +24187,7 @@ index 64c50c52c11214740de7903e5592b8b6b2c170b3..9f5e8a21de3785721897cf8cf75b17ce
              int pluginIndex = CraftMagicNumbers.SUPPORTED_API.indexOf(pdf.getAPIVersion());
  
 diff --git a/src/main/java/org/spigotmc/ActivationRange.java b/src/main/java/org/spigotmc/ActivationRange.java
-index e881584d38dc354204479863f004e974a0ac6c07..88536769e7605fafdf54494d0ebf17f306af8278 100644
+index e881584d38dc354204479863f004e974a0ac6c07..5b85034aeb2445a980f8d6156cea6a483ce97391 100644
 --- a/src/main/java/org/spigotmc/ActivationRange.java
 +++ b/src/main/java/org/spigotmc/ActivationRange.java
 @@ -65,26 +65,27 @@ public class ActivationRange
@@ -24255,8 +24255,13 @@ index e881584d38dc354204479863f004e974a0ac6c07..88536769e7605fafdf54494d0ebf17f3
              if ( world.spigotConfig.ignoreSpectatorActivation && player.isSpectator() )
              {
                  continue;
-@@ -215,7 +217,7 @@ public class ActivationRange
-             java.util.List<Entity> entities = world.getEntities((Entity)null, maxBB, (e) -> !(e instanceof net.minecraft.world.entity.Marker)); // Don't tick markers
+@@ -212,10 +214,11 @@ public class ActivationRange
+             // Paper end
+ 
+             // Paper start
+-            java.util.List<Entity> entities = world.getEntities((Entity)null, maxBB, (e) -> !(e instanceof net.minecraft.world.entity.Marker)); // Don't tick markers
++            java.util.List<Entity> entities = new java.util.ArrayList<>(); // Folia - region ticking - bypass getEntities thread check, we perform a check on the entities later
++            ((net.minecraft.server.level.ServerLevel)world).getEntityLookup().getEntities((Entity)null, maxBB, entities, (e) -> !(e instanceof net.minecraft.world.entity.Marker)); // Paper - optimise this call // Folia - region ticking - bypass getEntities thread check, we perform a check on the entities later
              for (int i = 0; i < entities.size(); i++) {
                  Entity entity = entities.get(i);
 -                ActivationRange.activateEntity(entity);
@@ -24264,7 +24269,7 @@ index e881584d38dc354204479863f004e974a0ac6c07..88536769e7605fafdf54494d0ebf17f3
              }
              // Paper end
          }
-@@ -229,16 +231,16 @@ public class ActivationRange
+@@ -229,16 +232,16 @@ public class ActivationRange
       */
      private static void activateEntity(Entity entity)
      {
@@ -24284,7 +24289,7 @@ index e881584d38dc354204479863f004e974a0ac6c07..88536769e7605fafdf54494d0ebf17f3
              }
          }
      }
-@@ -261,10 +263,10 @@ public class ActivationRange
+@@ -261,10 +264,10 @@ public class ActivationRange
          if (entity.remainingFireTicks > 0) {
              return 2;
          }
@@ -24297,7 +24302,7 @@ index e881584d38dc354204479863f004e974a0ac6c07..88536769e7605fafdf54494d0ebf17f3
          // Paper end
          // quick checks.
          if ( (entity.activationType != ActivationType.WATER && entity.wasTouchingWater && entity.isPushedByFluid()) ) // Paper
-@@ -387,19 +389,19 @@ public class ActivationRange
+@@ -387,19 +390,19 @@ public class ActivationRange
          }
          // Paper end
  
