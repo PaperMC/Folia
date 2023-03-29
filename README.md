@@ -22,6 +22,8 @@ threadpool. Thus, Folia should scale well for servers like this.
 Folia is also its own project, this will not be merged into Paper
 for the foreseeable future. 
 
+A more detailed but abstract overview: [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md).
+
 ## FAQ
 
 ### What server types can benefit from Folia?
@@ -146,8 +148,33 @@ issues, which then become near impossible to debug.
 
 ### Current API additions
 
-- RegionisedScheduler and EntityScheduler acting as a replacement for 
-  the BukkitScheduler.
+To properly understand API additions, please read
+[PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md).
+
+- RegionScheduler, AsyncScheduler, GlobalRegionScheduler, and EntityScheduler 
+  acting as a replacement for  the BukkitScheduler.
+  The entity scheduler is retrieved via Entity#getScheduler, and the
+  rest of the schedulers can be retrieved from the Bukkit/Server classes.
+- Bukkit#isOwnedByCurrentRegion to test if the current ticking region
+  owns positions/entities
+
+### Thread contexts for API
+
+To properly understand API additions, please read
+[PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md).
+
+General rules of thumb:
+
+1. Commands for entities/players are called on the region which owns
+the entity/player. Console commands are executed on the global region.
+
+2. Events involving a single entity (i.e player breaks/places block) are
+called on the region owning entity. Events involving actions on an entity
+(such as entity damage) are invoked on the region owning the target entity.
+
+3. The async modifier for events is deprecated - all events
+fired from regions or the global region are considered _synchronous_, 
+even though there is no main thread anymore. 
 
 ### Current broken API
 
