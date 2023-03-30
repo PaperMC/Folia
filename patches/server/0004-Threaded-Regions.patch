@@ -18734,7 +18734,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..17b3c16008d801fa61cb3e7d89f31a4e
      public void unsetRemoved() {
          this.removalReason = null;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index dcfb71b5a53df789e366fea2080921d677549a2e..485e5c3f1348f9e79f48f6ec3fad34fa58dcfe73 100644
+index dcfb71b5a53df789e366fea2080921d677549a2e..ce97dcc27d7c61b85b0ec30a97659a773d9d9627 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -464,7 +464,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
@@ -18775,7 +18775,15 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..485e5c3f1348f9e79f48f6ec3fad34fa
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level.getScoreboard().getPlayerTeam(s);
              if (!level.paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper
-@@ -2266,7 +2269,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1117,7 +1120,6 @@ public abstract class LivingEntity extends Entity implements Attackable {
+     }
+ 
+     public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause) {
+-        org.spigotmc.AsyncCatcher.catchOp("effect add"); // Spigot
+         if (this.isTickingEffects) {
+             this.effectsToProcess.add(new ProcessableEffect(mobeffect, cause));
+             return true;
+@@ -2266,7 +2268,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      @Nullable
      public LivingEntity getKillCredit() {
@@ -18784,7 +18792,7 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..485e5c3f1348f9e79f48f6ec3fad34fa
      }
  
      public final float getMaxHealth() {
-@@ -3394,7 +3397,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -3394,7 +3396,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          this.pushEntities();
          this.level.getProfiler().pop();
          // Paper start
@@ -18793,7 +18801,7 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..485e5c3f1348f9e79f48f6ec3fad34fa
              if (this.xo != getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
                  Location from = new Location(this.level.getWorld(), this.xo, this.yo, this.zo, this.yRotO, this.xRotO);
                  Location to = new Location (this.level.getWorld(), this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
-@@ -4054,7 +4057,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -4054,7 +4056,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          BlockPos blockposition = BlockPos.containing(d0, d1, d2);
          Level world = this.level;
  
@@ -20054,6 +20062,22 @@ index fabce3bc592b1b172b227395a07febdbb66ec3c9..ebdbadc1dba41f47ba4795ea43020b80
              double d1 = raid1.getCenter().distSqr(pos);
  
              if (raid1.isActive() && d1 < d0) {
+diff --git a/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java b/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java
+index 1fe630118981b02092054af3c5c6227a889ee3c2..749afea23d6bcfe626f8aaf93eb721185352d9b9 100644
+--- a/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java
++++ b/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java
+@@ -145,5 +145,11 @@ public class MinecartCommandBlock extends AbstractMinecart {
+             return (org.bukkit.craftbukkit.entity.CraftMinecartCommand) MinecartCommandBlock.this.getBukkitEntity();
+         }
+         // CraftBukkit end
++        // Folia start
++        @Override
++        public void threadCheck() {
++            io.papermc.paper.util.TickThread.ensureTickThread(MinecartCommandBlock.this, "sendSystemMessage to a command block");
++        }
++        // Folia end
+     }
+ }
 diff --git a/src/main/java/net/minecraft/world/entity/vehicle/MinecartHopper.java b/src/main/java/net/minecraft/world/entity/vehicle/MinecartHopper.java
 index 1b8f22805af87dc08e0dea9fd93a5f93c0b05107..00bc99948ddd67bb85c3797f869064540a8b1213 100644
 --- a/src/main/java/net/minecraft/world/entity/vehicle/MinecartHopper.java
@@ -20261,7 +20285,7 @@ index c6d2f764efa9b8bec730bbe757d480e365b25ccc..af9313a3b3aaa0af4f2a2f4fb2424dc3
              }
  
 diff --git a/src/main/java/net/minecraft/world/level/BaseCommandBlock.java b/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
-index 888936385196a178ab8b730fd5e4fff4a5466428..df4632a6ddef8744df160163c99bdcdd6225dd97 100644
+index 888936385196a178ab8b730fd5e4fff4a5466428..7f09f2864c73c8e144475f2168e4a9d9b8aa4642 100644
 --- a/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
 +++ b/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
 @@ -111,6 +111,7 @@ public abstract class BaseCommandBlock implements CommandSource {
@@ -20272,6 +20296,20 @@ index 888936385196a178ab8b730fd5e4fff4a5466428..df4632a6ddef8744df160163c99bdcdd
          if (!world.isClientSide && world.getGameTime() != this.lastExecution) {
              if ("Searge".equalsIgnoreCase(this.command)) {
                  this.lastOutput = Component.literal("#itzlipofutzli");
+@@ -169,10 +170,12 @@ public abstract class BaseCommandBlock implements CommandSource {
+ 
+     }
+ 
++    public void threadCheck() {} // Folia
++
+     @Override
+     public void sendSystemMessage(Component message) {
+         if (this.trackOutput) {
+-            org.spigotmc.AsyncCatcher.catchOp("sendSystemMessage to a command block"); // Paper
++            this.threadCheck(); // Folia
+             SimpleDateFormat simpledateformat = BaseCommandBlock.TIME_FORMAT;
+             Date date = new Date();
+ 
 diff --git a/src/main/java/net/minecraft/world/level/EntityGetter.java b/src/main/java/net/minecraft/world/level/EntityGetter.java
 index 3b959f42d958bf0f426853aee56753d6c455fcdb..b1a6a66ed02706c1adc36dcedfa415f5a24a25a0 100644
 --- a/src/main/java/net/minecraft/world/level/EntityGetter.java
@@ -21562,6 +21600,23 @@ index c57efcb9a79337ec791e4e8f6671612f0a82b441..526d1bfd5ad0de7bcfd0c2da902515f3
              boolean flag2 = blockEntity.brewTime <= 0; // == -> <=
              // CraftBukkit end
  
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java
+index a33d98a3ab2d00256e3c85b3de3680b4765df8d3..d1ae701b8dcdfc8860b2b479e0deeab1489da614 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java
+@@ -56,6 +56,12 @@ public class CommandBlockEntity extends BlockEntity {
+ 
+             return new CommandSourceStack(this, Vec3.atCenterOf(CommandBlockEntity.this.worldPosition), new Vec2(0.0F, enumdirection.toYRot()), this.getLevel(), 2, this.getName().getString(), this.getName(), this.getLevel().getServer(), (Entity) null);
+         }
++        // Folia start
++        @Override
++        public void threadCheck() {
++            io.papermc.paper.util.TickThread.ensureTickThread((ServerLevel) CommandBlockEntity.this.level, CommandBlockEntity.this.worldPosition, "sendSystemMessage to a command block");
++        }
++        // Folia end
+     };
+ 
+     public CommandBlockEntity(BlockPos pos, BlockState state) {
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
 index 963a596154091b79ca139af6274aa323518ad1ad..57b11cb78270a8094f772da497ad3264a0a67db1 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
