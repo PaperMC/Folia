@@ -921,10 +921,10 @@ index 1e98f778ffa0a7bb00ebccaaa8bde075183e41f0..aebe82cbe8bc20e5f4260a871d7b620e
       */
 diff --git a/src/main/java/ca/spottedleaf/concurrentutil/scheduler/SchedulerThreadPool.java b/src/main/java/ca/spottedleaf/concurrentutil/scheduler/SchedulerThreadPool.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..860ffdce012d84f263242f9a904180b3eb1e7774
+index 0000000000000000000000000000000000000000..0ce825d7af2a1dbeac5c22640534ee1901edce20
 --- /dev/null
 +++ b/src/main/java/ca/spottedleaf/concurrentutil/scheduler/SchedulerThreadPool.java
-@@ -0,0 +1,540 @@
+@@ -0,0 +1,543 @@
 +package ca.spottedleaf.concurrentutil.scheduler;
 +
 +import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
@@ -1024,17 +1024,20 @@ index 0000000000000000000000000000000000000000..860ffdce012d84f263242f9a904180b3
 +                    return true;
 +                }
 +                if ((System.nanoTime() - time) >= maxWaitNS) {
-+                    for (final Thread thread : this.threads) {
-+                        if (thread.isAlive()) {
-+                            TraceUtil.dumpTraceForThread(thread, "Did not shut down in time");
-+                        }
-+                    }
 +                    return false;
 +                }
 +            }
 +        }
 +
 +        return true;
++    }
++
++    public void dumpAliveThreadTraces(final String reason) {
++        for (final Thread thread : this.threads) {
++            if (thread.isAlive()) {
++                TraceUtil.dumpTraceForThread(thread, reason);
++            }
++        }
 +    }
 +
 +    /**
@@ -3632,10 +3635,10 @@ index 0000000000000000000000000000000000000000..d9687722e02dfd4088c7030abbf5008e
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6c288d1db81c4d6f574674889a98553baf9b86ee
+index 0000000000000000000000000000000000000000..1bfda654d7cb79504058b591d460bfef79f0c951
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,175 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.mojang.logging.LogUtils;
@@ -3768,6 +3771,7 @@ index 0000000000000000000000000000000000000000..6c288d1db81c4d6f574674889a98553b
 +            LOGGER.info("Scheduler halted");
 +        } else {
 +            LOGGER.warn("Scheduler did not terminate within 60s, proceeding with shutdown anyways");
++            TickRegions.getScheduler().dumpAliveThreadTraces("Did not shut down in time");
 +        }
 +
 +        MinecraftServer.getServer().stopServer(); // stop part 1: most logic, kicking players, plugins, etc
@@ -7637,10 +7641,10 @@ index 0000000000000000000000000000000000000000..29f9fed5f02530b3256e6b993e607d46
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3f14eda409ca49095dc43796868435b705c36ce4
+index 0000000000000000000000000000000000000000..9a729994cc7d51d5e5fcb78e32d3a97d39d04611
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-@@ -0,0 +1,559 @@
+@@ -0,0 +1,563 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -7795,6 +7799,10 @@ index 0000000000000000000000000000000000000000..3f14eda409ca49095dc43796868435b7
 +
 +    public boolean halt(final boolean sync, final long maxWaitNS) {
 +        return this.scheduler.halt(sync, maxWaitNS);
++    }
++
++    void dumpAliveThreadTraces(final String reason) {
++        this.scheduler.dumpAliveThreadTraces(reason);
 +    }
 +
 +    public void setHasTasks(final RegionScheduleHandle region) {
