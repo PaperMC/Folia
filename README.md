@@ -22,7 +22,7 @@ threadpool. Thus, Folia should scale well for servers like this.
 Folia is also its own project, this will not be merged into Paper
 for the foreseeable future. 
 
-A more detailed but abstract overview: [Project overview](https://docs.papermc.io/folia/reference/overvie).
+A more detailed but abstract overview: [Project overview](https://docs.papermc.io/folia/reference/overview).
 
 ## FAQ
 
