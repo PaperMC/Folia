@@ -22,7 +22,7 @@ a single independent region.
 ## Guarantees the regioniser provides
 
 The regioniser provides a set of important invariants that allows
-regions to tick in parallel without race condtions:
+regions to tick in parallel without race conditions:
 
 ### First invariant
 
@@ -54,7 +54,7 @@ but not far enough to be considered independent. The transient regions
 created in these cases will be merged into the ticking region 
 when the ticking region finishes ticking.
 
-Both of the second invariant and third invariant combined allow 
+Both the second invariant and third invariant combined allow 
 the regioniser to guarantee that a ticking region may create
 and then access chunk holders around it (i.e sync loading) without
 the possibility that it steps on another region's toes.
@@ -67,7 +67,7 @@ states: "transient", "ready", "ticking", or "dead."
 The "ready" state allows a state to transition to the "ticking" state,
 while the "transient" state is used as a state for a region that may
 not tick. The "dead" state is used to mark regions which should
-not be use.
+not be used.
 
 The states transistions are explained later, as it ties in
 with the regioniser's merge and split logic.
@@ -94,7 +94,7 @@ contained within region section (1, -1).
 Region section coordinates are used only as a performance
 tradeoff in the regioniser, as by approximating chunks to their
 region coordinate allows it to treat NxN chunks as a single
-unit for regionising. This means that regions do not own chunks positions,
+unit for regionising. This means that regions do not own chunk positions,
 but rather own region section positions. The grouping of NxN chunks 
 allows the regionising logic to be performed only on 
 the creation/destruction of region sections.
@@ -104,7 +104,7 @@ assuming region sections are always full.
 
 ### Implementation variables
 
-The implemnetation variables control how aggressively the
+The implementation variables control how aggressively the
 regioniser will maintain regions and merge regions.
 
 #### Recalculation count
@@ -139,8 +139,8 @@ then enforce the second invariant.
 
 The merge radius variable is used to ensure that for any
 existing region section x that for any other region section y within
-the merge radius are either owned by region that owns x 
-or are pending a merge into the region that owns x or that the
+the merge radius is either owned by the region that owns x 
+or is pending a merge into the region that owns x or that the
 region that owns x is pending a merge into the region that owns y.
 
 #### Region section chunk shift
@@ -200,7 +200,7 @@ In this case, the region section will be created if it does not exist.
 Additionally, the region sections in the "create empty radius" will be
 created as well.
 
-Then, any region in the create empty radius + merge radius are collected
+Then, any region in the create empty radius + merge radius is collected
 into a set X. This set represents the regions that need to be merged
 later to adhere to the second invariant.
 
@@ -211,7 +211,7 @@ If the set X contains just 1 region, then no regions need to be merged
 and no region state is modified, and the sections are added to this
 1 region.
 
-Merge logic needs to occur when there are more than 1 region in the
+Merge logic needs to occur when there is more than 1 region in the
 set X. From the set X, a region x is selected that is not ticking. If
 no such x exists, then a region x is created. Every region section 
 created is added to the set x, as it is the section that is known
@@ -232,7 +232,7 @@ Effectively, a merge into later operation from x into y will add y into x's
 merge into later set, and add x into y's expecting merge from set.
 
 When the ticking region finishes ticking, the ticking region 
-will perform the merge logic for all expecting merges.
+will perform the merge logic for all expected merges.
 
 ### Merge logic
 
@@ -245,7 +245,7 @@ The merge into later is also forwarded to the region y,
 such so that the regions x was to merge into later, y will
 now merge into later. 
 
-Additionally, if there is implementation specific data
+Additionally, if there is implementation-specific data
 on region x, the region callback to merge the data into the
 region y is invoked.
 
@@ -258,8 +258,8 @@ required to adhere to the second invariant.
 
 ### Removal of chunks (removeChunk)
 
-Removal of chunks from region sections simple updates
-the region sections state to "dead" or "alive", as well as the
+Removal of chunks from region sections simply updates
+the region sections' state to "dead" or "alive", as well as the
 region sections in the empty creation radius. It will not update
 any region state, and nor will it purge region sections.
 
@@ -272,7 +272,7 @@ invariants #2 and #3 can be met.
 
 At the end of a tick, the region's new state is not immediately known.
 
-First, tt first must process its pending merges. 
+First, it first must process its pending merges. 
 
 After it processes its pending merges, it must then check if the 
 region is now pending merge into any other region. If it is, then 
