@@ -7,6 +7,10 @@ pluginManagement {
     }
 }
 
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.4.0"
+}
+
 rootProject.name = "folia"
 
 for (name in listOf("Folia-API", "Folia-Server")) {
