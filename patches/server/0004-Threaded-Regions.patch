@@ -12616,10 +12616,10 @@ index 959b82e38f3442a6b19a1f9d7615b6ddab967819..6633e7a3946e06438633a3a6276c6eaa
          }
  
 diff --git a/src/main/java/net/minecraft/server/commands/EnchantCommand.java b/src/main/java/net/minecraft/server/commands/EnchantCommand.java
-index e639c0ec642910e66b1d68ae0b9208ef58d91fce..9ad71bda2f7498ad6e0853a1070c5be2d8016548 100644
+index e639c0ec642910e66b1d68ae0b9208ef58d91fce..abe7463f1e87449d65870955e58f257d4b8168c1 100644
 --- a/src/main/java/net/minecraft/server/commands/EnchantCommand.java
 +++ b/src/main/java/net/minecraft/server/commands/EnchantCommand.java
-@@ -46,6 +46,12 @@ public class EnchantCommand {
+@@ -46,43 +46,69 @@ public class EnchantCommand {
          })))));
      }
  
@@ -12632,7 +12632,12 @@ index e639c0ec642910e66b1d68ae0b9208ef58d91fce..9ad71bda2f7498ad6e0853a1070c5be2
      private static int enchant(CommandSourceStack source, Collection<? extends Entity> targets, Holder<Enchantment> enchantment, int level) throws CommandSyntaxException {
          Enchantment enchantment2 = enchantment.value();
          if (level > enchantment2.getMaxLevel()) {
-@@ -55,18 +61,26 @@ public class EnchantCommand {
+             throw ERROR_LEVEL_TOO_HIGH.create(level, enchantment2.getMaxLevel());
+         } else {
+-            int i = 0;
++            final java.util.concurrent.atomic.AtomicInteger changed = new java.util.concurrent.atomic.AtomicInteger(0); // Folia - region threading
++            final java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(targets.size()); // Folia - region threading
++            final java.util.concurrent.atomic.AtomicReference<Component> possibleSingleDisplayName = new java.util.concurrent.atomic.AtomicReference<>(); // Folia - region threading
  
              for(Entity entity : targets) {
                  if (entity instanceof LivingEntity) {
@@ -12652,24 +12657,57 @@ index e639c0ec642910e66b1d68ae0b9208ef58d91fce..9ad71bda2f7498ad6e0853a1070c5be2
 +                            if (!itemStack.isEmpty()) {
 +                                if (enchantment2.canEnchant(itemStack) && EnchantmentHelper.isEnchantmentCompatible(EnchantmentHelper.getEnchantments(itemStack).keySet(), enchantment2)) {
 +                                    itemStack.enchant(enchantment2, level);
++                                    possibleSingleDisplayName.set(livingEntity.getDisplayName());
++                                    changed.incrementAndGet();
 +                                } else if (targets.size() == 1) {
 +                                    throw ERROR_INCOMPATIBLE.create(itemStack.getItem().getName(itemStack).getString());
 +                                }
 +                            } else if (targets.size() == 1) {
 +                                throw ERROR_NO_ITEM.create(livingEntity.getName().getString());
 +                            }
-+                        } catch (CommandSyntaxException ex) {
-+                            sendMessage(source, ex);
++                        } catch (final CommandSyntaxException exception) {
++                            sendMessage(source, exception);
++                            return; // don't send feedback twice
                          }
 -                    } else if (targets.size() == 1) {
 -                        throw ERROR_NO_ITEM.create(livingEntity.getName().getString());
 -                    }
-+                    }, null, 1L);
-+                    ++i;
-+                    // Folia end - region threading
++                        sendFeedback(source, enchantment2, level, possibleSingleDisplayName, count, changed);
++                    }, ignored -> sendFeedback(source, enchantment2, level, possibleSingleDisplayName, count, changed), 1L);
                  } else if (targets.size() == 1) {
                      throw ERROR_NOT_LIVING_ENTITY.create(entity.getName().getString());
++                } else {
++                    sendFeedback(source, enchantment2, level, possibleSingleDisplayName, count, changed);
++                    // Folia end - region threading
                  }
+             }
+-
++            return targets.size(); // Folia - region threading
++        }
++    }
++    // Folia start - region threading
++    private static void sendFeedback(final CommandSourceStack source, final Enchantment enchantment2, final int level, final java.util.concurrent.atomic.AtomicReference<Component> possibleSingleDisplayName, final java.util.concurrent.atomic.AtomicInteger count, final java.util.concurrent.atomic.AtomicInteger changed) {
++        if (count.decrementAndGet() == 0) {
++            final int i = changed.get();
+             if (i == 0) {
+-                throw ERROR_NOTHING_HAPPENED.create();
++                sendMessage(source, ERROR_NOTHING_HAPPENED.create());
+             } else {
+-                if (targets.size() == 1) {
+-                    source.sendSuccess(Component.translatable("commands.enchant.success.single", enchantment2.getFullname(level), targets.iterator().next().getDisplayName()), true);
++                if (i == 1) {
++                    source.sendSuccess(Component.translatable("commands.enchant.success.single", enchantment2.getFullname(level), possibleSingleDisplayName.get()), true);
+                 } else {
+-                    source.sendSuccess(Component.translatable("commands.enchant.success.multiple", enchantment2.getFullname(level), targets.size()), true);
++                    source.sendSuccess(Component.translatable("commands.enchant.success.multiple", enchantment2.getFullname(level), i), true);
+                 }
+-
+-                return i;
+             }
+         }
+     }
++    // Folia end - region threading
+ }
 diff --git a/src/main/java/net/minecraft/server/commands/ExperienceCommand.java b/src/main/java/net/minecraft/server/commands/ExperienceCommand.java
 index a628e3730b1c26c2e6a85c449440af0afe4c0d8d..6651376603c3fb2331ae0955343285ac7c37726f 100644
 --- a/src/main/java/net/minecraft/server/commands/ExperienceCommand.java
