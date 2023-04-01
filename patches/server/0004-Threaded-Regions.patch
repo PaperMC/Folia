@@ -18734,7 +18734,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..17b3c16008d801fa61cb3e7d89f31a4e
      public void unsetRemoved() {
          this.removalReason = null;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index dcfb71b5a53df789e366fea2080921d677549a2e..ce97dcc27d7c61b85b0ec30a97659a773d9d9627 100644
+index dcfb71b5a53df789e366fea2080921d677549a2e..4f8062432cfe6480664e674fde0255f07b15c73a 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -464,7 +464,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
@@ -18775,15 +18775,16 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..ce97dcc27d7c61b85b0ec30a97659a77
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level.getScoreboard().getPlayerTeam(s);
              if (!level.paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper
-@@ -1117,7 +1120,6 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1117,7 +1120,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
      }
  
      public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause) {
 -        org.spigotmc.AsyncCatcher.catchOp("effect add"); // Spigot
++        io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot add effects to entities asynchronously"); // Folia - region threading
          if (this.isTickingEffects) {
              this.effectsToProcess.add(new ProcessableEffect(mobeffect, cause));
              return true;
-@@ -2266,7 +2268,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -2266,7 +2269,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      @Nullable
      public LivingEntity getKillCredit() {
@@ -18792,7 +18793,7 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..ce97dcc27d7c61b85b0ec30a97659a77
      }
  
      public final float getMaxHealth() {
-@@ -3394,7 +3396,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -3394,7 +3397,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          this.pushEntities();
          this.level.getProfiler().pop();
          // Paper start
@@ -18801,7 +18802,7 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..ce97dcc27d7c61b85b0ec30a97659a77
              if (this.xo != getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
                  Location from = new Location(this.level.getWorld(), this.xo, this.yo, this.zo, this.yRotO, this.xRotO);
                  Location to = new Location (this.level.getWorld(), this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
-@@ -4054,7 +4056,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -4054,7 +4057,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          BlockPos blockposition = BlockPos.containing(d0, d1, d2);
          Level world = this.level;
  
@@ -20063,7 +20064,7 @@ index fabce3bc592b1b172b227395a07febdbb66ec3c9..ebdbadc1dba41f47ba4795ea43020b80
  
              if (raid1.isActive() && d1 < d0) {
 diff --git a/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java b/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java
-index 1fe630118981b02092054af3c5c6227a889ee3c2..749afea23d6bcfe626f8aaf93eb721185352d9b9 100644
+index 1fe630118981b02092054af3c5c6227a889ee3c2..57ecc5e506c895fe701cb24c9b503d6009602a26 100644
 --- a/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java
 +++ b/src/main/java/net/minecraft/world/entity/vehicle/MinecartCommandBlock.java
 @@ -145,5 +145,11 @@ public class MinecartCommandBlock extends AbstractMinecart {
@@ -20073,7 +20074,7 @@ index 1fe630118981b02092054af3c5c6227a889ee3c2..749afea23d6bcfe626f8aaf93eb72118
 +        // Folia start
 +        @Override
 +        public void threadCheck() {
-+            io.papermc.paper.util.TickThread.ensureTickThread(MinecartCommandBlock.this, "sendSystemMessage to a command block");
++            io.papermc.paper.util.TickThread.ensureTickThread(MinecartCommandBlock.this, "Asynchronous sendSystemMessage to a command block");
 +        }
 +        // Folia end
      }
@@ -21601,7 +21602,7 @@ index c57efcb9a79337ec791e4e8f6671612f0a82b441..526d1bfd5ad0de7bcfd0c2da902515f3
              // CraftBukkit end
  
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java
-index a33d98a3ab2d00256e3c85b3de3680b4765df8d3..d1ae701b8dcdfc8860b2b479e0deeab1489da614 100644
+index a33d98a3ab2d00256e3c85b3de3680b4765df8d3..b311d150b0e4f1e36ba22042b02d8acd2cd5ce8c 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/CommandBlockEntity.java
 @@ -56,6 +56,12 @@ public class CommandBlockEntity extends BlockEntity {
@@ -21611,7 +21612,7 @@ index a33d98a3ab2d00256e3c85b3de3680b4765df8d3..d1ae701b8dcdfc8860b2b479e0deeab1
 +        // Folia start
 +        @Override
 +        public void threadCheck() {
-+            io.papermc.paper.util.TickThread.ensureTickThread((ServerLevel) CommandBlockEntity.this.level, CommandBlockEntity.this.worldPosition, "sendSystemMessage to a command block");
++            io.papermc.paper.util.TickThread.ensureTickThread((ServerLevel) CommandBlockEntity.this.level, CommandBlockEntity.this.worldPosition, "Asynchronous sendSystemMessage to a command block");
 +        }
 +        // Folia end
      };
