@@ -2044,7 +2044,7 @@ index 61c170555c8854b102c640b0b6a615f9f732edbf..515cc130a411f218ed20628eb918be9d
      }
  
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-index c6d20bc2f0eab737338db6b88dacb63f0decb66c..0d1896d09d419c78501bbccca97424dd1545230b 100644
+index c6d20bc2f0eab737338db6b88dacb63f0decb66c..9ac75b6c9d9698c6369978c4b004a82aa2b747f4 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 @@ -3,7 +3,6 @@ package io.papermc.paper.chunk.system.scheduling;
@@ -2826,25 +2826,27 @@ index c6d20bc2f0eab737338db6b88dacb63f0decb66c..0d1896d09d419c78501bbccca97424dd
                      if (chunkHolder.isSafeToUnload() != null) {
                          LOGGER.error("Chunkholder " + chunkHolder + " is not safe to unload but is inside the unload queue?");
                          continue;
-@@ -1168,6 +1492,17 @@ public final class ChunkHolderManager {
-                     }
- 
+@@ -1170,6 +1494,19 @@ public final class ChunkHolderManager {
                      this.ticketLevelUpdates.clear();
-+
-+                    // Folia start - region threading
-+                    // it is possible that a special case new chunk holder had its ticket removed before it was propagated,
-+                    // which means checkUnload was never invoked. By checking unload here, we ensure that either the
-+                    // ticket level was propagated (in which case, a later depropagation would check again) or that
-+                    // we called checkUnload for it.
-+                    for (final NewChunkHolder special : this.specialCaseUnload) {
-+                        special.checkUnload();
-+                    }
-+                    this.specialCaseUnload.clear();
-+                    // Folia end - region threading
                  }
              }
++
++            // Folia start - region threading
++            // it is possible that a special case new chunk holder had its ticket removed before it was propagated,
++            // which means checkUnload was never invoked. By checking unload here, we ensure that either the
++            // ticket level was propagated (in which case, a later depropagation would check again) or that
++            // we called checkUnload for it.
++            if (!this.specialCaseUnload.isEmpty()) {
++                for (final NewChunkHolder special : this.specialCaseUnload) {
++                    special.checkUnload();
++                }
++                this.specialCaseUnload.clear();
++            }
++            // Folia end - region threading
          } finally {
-@@ -1193,7 +1528,12 @@ public final class ChunkHolderManager {
+             this.ticketLock.unlock();
+         }
+@@ -1193,7 +1530,12 @@ public final class ChunkHolderManager {
  
      // only call on tick thread
      protected final boolean processPendingFullUpdate() {
@@ -2858,7 +2860,7 @@ index c6d20bc2f0eab737338db6b88dacb63f0decb66c..0d1896d09d419c78501bbccca97424dd
  
          boolean ret = false;
  
-@@ -1204,9 +1544,7 @@ public final class ChunkHolderManager {
+@@ -1204,9 +1546,7 @@ public final class ChunkHolderManager {
              ret |= holder.handleFullStatusChange(changedFullStatus);
  
              if (!changedFullStatus.isEmpty()) {
@@ -2869,7 +2871,7 @@ index c6d20bc2f0eab737338db6b88dacb63f0decb66c..0d1896d09d419c78501bbccca97424dd
                  changedFullStatus.clear();
              }
          }
-@@ -1256,7 +1594,7 @@ public final class ChunkHolderManager {
+@@ -1256,7 +1596,7 @@ public final class ChunkHolderManager {
  
      private JsonObject getDebugJsonNoLock() {
          final JsonObject ret = new JsonObject();
@@ -2878,7 +2880,7 @@ index c6d20bc2f0eab737338db6b88dacb63f0decb66c..0d1896d09d419c78501bbccca97424dd
  
          final JsonArray unloadQueue = new JsonArray();
          ret.add("unload_queue", unloadQueue);
-@@ -1275,60 +1613,73 @@ public final class ChunkHolderManager {
+@@ -1275,60 +1615,73 @@ public final class ChunkHolderManager {
              holders.add(holder.getDebugJson());
          }
  
