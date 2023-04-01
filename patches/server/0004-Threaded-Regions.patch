@@ -16669,7 +16669,7 @@ index 44d99e89226adb6234b9405f25ac9dab9bd84297..072634e26d32ca0b3438a5d3a03be367
                  Collections.shuffle( this.connections );
              }
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index d587b2c4e39bce7e098aa9fab361230f72770658..85116d9a4538404bb7d5cbd8893637581132746a 100644
+index d587b2c4e39bce7e098aa9fab361230f72770658..0243b6cd61c96656e61fce7d9f85fbf859c2f04d 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -322,10 +322,10 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
@@ -16819,6 +16819,15 @@ index d587b2c4e39bce7e098aa9fab361230f72770658..85116d9a4538404bb7d5cbd889363758
  
                  ++this.receivedMovePacketCount;
                  int i = this.receivedMovePacketCount - this.knownMovePacketCount;
+@@ -750,7 +764,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+                         // there to avoid any 'Moved wrongly' or 'Moved too quickly' errors.
+                         // We only do this if the Event was not cancelled.
+                         if (!oldTo.equals(event.getTo()) && !event.isCancelled()) {
+-                            this.player.getBukkitEntity().teleport(event.getTo(), PlayerTeleportEvent.TeleportCause.PLUGIN);
++                            this.player.getBukkitEntity().teleportAsync(event.getTo(), PlayerTeleportEvent.TeleportCause.PLUGIN); // Folia - region threading
+                             return;
+                         }
+ 
 @@ -866,13 +880,13 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          // PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel()); // Paper - run this async
          // CraftBukkit start
@@ -16897,6 +16906,15 @@ index d587b2c4e39bce7e098aa9fab361230f72770658..85116d9a4538404bb7d5cbd889363758
  
                              if (i > Math.max(this.allowedPlayerTicks, 5)) {
                                  ServerGamePacketListenerImpl.LOGGER.debug("{} is sending move packets too frequently ({} packets since last tick)", this.player.getName().getString(), i);
+@@ -1604,7 +1619,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+                                         // there to avoid any 'Moved wrongly' or 'Moved too quickly' errors.
+                                         // We only do this if the Event was not cancelled.
+                                         if (!oldTo.equals(event.getTo()) && !event.isCancelled()) {
+-                                            this.player.getBukkitEntity().teleport(event.getTo(), PlayerTeleportEvent.TeleportCause.PLUGIN);
++                                            this.player.getBukkitEntity().teleportAsync(event.getTo(), PlayerTeleportEvent.TeleportCause.PLUGIN); // Folia - region threading
+                                             return;
+                                         }
+ 
 @@ -1819,9 +1834,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
                  if (!this.player.isSpectator()) {
                      // limit how quickly items can be dropped
@@ -17762,7 +17780,7 @@ index 93a1e990b0a6caae4143c2f9d09bfb368fa1d6db..ad3166481dd37f4b5380f8bf28653bb4
  
                  itemstack = entityliving2.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 4705d7066207250c03a5f98eef61554c901f2e35..17b3c16008d801fa61cb3e7d89f31a4e0c166ac7 100644
+index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278e4a4b091 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -165,7 +165,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -18195,7 +18213,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..17b3c16008d801fa61cb3e7d89f31a4e
 +    }
 +
 +    protected boolean canTeleportAsync() {
-+        return !this.isRemoved() && this.isAlive() && (!(this instanceof net.minecraft.world.entity.LivingEntity livingEntity) || !livingEntity.isSleeping());
++        return !this.hasNullCallback() && !this.isRemoved() && this.isAlive() && (!(this instanceof net.minecraft.world.entity.LivingEntity livingEntity) || !livingEntity.isSleeping());
 +    }
 +
 +    protected void teleportSyncSameRegion(Vec3 pos, Float yaw, Float pitch, Vec3 speedDirectionUpdate) {
@@ -24124,7 +24142,7 @@ index cd4ad8261e56365850068db1d83d6a8454026737..78f7e72f2912dae503c2dab7d1992b65
              List<String> offers = waitable.get();
              if (offers == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 57a0dbb23a32123d30c3b3572f4d129be9d97847..3f46d9398add0e97a2b8b072f66b48b0e056d023 100644
+index 57a0dbb23a32123d30c3b3572f4d129be9d97847..b7b00aeadea76531d495e0478e09d3496677268c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 @@ -203,6 +203,16 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
@@ -24165,7 +24183,7 @@ index 57a0dbb23a32123d30c3b3572f4d129be9d97847..3f46d9398add0e97a2b8b072f66b48b0
  
          if (entityTracker == null) {
              return;
-@@ -1308,30 +1323,38 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1308,30 +1323,43 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          Preconditions.checkArgument(location != null, "location");
          location.checkFinite();
          Location locationClone = location.clone(); // clone so we don't need to worry about mutations after this call.
@@ -24186,27 +24204,33 @@ index 57a0dbb23a32123d30c3b3572f4d129be9d97847..3f46d9398add0e97a2b8b072f66b48b0
 -                } catch (Throwable throwable) {
 -                    if (throwable instanceof ThreadDeath) {
 -                        throw (ThreadDeath)throwable;
-+        boolean scheduled = this.taskScheduler.schedule(
-+            // success
-+            (Entity nmsEntity) -> {
-+                boolean success = nmsEntity.teleportAsync(
-+                    ((CraftWorld)locationClone.getWorld()).getHandle(),
-+                    new net.minecraft.world.phys.Vec3(locationClone.getX(), locationClone.getY(), locationClone.getZ()),
-+                    null, null, net.minecraft.world.phys.Vec3.ZERO,
-+                    cause == null ? TeleportCause.UNKNOWN : cause,
-+                    Entity.TELEPORT_FLAG_LOAD_CHUNK,
-+                    (Entity entityTp) -> {
-+                        ret.complete(Boolean.TRUE);
-                     }
+-                    }
 -                    net.minecraft.server.MinecraftServer.LOGGER.error("Failed to teleport entity " + CraftEntity.this, throwable);
 -                    ret.completeExceptionally(throwable);
-+                );
-+                if (!success) {
-+                    ret.complete(Boolean.FALSE);
++        java.util.function.Consumer<Entity> run = (Entity nmsEntity) -> {
++            boolean success = nmsEntity.teleportAsync(
++                ((CraftWorld)locationClone.getWorld()).getHandle(),
++                new net.minecraft.world.phys.Vec3(locationClone.getX(), locationClone.getY(), locationClone.getZ()),
++                null, null, net.minecraft.world.phys.Vec3.ZERO,
++                cause == null ? TeleportCause.UNKNOWN : cause,
++                Entity.TELEPORT_FLAG_LOAD_CHUNK,
++                (Entity entityTp) -> {
++                    ret.complete(Boolean.TRUE);
                  }
 -            });
 -        });
-+            },
++            );
++            if (!success) {
++                ret.complete(Boolean.FALSE);
++            }
++        };
++        if (org.bukkit.Bukkit.isOwnedByCurrentRegion(this)) {
++            run.accept(this.getHandle());
++            return ret;
++        }
++        boolean scheduled = this.taskScheduler.schedule(
++            // success
++           run,
 +            // retired
 +            (Entity nmsEntity) -> {
 +                ret.complete(Boolean.FALSE);
