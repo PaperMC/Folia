@@ -18945,6 +18945,29 @@ index 02cb6b8c1d59855ff4a8aad3024fe12007eca0ee..88e2d818264450e63e0f5693fdc7940d
  
              if (entityhuman != null) {
                  double d0 = entityhuman.distanceToSqr((Entity) this);
+diff --git a/src/main/java/net/minecraft/world/entity/ai/Brain.java b/src/main/java/net/minecraft/world/entity/ai/Brain.java
+index 328c3ecd0d35d2cad15173ec80962cee9177eaf8..625e03abc4a62f42774fedee31a5f5f776169674 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/Brain.java
++++ b/src/main/java/net/minecraft/world/entity/ai/Brain.java
+@@ -412,9 +412,17 @@ public class Brain<E extends LivingEntity> {
+     }
+ 
+     public void stopAll(ServerLevel world, E entity) {
++        // Folia start - region threading
++        List<BehaviorControl<? super E>> behaviors = this.getRunningBehaviors();
++        if (behaviors.isEmpty()) {
++            // avoid calling getGameTime, as this may be called while portalling an entity - which will cause
++            // the world data retrieval to fail
++            return;
++        }
++        // Folia end - region threading
+         long l = entity.level.getGameTime();
+ 
+-        for(BehaviorControl<? super E> behaviorControl : this.getRunningBehaviors()) {
++        for(BehaviorControl<? super E> behaviorControl : behaviors) {  // Folia - region threading
+             behaviorControl.doStop(world, entity, l);
+         }
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java b/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java
 index 8ec07578c1e41997a2e5ef158885ad3f4c2a31b6..6dcacfca6eb4a8a6425f1aaeb57733d29989032a 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java

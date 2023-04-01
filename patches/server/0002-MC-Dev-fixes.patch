@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Fri, 31 Mar 2023 20:40:28 -0700
+Subject: [PATCH] MC-Dev fixes
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/Brain.java b/src/main/java/net/minecraft/world/entity/ai/Brain.java
+index 10e7b6a846b443362f1e626b8ee2f63a3803fddb..328c3ecd0d35d2cad15173ec80962cee9177eaf8 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/Brain.java
++++ b/src/main/java/net/minecraft/world/entity/ai/Brain.java
+@@ -72,15 +72,15 @@ public class Brain<E extends LivingEntity> {
+             }
+ 
+             public <T> DataResult<Brain<E>> decode(DynamicOps<T> dynamicOps, MapLike<T> mapLike) {
+-                MutableObject<DataResult<ImmutableList.Builder<Brain.MemoryValue<?>>>> mutableObject = new MutableObject<>(DataResult.success(ImmutableList.builder()));
++                MutableObject<DataResult<ImmutableList.Builder<Brain.MemoryValue<?>>>> mutableObject2 = new MutableObject<>(DataResult.success(ImmutableList.builder())); // Folia - decompile fix
+                 mapLike.entries().forEach((pair) -> {
+                     DataResult<MemoryModuleType<?>> dataResult = BuiltInRegistries.MEMORY_MODULE_TYPE.byNameCodec().parse(dynamicOps, pair.getFirst());
+                     DataResult<? extends Brain.MemoryValue<?>> dataResult2 = dataResult.flatMap((memoryType) -> {
+                         return this.captureRead(memoryType, dynamicOps, (T)pair.getSecond());
+                     });
+-                    mutableObject.setValue(mutableObject.getValue().apply2(ImmutableList.Builder::add, dataResult2));
++                    mutableObject2.setValue(mutableObject2.getValue().apply2(ImmutableList.Builder::add, dataResult2)); // Folia - decompile fix
+                 });
+-                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject.getValue().resultOrPartial(Brain.LOGGER::error).map(ImmutableList.Builder::build).orElseGet(ImmutableList::of);
++                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject2.getValue().resultOrPartial(Brain.LOGGER::error).map(ImmutableList.Builder::build).orElseGet(ImmutableList::of); // Folia - decompile fix
+                 return DataResult.success(new Brain<>(memoryModules, sensors, immutableList, mutableObject::getValue));
+             }
+ 
+@@ -181,14 +181,14 @@ public class Brain<E extends LivingEntity> {
+         if (optional == null) {
+             throw new IllegalStateException("Unregistered memory fetched: " + type);
+         } else {
+-            return optional.map(ExpirableValue::getValue);
++            return (Optional<U>)optional.map(ExpirableValue::getValue); // Folia - decompile fix
+         }
+     }
+ 
+     @Nullable
+     public <U> Optional<U> getMemoryInternal(MemoryModuleType<U> type) {
+         Optional<? extends ExpirableValue<?>> optional = this.memories.get(type);
+-        return optional == null ? null : optional.map(ExpirableValue::getValue);
++        return optional == null ? null : (Optional<U>)optional.map(ExpirableValue::getValue); // Folia - decompile fix
+     }
+ 
+     public <U> long getTimeUntilExpiry(MemoryModuleType<U> type) {
+@@ -483,7 +483,7 @@ public class Brain<E extends LivingEntity> {
+         private final Optional<? extends ExpirableValue<U>> value;
+ 
+         static <U> Brain.MemoryValue<U> createUnchecked(MemoryModuleType<U> type, Optional<? extends ExpirableValue<?>> data) {
+-            return new Brain.MemoryValue<>(type, data);
++            return new Brain.MemoryValue<>(type, (Optional<? extends ExpirableValue<U>>)data); // Folia - decompile fix
+         }
+ 
+         MemoryValue(MemoryModuleType<U> type, Optional<? extends ExpirableValue<U>> data) {
