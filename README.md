@@ -7,7 +7,7 @@
 ## Overview
 
 Folia groups nearby loaded chunks to form an "independent region."
-See [REGION_LOGIC.md](REGION_LOGIC.md) for exact details on how Folia
+See [the PaperMC documentation](https://docs.papermc.io/folia/reference/region-logic) for exact details on how Folia
 will group nearby chunks.
 Each independent region has its own tick loop, which is ticked at the
 regular Minecraft tickrate (20TPS). The tick loops are executed
