@@ -17927,7 +17927,7 @@ index 93a1e990b0a6caae4143c2f9d09bfb368fa1d6db..ad3166481dd37f4b5380f8bf28653bb4
  
                  itemstack = entityliving2.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278e4a4b091 100644
+index 4705d7066207250c03a5f98eef61554c901f2e35..580e75595d7fc8c5af5a0281b77f7be88a25a464 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -165,7 +165,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -18110,7 +18110,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
              return;
          }
          // CraftBukkit end
-@@ -3380,6 +3406,751 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3380,6 +3406,754 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -18399,6 +18399,9 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
 +        Entity copy = this.getType().create(destination);
 +        copy.restoreFrom(this);
 +        copy.transform(pos, yaw, pitch, speedDirectionUpdate);
++        // vanilla code used to call remove _after_ copying, and some stuff is required to be after copy - so add hook here
++        // for example, clearing of inventory after switching dimensions
++        this.postRemoveAfterChangingDimensions();
 +
 +        return copy;
 +    }
@@ -18862,7 +18865,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3388,6 +4159,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3388,6 +4162,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Nullable
      public Entity teleportTo(ServerLevel worldserver, PositionImpl location) {
@@ -18874,7 +18877,20 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
          // CraftBukkit end
          // Paper start - fix bad state entities causing dupes
          if (!isAlive() || !valid) {
-@@ -3910,17 +4686,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3471,6 +4250,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         }
+     }
+ 
++    // Folia start - region threading - move inventory clearing until after the dimension change
++    protected void postRemoveAfterChangingDimensions() {
++
++    }
++    // Folia end - region threading - move inventory clearing until after the dimension change
++
+     protected void removeAfterChangingDimensions() {
+         this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION);
+     }
+@@ -3910,17 +4695,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // Paper start
      public void startSeenByPlayer(ServerPlayer player) {
@@ -18894,7 +18910,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
      }
      // Paper end
  
-@@ -4411,7 +5183,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4411,7 +5192,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
          // Paper end - fix MC-4
@@ -18904,7 +18920,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4432,7 +5205,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4432,7 +5214,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          // Paper start - never allow AABB to become desynced from position
          // hanging has its own special logic
@@ -18913,7 +18929,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4519,6 +5292,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4519,6 +5301,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return this.removalReason != null;
      }
  
@@ -18926,7 +18942,7 @@ index 4705d7066207250c03a5f98eef61554c901f2e35..f2d5603c6d0b3f7aa4b8f8da2c551278
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4543,7 +5322,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4543,7 +5331,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
          this.levelCallback.onRemove(reason);
@@ -19029,7 +19045,7 @@ index dcfb71b5a53df789e366fea2080921d677549a2e..4f8062432cfe6480664e674fde0255f0
  
              while (!flag2 && blockposition.getY() > world.getMinBuildHeight()) {
 diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
-index 02cb6b8c1d59855ff4a8aad3024fe12007eca0ee..88e2d818264450e63e0f5693fdc7940d072e50a6 100644
+index 02cb6b8c1d59855ff4a8aad3024fe12007eca0ee..a719dc69b48ae867ce0b508d3d640e65d2863068 100644
 --- a/src/main/java/net/minecraft/world/entity/Mob.java
 +++ b/src/main/java/net/minecraft/world/entity/Mob.java
 @@ -135,6 +135,14 @@ public abstract class Mob extends LivingEntity implements Targeting {
@@ -19092,6 +19108,33 @@ index 02cb6b8c1d59855ff4a8aad3024fe12007eca0ee..88e2d818264450e63e0f5693fdc7940d
  
              if (entityhuman != null) {
                  double d0 = entityhuman.distanceToSqr((Entity) this);
+@@ -1728,6 +1743,15 @@ public abstract class Mob extends LivingEntity implements Targeting {
+         this.goalSelector.removeAllGoals(predicate);
+     }
+ 
++    // Folia start - region threading - move inventory clearing until after the dimension change
++    @Override
++    protected void postRemoveAfterChangingDimensions() {
++        this.getAllSlots().forEach((itemstack) -> {
++            if (!itemstack.isEmpty()) itemstack.setCount(0); // CraftBukkit
++        });
++    }
++    // Folia end - region threading - move inventory clearing until after the dimension change
++
+     @Override
+     protected void removeAfterChangingDimensions() {
+         super.removeAfterChangingDimensions();
+@@ -1736,9 +1760,7 @@ public abstract class Mob extends LivingEntity implements Targeting {
+         this.level.getCraftServer().getPluginManager().callEvent(event); // CraftBukkit
+         this.dropLeash(true, event.isDropLeash());
+         // Paper end
+-        this.getAllSlots().forEach((itemstack) -> {
+-            if (!itemstack.isEmpty()) itemstack.setCount(0); // CraftBukkit
+-        });
++        // Folia - region threading - move inventory clearing until after the dimension change - move into postRemoveAfterChangingDimensions
+     }
+ 
+     @Nullable
 diff --git a/src/main/java/net/minecraft/world/entity/ai/Brain.java b/src/main/java/net/minecraft/world/entity/ai/Brain.java
 index 328c3ecd0d35d2cad15173ec80962cee9177eaf8..625e03abc4a62f42774fedee31a5f5f776169674 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/Brain.java
