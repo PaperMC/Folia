@@ -11011,6 +11011,37 @@ index 0000000000000000000000000000000000000000..cf9b66afc1762dbe2c625f09f9e804ca
 +        }
 +    }
 +}
+diff --git a/src/main/java/net/minecraft/advancements/CriterionProgress.java b/src/main/java/net/minecraft/advancements/CriterionProgress.java
+index f40d6eaa6ebbd775cd3feb41546423fe4cbf2b22..e43c95e3be6cb41eab0a1cecbf154350e70b7b79 100644
+--- a/src/main/java/net/minecraft/advancements/CriterionProgress.java
++++ b/src/main/java/net/minecraft/advancements/CriterionProgress.java
+@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
+ import net.minecraft.network.FriendlyByteBuf;
+ 
+ public class CriterionProgress {
+-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.ROOT);
++    private static final ThreadLocal<SimpleDateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.ROOT)); // Folia - region threading - SDF is not thread-safe
+     @Nullable
+     private Date obtained;
+ 
+@@ -43,7 +43,7 @@ public class CriterionProgress {
+     }
+ 
+     public JsonElement serializeToJson() {
+-        return (JsonElement)(this.obtained != null ? new JsonPrimitive(DATE_FORMAT.format(this.obtained)) : JsonNull.INSTANCE);
++        return (JsonElement)(this.obtained != null ? new JsonPrimitive(DATE_FORMAT.get().format(this.obtained)) : JsonNull.INSTANCE); // Folia - region threading - SDF is not thread-safe
+     }
+ 
+     public static CriterionProgress fromNetwork(FriendlyByteBuf buf) {
+@@ -56,7 +56,7 @@ public class CriterionProgress {
+         CriterionProgress criterionProgress = new CriterionProgress();
+ 
+         try {
+-            criterionProgress.obtained = DATE_FORMAT.parse(datetime);
++            criterionProgress.obtained = DATE_FORMAT.get().parse(datetime); // Folia - region threading - SDF is not thread-safe
+             return criterionProgress;
+         } catch (ParseException var3) {
+             throw new JsonSyntaxException("Invalid datetime: " + datetime, var3);
 diff --git a/src/main/java/net/minecraft/commands/CommandSourceStack.java b/src/main/java/net/minecraft/commands/CommandSourceStack.java
 index 7b6b51392b123d34382233adcf4c3d4867bdaa32..4c793605566f1755c99496c00dc1ef4f38c4ac7d 100644
 --- a/src/main/java/net/minecraft/commands/CommandSourceStack.java
@@ -17282,12 +17313,81 @@ index 2ff578e4a953ffcf5176815ba8e3f06f73499989..2e96377d628b3a07fb565020074d665f
  
          private State() {}
      }
+diff --git a/src/main/java/net/minecraft/server/players/BanListEntry.java b/src/main/java/net/minecraft/server/players/BanListEntry.java
+index 8f19876c20ce9cce574ebbec386a26ab5c807e18..4627c7bd326ca42c9476ec17867dba2ad4191b86 100644
+--- a/src/main/java/net/minecraft/server/players/BanListEntry.java
++++ b/src/main/java/net/minecraft/server/players/BanListEntry.java
+@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
+ 
+ public abstract class BanListEntry<T> extends StoredUserEntry<T> {
+ 
+-    public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.ROOT);
++    public static final ThreadLocal<SimpleDateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.ROOT)); // Folia - region threading - SDF is not thread-safe
+     public static final String EXPIRES_NEVER = "forever";
+     protected final Date created;
+     protected final String source;
+@@ -32,7 +32,7 @@ public abstract class BanListEntry<T> extends StoredUserEntry<T> {
+         Date date;
+ 
+         try {
+-            date = json.has("created") ? BanListEntry.DATE_FORMAT.parse(json.get("created").getAsString()) : new Date();
++            date = json.has("created") ? BanListEntry.DATE_FORMAT.get().parse(json.get("created").getAsString()) : new Date(); // Folia - region threading - SDF is not thread-safe
+         } catch (ParseException parseexception) {
+             date = new Date();
+         }
+@@ -43,7 +43,7 @@ public abstract class BanListEntry<T> extends StoredUserEntry<T> {
+         Date date1;
+ 
+         try {
+-            date1 = json.has("expires") ? BanListEntry.DATE_FORMAT.parse(json.get("expires").getAsString()) : null;
++            date1 = json.has("expires") ? BanListEntry.DATE_FORMAT.get().parse(json.get("expires").getAsString()) : null; // Folia - region threading - SDF is not thread-safe
+         } catch (ParseException parseexception1) {
+             date1 = null;
+         }
+@@ -78,9 +78,9 @@ public abstract class BanListEntry<T> extends StoredUserEntry<T> {
+ 
+     @Override
+     protected void serialize(JsonObject json) {
+-        json.addProperty("created", BanListEntry.DATE_FORMAT.format(this.created));
++        json.addProperty("created", BanListEntry.DATE_FORMAT.get().format(this.created)); // Folia - region threading - SDF is not thread-safe
+         json.addProperty("source", this.source);
+-        json.addProperty("expires", this.expires == null ? "forever" : BanListEntry.DATE_FORMAT.format(this.expires));
++        json.addProperty("expires", this.expires == null ? "forever" : BanListEntry.DATE_FORMAT.get().format(this.expires)); // Folia - region threading - SDF is not thread-safe
+         json.addProperty("reason", this.reason);
+     }
+ 
+@@ -89,7 +89,7 @@ public abstract class BanListEntry<T> extends StoredUserEntry<T> {
+         Date expires = null;
+ 
+         try {
+-            expires = jsonobject.has("expires") ? BanListEntry.DATE_FORMAT.parse(jsonobject.get("expires").getAsString()) : null;
++            expires = jsonobject.has("expires") ? BanListEntry.DATE_FORMAT.get().parse(jsonobject.get("expires").getAsString()) : null; // Folia - region threading - SDF is not thread-safe
+         } catch (ParseException ex) {
+             // Guess we don't have a date
+         }
+diff --git a/src/main/java/net/minecraft/server/players/OldUsersConverter.java b/src/main/java/net/minecraft/server/players/OldUsersConverter.java
+index 7edd4b88eb0476f0630630bc4681e859bd145b2b..f3586a5c5b5d4cae817aa7c15fc0c2fc4cd6dc09 100644
+--- a/src/main/java/net/minecraft/server/players/OldUsersConverter.java
++++ b/src/main/java/net/minecraft/server/players/OldUsersConverter.java
+@@ -517,7 +517,7 @@ public class OldUsersConverter {
+         Date date1;
+ 
+         try {
+-            date1 = BanListEntry.DATE_FORMAT.parse(dateString);
++            date1 = BanListEntry.DATE_FORMAT.get().parse(dateString); // Folia - region threading - SDF is not thread-safe
+         } catch (ParseException parseexception) {
+             date1 = fallback;
+         }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..0bdd6f4bea2b3fa7fef2c0a739af37f9c21ff5cd 100644
+index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..b9bd88fa6536e17cccec8a4f482b9b272be9568f 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -139,7 +139,7 @@ public abstract class PlayerList {
-     private static final SimpleDateFormat BAN_DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+@@ -136,10 +136,10 @@ public abstract class PlayerList {
+     public static final Component CHAT_FILTERED_FULL = Component.translatable("chat.filtered_full");
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private static final int SEND_PLAYER_INFO_INTERVAL = 600;
+-    private static final SimpleDateFormat BAN_DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
++    private static final ThreadLocal<SimpleDateFormat> BAN_DATE_FORMAT = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z")); // Folia - region threading - SDF is not thread-safe
      private final MinecraftServer server;
      public final List<ServerPlayer> players = new java.util.concurrent.CopyOnWriteArrayList(); // CraftBukkit - ArrayList -> CopyOnWriteArrayList: Iterator safety
 -    private final Map<UUID, ServerPlayer> playersByUUID = Maps.newHashMap();
@@ -17505,7 +17605,24 @@ index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..0bdd6f4bea2b3fa7fef2c0a739af37f9
          }
  
          // Instead of kicking then returning, we need to store the kick reason
-@@ -724,7 +785,7 @@ public abstract class PlayerList {
+@@ -704,7 +765,7 @@ public abstract class PlayerList {
+ 
+             ichatmutablecomponent = Component.translatable("multiplayer.disconnect.banned.reason", gameprofilebanentry.getReason());
+             if (gameprofilebanentry.getExpires() != null) {
+-                ichatmutablecomponent.append((Component) Component.translatable("multiplayer.disconnect.banned.expiration", PlayerList.BAN_DATE_FORMAT.format(gameprofilebanentry.getExpires())));
++                ichatmutablecomponent.append((Component) Component.translatable("multiplayer.disconnect.banned.expiration", PlayerList.BAN_DATE_FORMAT.get().format(gameprofilebanentry.getExpires()))); // Folia - region threading - SDF is not thread-safe
+             }
+ 
+             // return chatmessage;
+@@ -717,14 +778,14 @@ public abstract class PlayerList {
+ 
+             ichatmutablecomponent = Component.translatable("multiplayer.disconnect.banned_ip.reason", ipbanentry.getReason());
+             if (ipbanentry.getExpires() != null) {
+-                ichatmutablecomponent.append((Component) Component.translatable("multiplayer.disconnect.banned_ip.expiration", PlayerList.BAN_DATE_FORMAT.format(ipbanentry.getExpires())));
++                ichatmutablecomponent.append((Component) Component.translatable("multiplayer.disconnect.banned_ip.expiration", PlayerList.BAN_DATE_FORMAT.get().format(ipbanentry.getExpires()))); // Folia - region threading - SDF is not thread-safe
+             }
+ 
+             // return chatmessage;
              event.disallow(PlayerLoginEvent.Result.KICK_BANNED, PaperAdventure.asAdventure(ichatmutablecomponent)); // Paper - Adventure
          } else {
              // return this.players.size() >= this.maxPlayers && !this.canBypassPlayerLimit(gameprofile) ? IChatBaseComponent.translatable("multiplayer.disconnect.server_full") : null;
@@ -20407,9 +20524,18 @@ index c6d2f764efa9b8bec730bbe757d480e365b25ccc..af9313a3b3aaa0af4f2a2f4fb2424dc3
              }
  
 diff --git a/src/main/java/net/minecraft/world/level/BaseCommandBlock.java b/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
-index 888936385196a178ab8b730fd5e4fff4a5466428..7f09f2864c73c8e144475f2168e4a9d9b8aa4642 100644
+index 888936385196a178ab8b730fd5e4fff4a5466428..a49621dcc5915c86bf0327a4903706817c7b8ff4 100644
 --- a/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
 +++ b/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
+@@ -20,7 +20,7 @@ import net.minecraft.world.phys.Vec3;
+ 
+ public abstract class BaseCommandBlock implements CommandSource {
+ 
+-    private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm:ss");
++    private static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH:mm:ss")); // Folia - region threading - SDF is not thread-safe
+     private static final Component DEFAULT_NAME = Component.literal("@");
+     private long lastExecution = -1L;
+     private boolean updateLastExecution = true;
 @@ -111,6 +111,7 @@ public abstract class BaseCommandBlock implements CommandSource {
      }
  
@@ -20418,7 +20544,7 @@ index 888936385196a178ab8b730fd5e4fff4a5466428..7f09f2864c73c8e144475f2168e4a9d9
          if (!world.isClientSide && world.getGameTime() != this.lastExecution) {
              if ("Searge".equalsIgnoreCase(this.command)) {
                  this.lastOutput = Component.literal("#itzlipofutzli");
-@@ -169,10 +170,12 @@ public abstract class BaseCommandBlock implements CommandSource {
+@@ -169,11 +170,13 @@ public abstract class BaseCommandBlock implements CommandSource {
  
      }
  
@@ -20428,10 +20554,12 @@ index 888936385196a178ab8b730fd5e4fff4a5466428..7f09f2864c73c8e144475f2168e4a9d9
      public void sendSystemMessage(Component message) {
          if (this.trackOutput) {
 -            org.spigotmc.AsyncCatcher.catchOp("sendSystemMessage to a command block"); // Paper
+-            SimpleDateFormat simpledateformat = BaseCommandBlock.TIME_FORMAT;
 +            this.threadCheck(); // Folia
-             SimpleDateFormat simpledateformat = BaseCommandBlock.TIME_FORMAT;
++            SimpleDateFormat simpledateformat = BaseCommandBlock.TIME_FORMAT.get(); // Folia - region threading - SDF is not thread-safe
              Date date = new Date();
  
+             this.lastOutput = Component.literal("[" + simpledateformat.format(date) + "] ").append(message);
 diff --git a/src/main/java/net/minecraft/world/level/EntityGetter.java b/src/main/java/net/minecraft/world/level/EntityGetter.java
 index 3b959f42d958bf0f426853aee56753d6c455fcdb..b1a6a66ed02706c1adc36dcedfa415f5a24a25a0 100644
 --- a/src/main/java/net/minecraft/world/level/EntityGetter.java
