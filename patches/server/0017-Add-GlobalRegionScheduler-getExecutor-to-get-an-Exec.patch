@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: jdkeke142 <kjimenez@student.42angouleme.fr>
+Date: Mon, 3 Apr 2023 04:48:44 +0200
+Subject: [PATCH] Add GlobalRegionScheduler#getExecutor to get an Executor of
+ the global region and RegionScheduler#getExecutor to get an Executor of a
+ region
+
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+index eac8bc531dc11aa652bafd73e50d7930cbca19e5..3a0566d0136cbfbaa8e12936ebdba0678e9e62c4 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+@@ -8,6 +8,7 @@ import org.bukkit.plugin.Plugin;
+ import java.lang.invoke.VarHandle;
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.concurrent.Executor;
+ import java.util.function.Consumer;
+ import java.util.logging.Level;
+ 
+@@ -124,6 +125,15 @@ public final class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
+         }
+     }
+ 
++    @Override
++    public Executor getExecutor(final Plugin plugin) {
++        Validate.notNull(plugin, "Plugin may not be null");
++        return command -> {
++            Validate.notNull(command, "Command cannot be null");
++            this.execute(plugin, command);
++        };
++    }
++
+     private void scheduleInternal(final GlobalScheduledTask task, final long delay) {
+         // note: delay > 0
+         synchronized (this.stateLock) {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
+index aa10f3273e3bb35cf59d324644c269893cc12e99..81ce6c09159e98e8843dfe578526f9120c58265f 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
+@@ -24,6 +24,7 @@ import java.lang.invoke.VarHandle;
+ import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.concurrent.Executor;
+ import java.util.function.Consumer;
+ import java.util.logging.Level;
+ 
+@@ -139,6 +140,16 @@ public final class FoliaRegionScheduler implements RegionScheduler {
+         return ret;
+     }
+ 
++    @Override
++    public Executor getExecutor(final Plugin plugin, final World world, final int chunkX, final int chunkZ) {
++        Validate.notNull(plugin, "Plugin may not be null");
++        Validate.notNull(world, "World may not be null");
++        return command -> {
++            Validate.notNull(command, "Command cannot be null");
++            this.execute(plugin, world, chunkX, chunkZ, command);
++        };
++    }
++
+     public void tick() {
+         SCHEDULER_DATA.get().tick();
+     }

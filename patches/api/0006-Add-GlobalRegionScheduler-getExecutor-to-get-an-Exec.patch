@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: jdkeke142 <kjimenez@student.42angouleme.fr>
+Date: Mon, 3 Apr 2023 04:56:15 +0200
+Subject: [PATCH] Add GlobalRegionScheduler#getExecutor to get an Executor of
+ the global region and RegionScheduler#getExecutor to get an Executor of a
+ region
+
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
+index 712af8218d5a81f731a227bcaccd7a1dc54628be..4f23f608ba5cf71425235793bfcc5a4073f3b8e5 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
+@@ -2,6 +2,8 @@ package io.papermc.paper.threadedregions.scheduler;
+ 
+ import org.bukkit.plugin.Plugin;
+ import org.jetbrains.annotations.NotNull;
++
++import java.util.concurrent.Executor;
+ import java.util.function.Consumer;
+ 
+ /**
+@@ -49,6 +51,14 @@ public interface GlobalRegionScheduler {
+     @NotNull ScheduledTask runAtFixedRate(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task,
+                                                  long initialDelayTicks, long periodTicks);
+ 
++    /**
++     * Returns an executor that will run tasks on the global region.
++     *
++     * @param plugin The plugin that owns the task
++     * @return An executor associated with the global region
++     */
++    @NotNull Executor getExecutor(@NotNull Plugin plugin);
++
+     /**
+      * Attempts to cancel all tasks scheduled by the specified plugin.
+      * @param plugin Specified plugin.
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
+index 7a7afd4ffb323dd55db13ef1a49c6594aeb5ffea..2c28425be48b5ec8bcbcaa4e002a34e8f445c60d 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
+@@ -5,6 +5,8 @@ import org.bukkit.World;
+ import org.bukkit.entity.Entity;
+ import org.bukkit.plugin.Plugin;
+ import org.jetbrains.annotations.NotNull;
++
++import java.util.concurrent.Executor;
+ import java.util.function.Consumer;
+ 
+ /**
+@@ -123,4 +125,26 @@ public interface RegionScheduler {
+                                                   long initialDelayTicks, long periodTicks) {
+         return this.runAtFixedRate(plugin, location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4, task, initialDelayTicks, periodTicks);
+     }
++
++    /**
++     * Returns an executor that will run tasks on the region which owns the location.
++     *
++     * @param plugin The plugin that owns the task
++     * @param world  The world of the region that owns the task
++     * @param chunkX The chunk X coordinate of the region that owns the task
++     * @param chunkZ The chunk Z coordinate of the region that owns the task
++     * @return An executor associated with the given region
++     */
++    @NotNull Executor getExecutor(@NotNull Plugin plugin, @NotNull World world, int chunkX, int chunkZ);
++
++    /**
++     * Returns an executor that will run tasks on the region which owns the location.
++     *
++     * @param plugin   The plugin that owns the task
++     * @param location The location at which the region executing should own
++     * @return An executor associated with the given region
++     */
++    default @NotNull Executor getExecutor(@NotNull Plugin plugin, @NotNull Location location) {
++        return getExecutor(plugin, location.getWorld(),location.getBlockX() >> 4, location.getBlockZ() >> 4);
++    }
+ }
