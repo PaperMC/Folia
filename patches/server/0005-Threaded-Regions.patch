@@ -1850,7 +1850,7 @@ index 3c17001bcd3862a76a22df488bff80a0ff4d1b83..b2fffaa862df045bacb346f3cbe7eb96
              }
          }
 diff --git a/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java b/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
-index 61d03808c8d1ab822d9b2f31fab0de14089a3b15..9051a556fea7ee35014db7bdd75b5476f672f5a9 100644
+index 61d03808c8d1ab822d9b2f31fab0de14089a3b15..370e649a255a456d7f901b22e26241e135009af7 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
 @@ -91,6 +91,9 @@ public final class ChunkSystem {
@@ -1863,7 +1863,7 @@ index 61d03808c8d1ab822d9b2f31fab0de14089a3b15..9051a556fea7ee35014db7bdd75b5476
      }
  
      public static void onChunkHolderDelete(final ServerLevel level, final ChunkHolder holder) {
-@@ -98,6 +101,9 @@ public final class ChunkSystem {
+@@ -98,30 +101,34 @@ public final class ChunkSystem {
          for (int index = 0, len = chunkMap.regionManagers.size(); index < len; ++index) {
              chunkMap.regionManagers.get(index).removeChunk(holder.pos.x, holder.pos.z);
          }
@@ -1873,7 +1873,13 @@ index 61d03808c8d1ab822d9b2f31fab0de14089a3b15..9051a556fea7ee35014db7bdd75b5476
      }
  
      public static void onChunkBorder(final LevelChunk chunk, final ChunkHolder holder) {
-@@ -109,19 +115,19 @@ public final class ChunkSystem {
+         chunk.playerChunk = holder;
++        chunk.level.getCurrentWorldData().addChunk(chunk); // Folia - region threading
+     }
+ 
+     public static void onChunkNotBorder(final LevelChunk chunk, final ChunkHolder holder) {
+-
++        chunk.level.getCurrentWorldData().removeChunk(chunk); // Folia - region threading
      }
  
      public static void onChunkTicking(final LevelChunk chunk, final ChunkHolder holder) {
@@ -1888,7 +1894,7 @@ index 61d03808c8d1ab822d9b2f31fab0de14089a3b15..9051a556fea7ee35014db7bdd75b5476
  
      public static void onChunkEntityTicking(final LevelChunk chunk, final ChunkHolder holder) {
 -        chunk.level.getChunkSource().entityTickingChunks.add(chunk);
-+        chunk.level.getCurrentWorldData().addEntityTickingChunks(chunk); // Folia - region threading
++        chunk.level.getCurrentWorldData().addEntityTickingChunk(chunk); // Folia - region threading
      }
  
      public static void onChunkNotEntityTicking(final LevelChunk chunk, final ChunkHolder holder) {
@@ -5171,10 +5177,10 @@ index 0000000000000000000000000000000000000000..ac043fbc74874c205b821c3d2d011b92
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b61f0171c4
+index 0000000000000000000000000000000000000000..89e6dc92bfbb28d20f252eca5257db1d3d042327
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
-@@ -0,0 +1,649 @@
+@@ -0,0 +1,685 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.destroystokyo.paper.util.maplist.ReferenceList;
@@ -5198,7 +5204,6 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +import net.minecraft.network.chat.Component;
 +import net.minecraft.network.chat.MutableComponent;
 +import net.minecraft.network.protocol.game.ClientboundDisconnectPacket;
-+import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -5498,6 +5503,7 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +
 +    // ticking chunks
 +    private final IteratorSafeOrderedReferenceSet<LevelChunk> entityTickingChunks = new IteratorSafeOrderedReferenceSet<>();
++    private final IteratorSafeOrderedReferenceSet<LevelChunk> chunks = new IteratorSafeOrderedReferenceSet<>();
 +
 +    // Paper/CB api hook misc
 +    // don't bother to merge/split these, no point
@@ -5659,6 +5665,14 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +    }
 +
 +    // entities hooks
++    public int getEntityCount() {
++        return this.allEntities.size();
++    }
++
++    public int getPlayerCount() {
++        return this.localPlayers.size();
++    }
++
 +    public Iterable<Entity> getLocalEntities() {
 +        return this.allEntities;
 +    }
@@ -5676,6 +5690,7 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +            throw new IllegalArgumentException("Entity " + entity + " is not under this region's control");
 +        }
 +        this.entityTickList.add(entity);
++        TickRegions.RegionStats.updateCurrentRegion();
 +    }
 +
 +    public boolean hasEntityTickingEntity(final Entity entity) {
@@ -5687,6 +5702,7 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +            throw new IllegalArgumentException("Entity " + entity + " is not under this region's control");
 +        }
 +        this.entityTickList.remove(entity);
++        TickRegions.RegionStats.updateCurrentRegion();
 +    }
 +
 +    public void forEachTickingEntity(final Consumer<Entity> action) {
@@ -5708,6 +5724,7 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +            if (entity instanceof ServerPlayer player) {
 +                this.localPlayers.add(player);
 +            }
++            TickRegions.RegionStats.updateCurrentRegion();
 +        }
 +    }
 +
@@ -5723,6 +5740,7 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +            if (entity instanceof ServerPlayer player) {
 +                this.localPlayers.remove(player);
 +            }
++            TickRegions.RegionStats.updateCurrentRegion();
 +        }
 +    }
 +
@@ -5812,16 +5830,40 @@ index 0000000000000000000000000000000000000000..f8eae93448d1d1c70bff68ff106139b6
 +    }
 +
 +    // ticking chunks
-+    public void addEntityTickingChunks(final LevelChunk levelChunk) {
++    public void addEntityTickingChunk(final LevelChunk levelChunk) {
 +        this.entityTickingChunks.add(levelChunk);
++        TickRegions.RegionStats.updateCurrentRegion();
 +    }
 +
 +    public void removeEntityTickingChunk(final LevelChunk levelChunk) {
 +        this.entityTickingChunks.remove(levelChunk);
++        TickRegions.RegionStats.updateCurrentRegion();
 +    }
 +
 +    public IteratorSafeOrderedReferenceSet<LevelChunk> getEntityTickingChunks() {
 +        return this.entityTickingChunks;
++    }
++
++    public void addChunk(final LevelChunk levelChunk) {
++        this.chunks.add(levelChunk);
++        TickRegions.RegionStats.updateCurrentRegion();
++    }
++
++    public void removeChunk(final LevelChunk levelChunk) {
++        this.chunks.remove(levelChunk);
++        TickRegions.RegionStats.updateCurrentRegion();
++    }
++
++    public IteratorSafeOrderedReferenceSet<LevelChunk> getChunks() {
++        return this.chunks;
++    }
++
++    public int getEntityTickingChunkCount() {
++        return this.entityTickingChunks.size();
++    }
++
++    public int getChunkCount() {
++        return this.chunks.size();
 +    }
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/Schedule.java b/src/main/java/io/papermc/paper/threadedregions/Schedule.java
@@ -8214,10 +8256,10 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f49ecb7bc
+index 0000000000000000000000000000000000000000..c6bc546b67c701f932e69630db1a5f83efc255fa
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,399 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -8235,6 +8277,7 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +import org.slf4j.Logger;
 +import java.util.Iterator;
 +import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicInteger;
 +import java.util.concurrent.atomic.AtomicLong;
 +import java.util.function.BooleanSupplier;
 +
@@ -8287,7 +8330,9 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +
 +    @Override
 +    public void onRegionCreate(final ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData> region) {
-+        // nothing for now
++        final TickRegionData data = region.getData();
++        // post-region merge/split regioninfo update
++        data.getRegionStats().updateFrom(data.getOrCreateRegionizedData(data.world.worldRegionData));
 +    }
 +
 +    @Override
@@ -8314,6 +8359,35 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +
 +    public static final class TickRegionSectionData implements ThreadedRegionizer.ThreadedRegionSectionData {}
 +
++    public static final class RegionStats {
++
++        private final AtomicInteger entityCount = new AtomicInteger();
++        private final AtomicInteger playerCount = new AtomicInteger();
++        private final AtomicInteger chunkCount = new AtomicInteger();
++
++        public int getEntityCount() {
++            return this.entityCount.get();
++        }
++
++        public int getPlayerCount() {
++            return this.playerCount.get();
++        }
++
++        public int getChunkCount() {
++            return this.chunkCount.get();
++        }
++
++        void updateFrom(final RegionizedWorldData data) {
++            this.entityCount.setRelease(data == null ? 0 : data.getEntityCount());
++            this.playerCount.setRelease(data == null ? 0 : data.getPlayerCount());
++            this.chunkCount.setRelease(data == null ? 0 : data.getChunkCount());
++        }
++
++        static void updateCurrentRegion() {
++            TickRegionScheduler.getCurrentRegion().getData().getRegionStats().updateFrom(TickRegionScheduler.getCurrentRegionizedWorldData());
++        }
++    }
++
 +    public static final class TickRegionData implements ThreadedRegionizer.ThreadedRegionData<TickRegionData, TickRegionSectionData> {
 +
 +        private static final AtomicLong ID_GENERATOR = new AtomicLong();
@@ -8335,10 +8409,18 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +        // chunk holder manager data
 +        private final ChunkHolderManager.HolderManagerRegionData holderManagerRegionData = new ChunkHolderManager.HolderManagerRegionData();
 +
++        // async-safe read-only region data
++        private final RegionStats regionStats;
++
 +        private TickRegionData(final ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData> region) {
 +            this.region = region;
 +            this.world = region.regioniser.world;
 +            this.taskQueueData = new RegionizedTaskQueue.RegionTaskQueueData(this.world.taskQueueRegionData);
++            this.regionStats = new RegionStats();
++        }
++
++        public RegionStats getRegionStats() {
++            return this.regionStats;
 +        }
 +
 +        public RegionizedTaskQueue.RegionTaskQueueData getTaskQueueData() {
@@ -8357,6 +8439,10 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +
 +        public ChunkHolderManager.HolderManagerRegionData getHolderManagerRegionData() {
 +            return this.holderManagerRegionData;
++        }
++
++        <T> T getRegionizedData(final RegionizedData<T> regionizedData) {
++            return (T)this.regionizedData.get(regionizedData);
 +        }
 +
 +        <T> T getOrCreateRegionizedData(final RegionizedData<T> regionizedData) {
@@ -8575,13 +8661,14 @@ index 0000000000000000000000000000000000000000..1cc7c32690ba7f7d7cdcbe239314f30f
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059abeb23db
+index 0000000000000000000000000000000000000000..3bcb1dc98c61e025874cc9e008faa722581a530c
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
-@@ -0,0 +1,330 @@
+@@ -0,0 +1,355 @@
 +package io.papermc.paper.threadedregions.commands;
 +
 +import io.papermc.paper.threadedregions.RegionizedServer;
++import io.papermc.paper.threadedregions.RegionizedWorldData;
 +import io.papermc.paper.threadedregions.ThreadedRegionizer;
 +import io.papermc.paper.threadedregions.TickData;
 +import io.papermc.paper.threadedregions.TickRegionScheduler;
@@ -8612,8 +8699,15 @@ index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059
 +
 +public final class CommandServerHealth extends Command {
 +
-+    private static final DecimalFormat TWO_DECIMAL_PLACES = new DecimalFormat("#0.00");
-+    private static final DecimalFormat ONE_DECIMAL_PLACES = new DecimalFormat("#0.0");
++    private static final ThreadLocal<DecimalFormat> TWO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
++        return new DecimalFormat("#,##0.00");
++    });
++    private static final ThreadLocal<DecimalFormat> ONE_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
++        return new DecimalFormat("#,##0.0");
++    });
++    private static final ThreadLocal<DecimalFormat> NO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
++        return new DecimalFormat("#,##0");
++    });
 +
 +    private static final TextColor HEADER = TextColor.color(79, 164, 240);
 +    private static final TextColor PRIMARY = TextColor.color(48, 145, 237);
@@ -8632,12 +8726,23 @@ index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059
 +                                              final boolean newline) {
 +        return Component.text()
 +            .append(Component.text(prefix, PRIMARY, TextDecoration.BOLD))
-+            .append(Component.text(ONE_DECIMAL_PLACES.format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
++            .append(Component.text(ONE_DECIMAL_PLACES.get().format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
 +            .append(Component.text("% util at ", PRIMARY))
-+            .append(Component.text(TWO_DECIMAL_PLACES.format(mspt), CommandUtil.getColourForMSPT(mspt)))
++            .append(Component.text(TWO_DECIMAL_PLACES.get().format(mspt), CommandUtil.getColourForMSPT(mspt)))
 +            .append(Component.text(" MSPT at ", PRIMARY))
-+            .append(Component.text(TWO_DECIMAL_PLACES.format(tps), CommandUtil.getColourForTPS(tps)))
++            .append(Component.text(TWO_DECIMAL_PLACES.get().format(tps), CommandUtil.getColourForTPS(tps)))
 +            .append(Component.text(" TPS" + (newline ? "\n" : ""), PRIMARY))
++            .build();
++    }
++
++    private static Component formatRegionStats(final TickRegions.RegionStats stats, final boolean newline) {
++        return Component.text()
++            .append(Component.text("Chunks: ", PRIMARY))
++            .append(Component.text(NO_DECIMAL_PLACES.get().format((long)stats.getChunkCount()), INFORMATION))
++            .append(Component.text(" Players: ", PRIMARY))
++            .append(Component.text(NO_DECIMAL_PLACES.get().format((long)stats.getPlayerCount()), INFORMATION))
++            .append(Component.text(" Entities: ", PRIMARY))
++            .append(Component.text(NO_DECIMAL_PLACES.get().format((long)stats.getEntityCount()) + (newline ? "\n" : ""), INFORMATION))
 +            .build();
 +    }
 +
@@ -8679,7 +8784,10 @@ index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059
 +                formatRegionInfo("15s: ", util15s, mspt15s, tps15s, true)
 +            )
 +            .append(
-+                formatRegionInfo("1m: ", util1m, mspt1m, tps1m, false)
++                formatRegionInfo("1m: ", util1m, mspt1m, tps1m, true)
++            )
++            .append(
++                formatRegionStats(region.getData().getRegionStats(), false)
 +            )
 +
 +            .build();
@@ -8807,12 +8915,15 @@ index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059
 +                .append(Component.text(":\n", PRIMARY))
 +
 +                .append(Component.text("    ", PRIMARY))
-+                .append(Component.text(ONE_DECIMAL_PLACES.format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
++                .append(Component.text(ONE_DECIMAL_PLACES.get().format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
 +                .append(Component.text("% util at ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.format(mspt), CommandUtil.getColourForMSPT(mspt)))
++                .append(Component.text(TWO_DECIMAL_PLACES.get().format(mspt), CommandUtil.getColourForMSPT(mspt)))
 +                .append(Component.text(" MSPT at ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.format(tps), CommandUtil.getColourForTPS(tps)))
-+                .append(Component.text(" TPS" + ((i + 1) == len ? "" : "\n"), PRIMARY))
++                .append(Component.text(TWO_DECIMAL_PLACES.get().format(tps), CommandUtil.getColourForTPS(tps)))
++                .append(Component.text(" TPS\n", PRIMARY))
++
++                .append(Component.text("    ", PRIMARY))
++                .append(formatRegionStats(region.getData().getRegionStats(), (i + 1) != len))
 +                .build()
 +
 +                .clickEvent(ClickEvent.clickEvent(ClickEvent.Action.RUN_COMMAND, "/minecraft:execute as @s in " + world.getWorld().getKey().toString() + " run tp " + centerBlockX + ".5 " + yLoc + " " + centerBlockZ + ".5"))
@@ -8835,23 +8946,23 @@ index 0000000000000000000000000000000000000000..1fc6814f48596169db00fdee480f5059
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Utilisation: ", PRIMARY))
-+                .append(Component.text(ONE_DECIMAL_PLACES.format(totalUtil * 100.0), CommandUtil.getUtilisationColourRegion(totalUtil / (double)maxThreadCount)))
++                .append(Component.text(ONE_DECIMAL_PLACES.get().format(totalUtil * 100.0), CommandUtil.getUtilisationColourRegion(totalUtil / (double)maxThreadCount)))
 +                .append(Component.text("% / ", PRIMARY))
-+                .append(Component.text(ONE_DECIMAL_PLACES.format(maxThreadCount * 100.0), INFORMATION))
++                .append(Component.text(ONE_DECIMAL_PLACES.get().format(maxThreadCount * 100.0), INFORMATION))
 +                .append(Component.text("%\n", PRIMARY))
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Lowest Region TPS: ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.format(minTps) + "\n", CommandUtil.getColourForTPS(minTps)))
++                .append(Component.text(TWO_DECIMAL_PLACES.get().format(minTps) + "\n", CommandUtil.getColourForTPS(minTps)))
 +
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Median Region TPS: ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.format(medianTps) + "\n", CommandUtil.getColourForTPS(medianTps)))
++                .append(Component.text(TWO_DECIMAL_PLACES.get().format(medianTps) + "\n", CommandUtil.getColourForTPS(medianTps)))
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Highest Region TPS: ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.format(maxTps) + "\n", CommandUtil.getColourForTPS(maxTps)))
++                .append(Component.text(TWO_DECIMAL_PLACES.get().format(maxTps) + "\n", CommandUtil.getColourForTPS(maxTps)))
 +
 +                .append(Component.text("Highest ", HEADER, TextDecoration.BOLD))
 +                .append(Component.text(Integer.toString(lowestRegionsCount), INFORMATION, TextDecoration.BOLD))
