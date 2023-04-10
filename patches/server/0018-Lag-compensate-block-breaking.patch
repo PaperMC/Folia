@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Mon, 10 Apr 2023 14:14:31 -0700
+Subject: [PATCH] Lag compensate block breaking
+
+Due to TPS catchup being removed, a lost tick will always
+affect block breaking.
+
+Additionally, constant low TPS would affect block breaking
+in an intrusive manner to the user when there is no need
+for that to occur.
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
+index 89e6dc92bfbb28d20f252eca5257db1d3d042327..5f609782fceda0fdc856123ca8d40d3f8b13b10b 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
++++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
+@@ -432,11 +432,25 @@ public final class RegionizedWorldData {
+         return this.tickData;
+     }
+ 
++    // Folia start - lag compensation
++    public static final long SERVER_INIT = System.nanoTime();
++
++    private long lagCompensationTick;
++
++    public long getLagCompensationTick() {
++        return this.lagCompensationTick;
++    }
++    // Folia end - lag compensation
++
+     public void updateTickData() {
+         this.tickData = this.world.tickData;
+         this.hasPhysicsEvent = org.bukkit.event.block.BlockPhysicsEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper
+         this.hasEntityMoveEvent = io.papermc.paper.event.entity.EntityMoveEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper
+         this.skipHopperEvents = this.world.paperConfig().hopper.disableMoveEvent || org.bukkit.event.inventory.InventoryMoveItemEvent.getHandlerList().getRegisteredListeners().length == 0; // Paper
++        // Folia start - lag compensation
++        // always subtract from server init so that the tick starts at zero, allowing us to cast to int without much worry
++        this.lagCompensationTick = (System.nanoTime() - SERVER_INIT) / TickRegionScheduler.TIME_BETWEEN_TICKS;
++        // Folia end - lag compensation
+     }
+ 
+     // connections
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
+index 59a9a9633ac924c606564b75298fae22f1ffd4ec..33cc8db1892d6c876c2510bd14546766ab7e21e3 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
+@@ -123,7 +123,7 @@ public class ServerPlayerGameMode {
+     }
+ 
+     public void tick() {
+-        ++this.gameTicks; // CraftBukkit; // Folia - region threading
++        this.gameTicks = (int)this.level.getCurrentWorldData().getLagCompensationTick(); // CraftBukkit; // Folia - region threading // Folia - lag compensation
+         BlockState iblockdata;
+ 
+         if (this.hasDelayedDestroy) {
