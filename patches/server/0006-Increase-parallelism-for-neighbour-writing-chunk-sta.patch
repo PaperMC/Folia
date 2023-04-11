@@ -10,29 +10,10 @@ will allow the chunk system to scale beyond 10 threads
 per world.
 
 diff --git a/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
-index 5b4025178c1e476ed5dd0808cc33bf1ec7c08b66..ae11120ac1829b237970ac1f9bf90005ce5af2cf 100644
+index 88c48279d04b2bc5a67de0fdbd2c266516cbcd49..d52a522fe6d5c4375862691fa32450bc458ca38b 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
-@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
- import it.unimi.dsi.fastutil.longs.LongArrayList;
- import it.unimi.dsi.fastutil.longs.LongComparator;
- import it.unimi.dsi.fastutil.longs.LongHeapPriorityQueue;
-+import it.unimi.dsi.fastutil.longs.LongIterator;
- import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
- import net.minecraft.network.protocol.Packet;
- import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
-@@ -30,8 +31,9 @@ import net.minecraft.world.level.levelgen.BelowZeroRetrogen;
- import org.apache.commons.lang3.mutable.MutableObject;
- import org.bukkit.craftbukkit.entity.CraftPlayer;
- import org.bukkit.entity.Player;
--
- import java.util.ArrayDeque;
-+import java.util.ArrayList;
-+import java.util.List;
- import java.util.concurrent.TimeUnit;
- import java.util.concurrent.atomic.AtomicLong;
- 
-@@ -288,7 +290,92 @@ public class RegionizedPlayerChunkLoader {
+@@ -286,7 +286,92 @@ public class RegionizedPlayerChunkLoader {
              }
          }
  
@@ -42,8 +23,8 @@ index 5b4025178c1e476ed5dd0808cc33bf1ec7c08b66..ae11120ac1829b237970ac1f9bf90005
 +        // but, we need to maintain sorted order by manhatten distance
 +
 +        // first, build a map of manhatten distance -> chunks
-+        final List<LongArrayList> byDistance = new ArrayList<>();
-+        for (final LongIterator iterator = chunks.iterator(); iterator.hasNext();) {
++        final java.util.List<LongArrayList> byDistance = new java.util.ArrayList<>();
++        for (final it.unimi.dsi.fastutil.longs.LongIterator iterator = chunks.iterator(); iterator.hasNext();) {
 +            final long chunkKey = iterator.nextLong();
 +
 +            final int chunkX = CoordinateUtils.getChunkX(chunkKey);
@@ -77,14 +58,14 @@ index 5b4025178c1e476ed5dd0808cc33bf1ec7c08b66..ae11120ac1829b237970ac1f9bf90005
 +                // select the chunk from the not yet added set that has the largest minimum distance from
 +                // the current set of added chunks
 +
-+                for (final LongIterator iterator = notAdded.iterator(); iterator.hasNext();) {
++                for (final it.unimi.dsi.fastutil.longs.LongIterator iterator = notAdded.iterator(); iterator.hasNext();) {
 +                    final long chunkKey = iterator.nextLong();
 +                    final int chunkX = CoordinateUtils.getChunkX(chunkKey);
 +                    final int chunkZ = CoordinateUtils.getChunkZ(chunkKey);
 +
 +                    int minDist = Integer.MAX_VALUE;
 +
-+                    for (final LongIterator iterator2 = added.iterator(); iterator2.hasNext();) {
++                    for (final it.unimi.dsi.fastutil.longs.LongIterator iterator2 = added.iterator(); iterator2.hasNext();) {
 +                        final long addedKey = iterator2.nextLong();
 +                        final int addedX = CoordinateUtils.getChunkX(addedKey);
 +                        final int addedZ = CoordinateUtils.getChunkZ(addedKey);
@@ -233,7 +214,7 @@ index 9ac75b6c9d9698c6369978c4b004a82aa2b747f4..aa6dad3a41077b187ef0702cb27ca03f
      }
  
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
-index 25db30284e3bab9ebad1ca7320db66116057e599..18c543e33ac2f3c3dbfa5a8531b9e532987dbe9d 100644
+index c185a85e18932ac8ee96a01779e1e1a580197613..5ca4e9c85c957c669d54fd9e5e52f13502b592da 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
 @@ -2,9 +2,9 @@ package io.papermc.paper.chunk.system.scheduling;
@@ -263,7 +244,7 @@ index 25db30284e3bab9ebad1ca7320db66116057e599..18c543e33ac2f3c3dbfa5a8531b9e532
  import java.util.function.Consumer;
  
  public final class ChunkTaskScheduler {
-@@ -108,9 +106,9 @@ public final class ChunkTaskScheduler {
+@@ -112,9 +110,9 @@ public final class ChunkTaskScheduler {
  
      public final ServerLevel world;
      public final PrioritisedThreadPool workers;
@@ -275,7 +256,7 @@ index 25db30284e3bab9ebad1ca7320db66116057e599..18c543e33ac2f3c3dbfa5a8531b9e532
      public final PrioritisedThreadPool.PrioritisedPoolExecutor loadExecutor;
  
      // Folia - regionised ticking
-@@ -128,7 +126,7 @@ public final class ChunkTaskScheduler {
+@@ -132,7 +130,7 @@ public final class ChunkTaskScheduler {
          ChunkStatus.CARVERS.writeRadius = 0;
          ChunkStatus.LIQUID_CARVERS.writeRadius = 0;
          ChunkStatus.FEATURES.writeRadius = 1;
@@ -284,7 +265,7 @@ index 25db30284e3bab9ebad1ca7320db66116057e599..18c543e33ac2f3c3dbfa5a8531b9e532
          ChunkStatus.SPAWN.writeRadius = 0;
          ChunkStatus.HEIGHTMAPS.writeRadius = 0;
          ChunkStatus.FULL.writeRadius = 0;
-@@ -196,12 +194,11 @@ public final class ChunkTaskScheduler {
+@@ -200,12 +198,11 @@ public final class ChunkTaskScheduler {
          this.workers = workers;
  
          final String worldName = world.getWorld().getName();
@@ -301,7 +282,7 @@ index 25db30284e3bab9ebad1ca7320db66116057e599..18c543e33ac2f3c3dbfa5a8531b9e532
          this.chunkHolderManager = new ChunkHolderManager(world, this);
      }
  
-@@ -740,8 +737,7 @@ public final class ChunkTaskScheduler {
+@@ -744,8 +741,7 @@ public final class ChunkTaskScheduler {
      // Folia - regionised ticking
  
      public boolean halt(final boolean sync, final long maxWaitNS) {
@@ -311,7 +292,7 @@ index 25db30284e3bab9ebad1ca7320db66116057e599..18c543e33ac2f3c3dbfa5a8531b9e532
          this.parallelGenExecutor.halt();
          this.loadExecutor.halt();
          final long time = System.nanoTime();
-@@ -749,8 +745,7 @@ public final class ChunkTaskScheduler {
+@@ -753,8 +749,7 @@ public final class ChunkTaskScheduler {
              // start at 10 * 0.5ms -> 5ms
              for (long failures = 9L;; failures = ConcurrentUtil.linearLongBackoff(failures, 500_000L, 50_000_000L)) {
                  if (

@@ -4,6 +4,21 @@ Date: Wed, 1 Feb 2023 21:06:31 -0800
 Subject: [PATCH] New player chunk loader system
 
 
+diff --git a/src/main/java/ca/spottedleaf/concurrentutil/executor/standard/PrioritisedThreadPool.java b/src/main/java/ca/spottedleaf/concurrentutil/executor/standard/PrioritisedThreadPool.java
+index 26fa2caa18a9194e57574a4a7fa9f7a4265740e0..5aa1c61a8a82c91514d35df62db7f4bd67aa27a1 100644
+--- a/src/main/java/ca/spottedleaf/concurrentutil/executor/standard/PrioritisedThreadPool.java
++++ b/src/main/java/ca/spottedleaf/concurrentutil/executor/standard/PrioritisedThreadPool.java
+@@ -71,6 +71,10 @@ public final class PrioritisedThreadPool {
+         return Arrays.copyOf(this.threads, this.threads.length, Thread[].class);
+     }
+ 
++    public int getThreadCount() {
++        return this.threads.length;
++    }
++
+     public PrioritisedPoolExecutor createExecutor(final String name, final int parallelism) {
+         synchronized (this.nonShutdownQueues) {
+             if (this.shutdown) {
 diff --git a/src/main/java/co/aikar/timings/TimingsExport.java b/src/main/java/co/aikar/timings/TimingsExport.java
 index c07eb451a576811a39021f6f97103c77488fd001..a2f71a6d1a9e98133dff6cd0f625da9435a8af14 100644
 --- a/src/main/java/co/aikar/timings/TimingsExport.java
@@ -46,18 +61,20 @@ index 0e45a340ae534caf676b7f9d0adcbcee5829925e..61d03808c8d1ab822d9b2f31fab0de14
      private ChunkSystem() {
 diff --git a/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff541d3a85
+index 0000000000000000000000000000000000000000..63c69c4da5fcbd5901c9fc3427f69626e16492ee
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
-@@ -0,0 +1,1304 @@
+@@ -0,0 +1,1332 @@
 +package io.papermc.paper.chunk.system;
 +
++import ca.spottedleaf.concurrentutil.collection.SRSWLinkedQueue;
 +import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor;
++import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
++import io.papermc.paper.chunk.system.io.RegionFileIOThread;
 +import io.papermc.paper.chunk.system.scheduling.ChunkHolderManager;
 +import io.papermc.paper.configuration.GlobalConfiguration;
 +import io.papermc.paper.util.CoordinateUtils;
 +import io.papermc.paper.util.IntegerUtil;
-+import io.papermc.paper.util.IntervalledCounter;
 +import io.papermc.paper.util.TickThread;
 +import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 +import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
@@ -82,7 +99,7 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +import org.apache.commons.lang3.mutable.MutableObject;
 +import org.bukkit.craftbukkit.entity.CraftPlayer;
 +import org.bukkit.entity.Player;
-+
++import java.lang.invoke.VarHandle;
 +import java.util.ArrayDeque;
 +import java.util.concurrent.TimeUnit;
 +import java.util.concurrent.atomic.AtomicLong;
@@ -284,16 +301,14 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +    public void tick() {
 +        TickThread.ensureTickThread("Cannot tick player chunk loader async");
 +        long currTime = System.nanoTime();
-+        for (final ServerPlayer player : this.world.players()) {
-+            player.chunkLoader.update();
-+            player.chunkLoader.midTickUpdate(currTime);
-+        }
-+    }
-+
-+    public void tickMidTick() {
-+        final long time = System.nanoTime();
-+        for (final ServerPlayer player : this.world.players()) {
-+            player.chunkLoader.midTickUpdate(time);
++        for (final ServerPlayer player : new java.util.ArrayList<>(this.world.players())) {
++            final PlayerChunkLoaderData loader = player.chunkLoader;
++            if (loader == null || loader.world != this.world) {
++                // not our problem anymore
++                continue;
++            }
++            loader.update(); // can't invoke plugin logic
++            loader.updateQueues(currTime);
 +        }
 +    }
 +
@@ -357,6 +372,8 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            }
 +        }
 +
++        private static final long MAX_RATE = 10_000L;
++
 +        private final ServerPlayer player;
 +        private final ServerLevel world;
 +
@@ -398,15 +415,9 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +        }
 +
 +        // rate limiting
-+        private final MultiIntervalledCounter chunkSendCounter = new MultiIntervalledCounter(
-+            TimeUnit.MILLISECONDS.toNanos(50L), TimeUnit.MILLISECONDS.toNanos(250L), TimeUnit.SECONDS.toNanos(1L)
-+        );
-+        private final MultiIntervalledCounter chunkLoadTicketCounter = new MultiIntervalledCounter(
-+            TimeUnit.MILLISECONDS.toNanos(50L), TimeUnit.MILLISECONDS.toNanos(250L), TimeUnit.SECONDS.toNanos(1L)
-+        );
-+        private final MultiIntervalledCounter chunkGenerateTicketCounter = new MultiIntervalledCounter(
-+            TimeUnit.MILLISECONDS.toNanos(50L), TimeUnit.MILLISECONDS.toNanos(250L), TimeUnit.SECONDS.toNanos(1L)
-+        );
++        private final AllocatingRateLimiter chunkSendLimiter = new AllocatingRateLimiter();
++        private final AllocatingRateLimiter chunkLoadTicketLimiter = new AllocatingRateLimiter();
++        private final AllocatingRateLimiter chunkGenerateTicketLimiter = new AllocatingRateLimiter();
 +
 +        // queues
 +        private final LongComparator CLOSEST_MANHATTAN_DIST = (final long c1, final long c2) -> {
@@ -430,6 +441,8 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +        private final LongHeapPriorityQueue genQueue = new LongHeapPriorityQueue(CLOSEST_MANHATTAN_DIST);
 +        private final LongHeapPriorityQueue loadingQueue = new LongHeapPriorityQueue(CLOSEST_MANHATTAN_DIST);
 +        private final LongHeapPriorityQueue loadQueue = new LongHeapPriorityQueue(CLOSEST_MANHATTAN_DIST);
++
++        private volatile boolean removed;
 +
 +        public PlayerChunkLoaderData(final ServerLevel world, final ServerPlayer player) {
 +            this.world = world;
@@ -581,68 +594,50 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            return !this.player.isSpectator() || this.world.getGameRules().getBoolean(GameRules.RULE_SPECTATORSGENERATECHUNKS);
 +        }
 +
-+        private int getMaxChunkLoads() {
-+            final int radiusChunks = (2 * this.lastLoadDistance + 1) * (2 * this.lastLoadDistance + 1);
-+            int configLimit = GlobalConfiguration.get().chunkLoadingAdvanced.playerMaxConcurrentChunkLoads;
-+            if (configLimit == 0) {
-+                // by default, only allow 1/10th of the chunks in the view distance to be concurrently active
-+                configLimit = Math.max(5, radiusChunks / 10);
-+            } else if (configLimit < 0) {
++        private double getMaxChunkLoadRate() {
++            final double configRate = GlobalConfiguration.get().chunkLoadingBasic.playerMaxChunkLoadRate;
++
++            return configRate < 0.0 || configRate > (double)MAX_RATE ? (double)MAX_RATE : Math.max(1.0, configRate);
++        }
++
++        private double getMaxChunkGenRate() {
++            final double configRate = GlobalConfiguration.get().chunkLoadingBasic.playerMaxChunkGenerateRate;
++
++            return configRate < 0.0 || configRate > (double)MAX_RATE ? (double)MAX_RATE : Math.max(1.0, configRate);
++        }
++
++        private double getMaxChunkSendRate() {
++            final double configRate = GlobalConfiguration.get().chunkLoadingBasic.playerMaxChunkSendRate;
++
++            return configRate < 0.0 || configRate > (double)MAX_RATE ? (double)MAX_RATE : Math.max(1.0, configRate);
++        }
++
++        private long getMaxChunkLoads() {
++            final long radiusChunks = (2L * this.lastLoadDistance + 1L) * (2L * this.lastLoadDistance + 1L);
++            long configLimit = GlobalConfiguration.get().chunkLoadingAdvanced.playerMaxConcurrentChunkLoads;
++            if (configLimit == 0L) {
++                // by default, only allow 1/5th of the chunks in the view distance to be concurrently active
++                configLimit = Math.max(5L, radiusChunks / 5L);
++            } else if (configLimit < 0L) {
 +                configLimit = Integer.MAX_VALUE;
 +            } // else: use the value configured
 +            configLimit = configLimit - this.loadingQueue.size();
 +
-+            int rateLimit;
-+            double configRate = GlobalConfiguration.get().chunkLoadingBasic.playerMaxChunkLoadRate;
-+            if (configRate < 0.0 || configRate > (1000.0 * (double)radiusChunks)) {
-+                // getMaxCountBeforeViolation may not work with large config rates, so by checking against the load count we ensure
-+                // there are no issues with the cast to integer
-+                rateLimit = Integer.MAX_VALUE;
-+            } else {
-+                rateLimit = (int)this.chunkLoadTicketCounter.getMaxCountBeforeViolation(configRate);
-+            }
-+
-+            return Math.min(configLimit, rateLimit);
++            return configLimit;
 +        }
 +
-+        private int getMaxChunkGenerates() {
-+            final int radiusChunks = (2 * this.lastLoadDistance + 1) * (2 * this.lastLoadDistance + 1);
-+            int configLimit = GlobalConfiguration.get().chunkLoadingAdvanced.playerMaxConcurrentChunkGenerates;
-+            if (configLimit == 0) {
-+                // by default, only allow 1/10th of the chunks in the view distance to be concurrently active
-+                configLimit = Math.max(5, radiusChunks / 10);
-+            } else if (configLimit < 0) {
++        private long getMaxChunkGenerates() {
++            final long radiusChunks = (2L * this.lastLoadDistance + 1L) * (2L * this.lastLoadDistance + 1L);
++            long configLimit = GlobalConfiguration.get().chunkLoadingAdvanced.playerMaxConcurrentChunkGenerates;
++            if (configLimit == 0L) {
++                // by default, only allow 1/5th of the chunks in the view distance to be concurrently active
++                configLimit = Math.max(5L, radiusChunks / 5L);
++            } else if (configLimit < 0L) {
 +                configLimit = Integer.MAX_VALUE;
 +            } // else: use the value configured
 +            configLimit = configLimit - this.generatingQueue.size();
 +
-+            int rateLimit;
-+            double configRate = GlobalConfiguration.get().chunkLoadingBasic.playerMaxChunkGenerateRate;
-+            if (configRate < 0.0 || configRate > (1000.0 * (double)radiusChunks)) {
-+                // getMaxCountBeforeViolation may not work with large config rates, so by checking against the load count we ensure
-+                // there are no issues with the cast to integer
-+                rateLimit = Integer.MAX_VALUE;
-+            } else {
-+                rateLimit = (int)this.chunkGenerateTicketCounter.getMaxCountBeforeViolation(configRate);
-+            }
-+
-+            return Math.min(configLimit, rateLimit);
-+        }
-+
-+        private int getMaxChunkSends() {
-+            final int radiusChunks = (2 * this.lastSendDistance + 1) * (2 * this.lastSendDistance + 1);
-+
-+            int rateLimit;
-+            double configRate = GlobalConfiguration.get().chunkLoadingBasic.playerMaxChunkSendRate;
-+            if (configRate < 0.0 || configRate > (1000.0 * (double)radiusChunks)) {
-+                // getMaxCountBeforeViolation may not work with large config rates, so by checking against the load count we ensure
-+                // there are no issues with the cast to integer
-+                rateLimit = Integer.MAX_VALUE;
-+            } else {
-+                rateLimit = (int)this.chunkSendCounter.getMaxCountBeforeViolation(configRate);
-+            }
-+
-+            return rateLimit;
++            return configLimit;
 +        }
 +
 +        private boolean wantChunkSent(final int chunkX, final int chunkZ) {
@@ -659,12 +654,19 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            return Math.max(Math.abs(dx), Math.abs(dz)) <= this.lastTickDistance;
 +        }
 +
-+        void midTickUpdate(final long time) {
++        void updateQueues(final long time) {
 +            TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async");
++            if (this.removed) {
++                throw new IllegalStateException("Ticking removed player chunk loader");
++            }
 +            // update rate limits
-+            this.chunkSendCounter.update(time);
-+            this.chunkGenerateTicketCounter.update(time);
-+            this.chunkLoadTicketCounter.update(time);
++            final double loadRate = this.getMaxChunkLoadRate();
++            final double genRate = this.getMaxChunkGenRate();
++            final double sendRate = this.getMaxChunkSendRate();
++
++            this.chunkLoadTicketLimiter.tickAllocation(time, loadRate, loadRate);
++            this.chunkGenerateTicketLimiter.tickAllocation(time, genRate, genRate);
++            this.chunkSendLimiter.tickAllocation(time, sendRate, sendRate);
 +
 +            // try to progress chunk loads
 +            while (!this.loadingQueue.isEmpty()) {
@@ -691,11 +693,11 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            }
 +
 +            // try to push more chunk loads
-+            int loadSlots;
-+            while ((loadSlots = Math.min(this.getMaxChunkLoads(), this.loadQueue.size())) > 0) {
-+                final LongArrayList chunks = new LongArrayList(loadSlots);
-+                int actualLoadsQueued = 0;
-+                for (int i = 0; i < loadSlots; ++i) {
++            final long maxLoads = Math.max(0L, Math.min(MAX_RATE, Math.min(this.loadQueue.size(), this.getMaxChunkLoads())));
++            final int maxLoadsThisTick = (int)this.chunkLoadTicketLimiter.takeAllocation(time, loadRate, maxLoads);
++            if (maxLoadsThisTick > 0) {
++                final LongArrayList chunks = new LongArrayList(maxLoadsThisTick);
++                for (int i = 0; i < maxLoadsThisTick; ++i) {
 +                    final long chunk = this.loadQueue.dequeueLong();
 +                    final byte prev = this.chunkTicketStage.put(chunk, CHUNK_TICKET_STAGE_LOADING);
 +                    if (prev != CHUNK_TICKET_STAGE_NONE) {
@@ -709,14 +711,6 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +                    );
 +                    chunks.add(chunk);
 +                    this.loadingQueue.enqueue(chunk);
-+
-+                    if (this.world.chunkSource.getChunkAtImmediately(CoordinateUtils.getChunkX(chunk), CoordinateUtils.getChunkZ(chunk)) == null) {
-+                        // this is a good enough approximation for counting, but NOT for actual state management
-+                        ++actualLoadsQueued;
-+                    }
-+                }
-+                if (actualLoadsQueued > 0) {
-+                    this.chunkLoadTicketCounter.addTime(time, (long)actualLoadsQueued);
 +                }
 +
 +                // here we need to flush tickets, as scheduleChunkLoad requires tickets to be propagated with addTicket = false
@@ -727,13 +721,21 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +                // Note: this CAN call plugin logic, so it is VITAL that our bookkeeping logic is completely done by the time this is invoked
 +                this.world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
 +
-+                for (int i = 0; i < loadSlots; ++i) {
++                if (this.removed) {
++                    // process ticket updates may invoke plugin logic, which may remove this player
++                    return;
++                }
++
++                for (int i = 0; i < maxLoadsThisTick; ++i) {
 +                    final long queuedLoadChunk = chunks.getLong(i);
 +                    final int queuedChunkX = CoordinateUtils.getChunkX(queuedLoadChunk);
 +                    final int queuedChunkZ = CoordinateUtils.getChunkZ(queuedLoadChunk);
 +                    this.world.chunkTaskScheduler.scheduleChunkLoad(
 +                        queuedChunkX, queuedChunkZ, ChunkStatus.EMPTY, false, PrioritisedExecutor.Priority.NORMAL, null
 +                    );
++                    if (this.removed) {
++                        return;
++                    }
 +                }
 +            }
 +
@@ -767,32 +769,22 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            }
 +
 +            // try to push more chunk generations
-+            int genSlots;
-+            while ((genSlots = Math.min(this.getMaxChunkGenerates(), this.genQueue.size())) > 0) {
-+                int actualGenerationsQueued = 0;
-+                for (int i = 0; i < genSlots; ++i) {
-+                    final long chunk = this.genQueue.dequeueLong();
-+                    final byte prev = this.chunkTicketStage.put(chunk, CHUNK_TICKET_STAGE_GENERATING);
-+                    if (prev != CHUNK_TICKET_STAGE_LOADED) {
-+                        throw new IllegalStateException("Previous state should be " + CHUNK_TICKET_STAGE_LOADED + ", not " + prev);
-+                    }
-+                    this.pushDelayedTicketOp(
-+                        ChunkHolderManager.TicketOperation.addAndRemove(
-+                            chunk,
-+                            REGION_PLAYER_TICKET, GENERATED_TICKET_LEVEL, this.idBoxed,
-+                            REGION_PLAYER_TICKET, LOADED_TICKET_LEVEL, this.idBoxed
-+                        )
-+                    );
-+                    this.generatingQueue.enqueue(chunk);
-+                    final ChunkAccess existingChunk = this.world.chunkSource.getChunkAtImmediately(CoordinateUtils.getChunkX(chunk), CoordinateUtils.getChunkZ(chunk));
-+                    if (existingChunk == null || !existingChunk.getStatus().isOrAfter(ChunkStatus.FULL)) {
-+                        // this is a good enough approximation for counting, but NOT for actual state management
-+                        ++actualGenerationsQueued;
-+                    }
++            final long maxGens = Math.max(0L, Math.min(MAX_RATE, Math.min(this.genQueue.size(), this.getMaxChunkGenerates())));
++            final int maxGensThisTick = (int)this.chunkGenerateTicketLimiter.takeAllocation(time, genRate, maxGens);
++            for (int i = 0; i < maxGensThisTick; ++i) {
++                final long chunk = this.genQueue.dequeueLong();
++                final byte prev = this.chunkTicketStage.put(chunk, CHUNK_TICKET_STAGE_GENERATING);
++                if (prev != CHUNK_TICKET_STAGE_LOADED) {
++                    throw new IllegalStateException("Previous state should be " + CHUNK_TICKET_STAGE_LOADED + ", not " + prev);
 +                }
-+                if (actualGenerationsQueued > 0) {
-+                    this.chunkGenerateTicketCounter.addTime(time, (long)actualGenerationsQueued);
-+                }
++                this.pushDelayedTicketOp(
++                    ChunkHolderManager.TicketOperation.addAndRemove(
++                        chunk,
++                        REGION_PLAYER_TICKET, GENERATED_TICKET_LEVEL, this.idBoxed,
++                        REGION_PLAYER_TICKET, LOADED_TICKET_LEVEL, this.idBoxed
++                    )
++                );
++                this.generatingQueue.enqueue(chunk);
 +            }
 +
 +            // try to pull ticking chunks
@@ -832,23 +824,26 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            }
 +
 +            // try to pull sending chunks
-+            final int maxSends = this.getMaxChunkSends();
-+            final int sendSlots = Math.min(maxSends, this.sendQueue.size());
-+            for (int i = 0; i < sendSlots; ++i) {
++            final long maxSends = Math.max(0L, Math.min(MAX_RATE, Integer.MAX_VALUE)); // no logic to track concurrent sends
++            final int maxSendsThisTick = Math.min((int)this.chunkSendLimiter.takeAllocation(time, sendRate, maxSends), this.sendQueue.size());
++            // we do not return sends that we took from the allocation back because we want to limit the max send rate, not target it
++            for (int i = 0; i < maxSendsThisTick; ++i) {
 +                final long pendingSend = this.sendQueue.firstLong();
 +                final int pendingSendX = CoordinateUtils.getChunkX(pendingSend);
 +                final int pendingSendZ = CoordinateUtils.getChunkZ(pendingSend);
 +                final LevelChunk chunk = this.world.chunkSource.getChunkAtIfLoadedMainThreadNoCache(pendingSendX, pendingSendZ);
-+                if (!chunk.areNeighboursLoaded(1)) {
++                if (!chunk.areNeighboursLoaded(1) || !TickThread.isTickThreadFor(this.world, pendingSendX, pendingSendZ)) {
 +                    // nothing to do
++                    // the target chunk may not be owned by this region, but this should be resolved in the future
 +                    break;
 +                }
 +                this.sendQueue.dequeueLong();
 +
 +                this.sendChunk(pendingSendX, pendingSendZ);
-+            }
-+            if (sendSlots > 0) {
-+                this.chunkSendCounter.addTime(time, sendSlots);
++                if (this.removed) {
++                    // sendChunk may invoke plugin logic
++                    return;
++                }
 +            }
 +
 +            this.flushDelayedTicketOps();
@@ -856,6 +851,10 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +        }
 +
 +        void add() {
++            TickThread.ensureTickThread(this.player, "Cannot add player asynchronously");
++            if (this.removed) {
++                throw new IllegalStateException("Adding removed player chunk loader");
++            }
 +            final ViewDistances playerDistances = this.player.getViewDistances();
 +            final ViewDistances worldDistances = this.world.getViewDistances();
 +            final int chunkX = this.player.chunkPosition().x;
@@ -897,6 +896,10 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +        }
 +
 +        void update() {
++            TickThread.ensureTickThread(this.player, "Cannot update player asynchronously");
++            if (this.removed) {
++                throw new IllegalStateException("Updating removed player chunk loader");
++            }
 +            final ViewDistances playerDistances = this.player.getViewDistances();
 +            final ViewDistances worldDistances = this.world.getViewDistances();
 +
@@ -1042,6 +1045,11 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +        }
 +
 +        void remove() {
++            TickThread.ensureTickThread(this.player, "Cannot add player asynchronously");
++            if (this.removed) {
++                throw new IllegalStateException("Removing removed player chunk loader");
++            }
++            this.removed = true;
 +            // sends the chunk unload packets
 +            this.broadcastMap.remove();
 +            // cleans up loading/generating tickets
@@ -1064,68 +1072,48 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +        }
 +    }
 +
-+    private static final class MultiIntervalledCounter {
++    // TODO rebase into util patch
++    private static final class AllocatingRateLimiter {
 +
-+        private final IntervalledCounter[] counters;
++        // max difference granularity in ns
++        private static final long MAX_GRANULARITY = TimeUnit.SECONDS.toNanos(1L);
 +
-+        public MultiIntervalledCounter(final long... intervals) {
-+            final IntervalledCounter[] counters = new IntervalledCounter[intervals.length];
-+            for (int i = 0; i < intervals.length; ++i) {
-+                counters[i] = new IntervalledCounter(intervals[i]);
-+            }
-+            this.counters = counters;
++        private double allocation;
++        private long lastAllocationUpdate;
++        private double takeCarry;
++        private long lastTakeUpdate;
++
++        // rate in units/s, and time in ns
++        public void tickAllocation(final long time, final double rate, final double maxAllocation) {
++            final long diff = Math.min(MAX_GRANULARITY, time - this.lastAllocationUpdate);
++            this.lastAllocationUpdate = time;
++
++            this.allocation = Math.min(maxAllocation - this.takeCarry, this.allocation + rate * (diff*1.0E-9D));
 +        }
 +
-+        public long getMaxCountBeforeViolation(final double rate) {
-+            long count = Long.MAX_VALUE;
-+            for (final IntervalledCounter counter : this.counters) {
-+                final long sum = counter.getSum();
-+                final long interval = counter.getInterval();
-+                // rate = sum / interval
-+                // so, sum = rate*interval
-+                final long maxSum = (long)Math.ceil(rate * (1.0E-9 * (double)interval));
-+                final long diff = maxSum - sum;
-+                if (diff < count) {
-+                    count = diff;
-+                }
++        // rate in units/s, and time in ns
++        public long takeAllocation(final long time, final double rate, final long maxTake) {
++            if (maxTake < 1L) {
++                return 0L;
 +            }
 +
-+            return Math.max(0L, count);
-+        }
++            double ret = this.takeCarry;
++            final long diff = Math.min(MAX_GRANULARITY, time - this.lastTakeUpdate);
++            this.lastTakeUpdate = time;
 +
-+        public void update(final long time) {
-+            for (final IntervalledCounter counter : this.counters) {
-+                counter.updateCurrentTime(time);
-+            }
-+        }
++            // note: abs(takeCarry) <= 1.0
++            final double take = Math.min(Math.min((double)maxTake - this.takeCarry, this.allocation), rate * (diff*1.0E-9));
 +
-+        public void updateAndAdd(final long count, final long time) {
-+            for (final IntervalledCounter counter : this.counters) {
-+                counter.updateAndAdd(count, time);
-+            }
-+        }
++            ret += take;
++            this.allocation -= take;
 +
-+        public void addTime(final long time, final long count) {
-+            for (final IntervalledCounter counter : this.counters) {
-+                counter.addTime(time, count);
-+            }
-+        }
++            final long retInteger = (long)Math.floor(ret);
++            this.takeCarry = ret - (double)retInteger;
 +
-+        public double getMaxRate() {
-+            double ret = 0.0;
-+
-+            for (final IntervalledCounter counter : this.counters) {
-+                final double counterRate = counter.getRate();
-+                if (counterRate > ret) {
-+                    ret = counterRate;
-+                }
-+            }
-+
-+            return ret;
++            return retInteger;
 +        }
 +    }
 +
-+    // TODO rebase into util patch
 +    public static abstract class SingleUserAreaMap<T> {
 +
 +        private static final int NOT_SET = Integer.MIN_VALUE;
@@ -1353,6 +1341,61 @@ index 0000000000000000000000000000000000000000..99dc2038aa4fb0f70dc3670e451018ff
 +            return true;
 +        }
 +    }
++
++    static final class CountedSRSWLinkedQueue<E> {
++
++        private final SRSWLinkedQueue<E> queue = new SRSWLinkedQueue<>();
++        private volatile long countAdded;
++        private volatile long countRemoved;
++
++        private static final VarHandle COUNT_ADDED_HANDLE = ConcurrentUtil.getVarHandle(CountedSRSWLinkedQueue.class, "countAdded", long.class);
++        private static final VarHandle COUNT_REMOVED_HANDLE = ConcurrentUtil.getVarHandle(CountedSRSWLinkedQueue.class, "countRemoved", long.class);
++
++        private long getCountAddedPlain() {
++            return (long)COUNT_ADDED_HANDLE.get(this);
++        }
++
++        private long getCountAddedAcquire() {
++            return (long)COUNT_ADDED_HANDLE.getAcquire(this);
++        }
++
++        private void setCountAddedRelease(final long to) {
++            COUNT_ADDED_HANDLE.setRelease(this, to);
++        }
++
++        private long getCountRemovedPlain() {
++            return (long)COUNT_REMOVED_HANDLE.get(this);
++        }
++
++        private long getCountRemovedAcquire() {
++            return (long)COUNT_REMOVED_HANDLE.getAcquire(this);
++        }
++
++        private void setCountRemovedRelease(final long to) {
++            COUNT_REMOVED_HANDLE.setRelease(this, to);
++        }
++
++        public void add(final E element) {
++            this.setCountAddedRelease(this.getCountAddedPlain() + 1L);
++            this.queue.addLast(element);
++        }
++
++        public E poll() {
++            final E ret = this.queue.poll();
++            if (ret != null) {
++                this.setCountRemovedRelease(this.getCountRemovedPlain() + 1L);
++            }
++
++            return ret;
++        }
++
++        public long size() {
++            final long removed = this.getCountRemovedAcquire();
++            final long added = this.getCountAddedAcquire();
++
++            return added - removed;
++        }
++    }
 +}
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 index e5d9c6f2cbe11c2ded6d8ad111fa6a8b2086dfba..c6d20bc2f0eab737338db6b88dacb63f0decb66c 100644
@@ -1539,6 +1582,21 @@ index e5d9c6f2cbe11c2ded6d8ad111fa6a8b2086dfba..c6d20bc2f0eab737338db6b88dacb63f
              final boolean levelsUpdated = this.ticketLevelPropagator.propagateUpdates();
              if (levelsUpdated) {
                  // Unlike CB, ticket level updates cannot happen recursively. Thank god.
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
+index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..e944bd32df98a1dd7dde8c5ce3698b6d81862cbf 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
+@@ -48,6 +48,10 @@ public final class ChunkTaskScheduler {
+ 
+     public static ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadPool workerThreads;
+ 
++    public static int getWorkerCount() {
++        return workerThreads.getThreadCount();
++    }
++
+     private static boolean initialised = false;
+ 
+     public static void init(final GlobalConfiguration.ChunkSystem config) {
 diff --git a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
 index 8d442c5a498ecf288a0cc0c54889c6e2fda849ce..9f5f0d8ddc8f480b48079c70e38c9c08eff403f6 100644
 --- a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
@@ -1932,7 +1990,7 @@ index 52cba8f68d274cce106304aef1249a95474d3238..88fca8b160df6804f30ed2cf8cf1f645
  
      public int getNaturalSpawnChunkCount() {
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index ca84eddbdb1e198b899750e5f6b3eafd25ce970f..736f37979c882e41e7571202df38eb6a2923fcb0 100644
+index ca84eddbdb1e198b899750e5f6b3eafd25ce970f..5c7b8041e96ede9e662dfdb5285539bf51304650 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -645,7 +645,7 @@ public class ServerChunkCache extends ChunkSource {
@@ -1949,7 +2007,7 @@ index ca84eddbdb1e198b899750e5f6b3eafd25ce970f..736f37979c882e41e7571202df38eb6a
          // CraftBukkit start - process pending Chunk loadCallback() and unloadCallback() after each run task
          public boolean pollTask() {
 -            ServerChunkCache.this.chunkMap.playerChunkManager.tickMidTick();
-+            ServerChunkCache.this.chunkMap.level.playerChunkLoader.tickMidTick(); // Paper - replace player chunk loader
++            // Paper - replace player chunk loader
              if (ServerChunkCache.this.runDistanceManagerUpdates()) {
                  return true;
              }

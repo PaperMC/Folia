@@ -3,10 +3,8 @@ From: Spottedleaf <Spottedleaf@users.noreply.github.com>
 Date: Sun, 2 Oct 2022 21:28:53 -0700
 Subject: [PATCH] Threaded Regions
 
-Connection thread-safety fixes
-
-- send packet
-- pending addition
+See https://docs.papermc.io/folia/reference/overview and
+https://docs.papermc.io/folia/reference/region-logic
 
 diff --git a/src/main/java/ca/spottedleaf/concurrentutil/collection/MultiThreadedQueue.java b/src/main/java/ca/spottedleaf/concurrentutil/collection/MultiThreadedQueue.java
 index f4415f782b32fed25da98e44b172f717c4d46e34..ba7c24b3627a1827721d2462add15fdd4adbed90 100644
@@ -1904,68 +1902,18 @@ index 61d03808c8d1ab822d9b2f31fab0de14089a3b15..370e649a255a456d7f901b22e26241e1
  
      public static ChunkHolder getUnloadingChunkHolder(final ServerLevel level, final int chunkX, final int chunkZ) {
 diff --git a/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
-index 99dc2038aa4fb0f70dc3670e451018ff541d3a85..5b4025178c1e476ed5dd0808cc33bf1ec7c08b66 100644
+index 63c69c4da5fcbd5901c9fc3427f69626e16492ee..88c48279d04b2bc5a67de0fdbd2c266516cbcd49 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/RegionizedPlayerChunkLoader.java
-@@ -232,17 +232,19 @@ public class RegionizedPlayerChunkLoader {
+@@ -234,7 +234,7 @@ public class RegionizedPlayerChunkLoader {
      public void tick() {
          TickThread.ensureTickThread("Cannot tick player chunk loader async");
          long currTime = System.nanoTime();
--        for (final ServerPlayer player : this.world.players()) {
-+        for (final ServerPlayer player : this.world.getLocalPlayers()) { // Folia - region threding
-             player.chunkLoader.update();
-             player.chunkLoader.midTickUpdate(currTime);
-         }
-     }
- 
--    public void tickMidTick() {
-+    public boolean tickMidTick() { // Folia - region threading - report whether tickets were added
-         final long time = System.nanoTime();
--        for (final ServerPlayer player : this.world.players()) {
--            player.chunkLoader.midTickUpdate(time);
-+        boolean ret = false; // Folia - region threading - report whether tickets were added
-+        for (final ServerPlayer player : this.world.getLocalPlayers()) { // Folia - region threading
-+            ret |= player.chunkLoader.midTickUpdate(time);
-         }
-+        return ret; // Folia - region threading - report whether tickets were added
-     }
- 
-     private static long[] generateBFSOrder(final int radius) {
-@@ -384,13 +386,13 @@ public class RegionizedPlayerChunkLoader {
-             this.player = player;
-         }
- 
--        private void flushDelayedTicketOps() {
-+        private boolean flushDelayedTicketOps() { // Folia - region threading - report whether tickets were added
-             if (this.delayedTicketOps.isEmpty()) {
--                return;
-+                return false; // Folia - region threading - report whether tickets were added
-             }
-             this.world.chunkTaskScheduler.chunkHolderManager.pushDelayedTicketUpdates(this.delayedTicketOps);
-             this.delayedTicketOps.clear();
--            this.world.chunkTaskScheduler.chunkHolderManager.tryDrainTicketUpdates();
-+            return this.world.chunkTaskScheduler.chunkHolderManager.tryDrainTicketUpdates() == Boolean.TRUE; // Folia - region threading - report whether tickets were added
-         }
- 
-         private void pushDelayedTicketOp(final ChunkHolderManager.TicketOperation<?, ?> op) {
-@@ -607,7 +609,7 @@ public class RegionizedPlayerChunkLoader {
-             return Math.max(Math.abs(dx), Math.abs(dz)) <= this.lastTickDistance;
-         }
- 
--        void midTickUpdate(final long time) {
-+        boolean midTickUpdate(final long time) { // Folia - region threading - report whether tickets were added
-             TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async");
-             // update rate limits
-             this.chunkSendCounter.update(time);
-@@ -799,7 +801,7 @@ public class RegionizedPlayerChunkLoader {
-                 this.chunkSendCounter.addTime(time, sendSlots);
-             }
- 
--            this.flushDelayedTicketOps();
-+            return this.flushDelayedTicketOps(); // Folia - region threading - report whether tickets were added
-             // we assume propagate ticket levels happens after this call
-         }
- 
+-        for (final ServerPlayer player : new java.util.ArrayList<>(this.world.players())) {
++        for (final ServerPlayer player : new java.util.ArrayList<>(this.world.getLocalPlayers())) { // Folia - region threding
+             final PlayerChunkLoaderData loader = player.chunkLoader;
+             if (loader == null || loader.world != this.world) {
+                 // not our problem anymore
 diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
 index 61c170555c8854b102c640b0b6a615f9f732edbf..515cc130a411f218ed20628eb918be9d770b9939 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
@@ -2999,10 +2947,10 @@ index c6d20bc2f0eab737338db6b88dacb63f0decb66c..9ac75b6c9d9698c6369978c4b004a82a
          return ret;
      }
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
-index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db66116057e599 100644
+index e944bd32df98a1dd7dde8c5ce3698b6d81862cbf..c185a85e18932ac8ee96a01779e1e1a580197613 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
-@@ -113,7 +113,7 @@ public final class ChunkTaskScheduler {
+@@ -117,7 +117,7 @@ public final class ChunkTaskScheduler {
      public final PrioritisedThreadPool.PrioritisedPoolExecutor parallelGenExecutor;
      public final PrioritisedThreadPool.PrioritisedPoolExecutor loadExecutor;
  
@@ -3011,7 +2959,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
  
      final ReentrantLock schedulingLock = new ReentrantLock();
      public final ChunkHolderManager chunkHolderManager;
-@@ -240,14 +240,13 @@ public final class ChunkTaskScheduler {
+@@ -244,14 +244,13 @@ public final class ChunkTaskScheduler {
          };
  
          // this may not be good enough, specifically thanks to stupid ass plugins swallowing exceptions
@@ -3028,7 +2976,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
      }
  
      public void raisePriority(final int x, final int z, final PrioritisedExecutor.Priority priority) {
-@@ -267,7 +266,7 @@ public final class ChunkTaskScheduler {
+@@ -271,7 +270,7 @@ public final class ChunkTaskScheduler {
      public void scheduleTickingState(final int chunkX, final int chunkZ, final ChunkHolder.FullChunkStatus toStatus,
                                       final boolean addTicket, final PrioritisedExecutor.Priority priority,
                                       final Consumer<LevelChunk> onComplete) {
@@ -3037,7 +2985,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
              this.scheduleChunkTask(chunkX, chunkZ, () -> {
                  ChunkTaskScheduler.this.scheduleTickingState(chunkX, chunkZ, toStatus, addTicket, priority, onComplete);
              }, priority);
-@@ -380,9 +379,50 @@ public final class ChunkTaskScheduler {
+@@ -384,9 +383,50 @@ public final class ChunkTaskScheduler {
          });
      }
  
@@ -3089,7 +3037,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
              this.scheduleChunkTask(chunkX, chunkZ, () -> {
                  ChunkTaskScheduler.this.scheduleChunkLoad(chunkX, chunkZ, toStatus, addTicket, priority, onComplete);
              }, priority);
-@@ -409,7 +449,7 @@ public final class ChunkTaskScheduler {
+@@ -413,7 +453,7 @@ public final class ChunkTaskScheduler {
              this.chunkHolderManager.processTicketUpdates();
          }
  
@@ -3098,7 +3046,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
              try {
                  if (onComplete != null) {
                      onComplete.accept(chunk);
-@@ -449,7 +489,9 @@ public final class ChunkTaskScheduler {
+@@ -453,7 +493,9 @@ public final class ChunkTaskScheduler {
                          if (!chunkHolder.upgradeGenTarget(toStatus)) {
                              this.schedule(chunkX, chunkZ, toStatus, chunkHolder, tasks);
                          }
@@ -3109,7 +3057,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
                      }
                  }
              } finally {
-@@ -463,7 +505,7 @@ public final class ChunkTaskScheduler {
+@@ -467,7 +509,7 @@ public final class ChunkTaskScheduler {
              tasks.get(i).schedule();
          }
  
@@ -3118,7 +3066,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
              // couldn't schedule
              try {
                  loadCallback.accept(chunk);
-@@ -652,7 +694,7 @@ public final class ChunkTaskScheduler {
+@@ -656,7 +698,7 @@ public final class ChunkTaskScheduler {
       */
      @Deprecated
      public PrioritisedExecutor.PrioritisedTask scheduleChunkTask(final Runnable run) {
@@ -3127,7 +3075,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
      }
  
      /**
-@@ -660,7 +702,7 @@ public final class ChunkTaskScheduler {
+@@ -664,7 +706,7 @@ public final class ChunkTaskScheduler {
       */
      @Deprecated
      public PrioritisedExecutor.PrioritisedTask scheduleChunkTask(final Runnable run, final PrioritisedExecutor.Priority priority) {
@@ -3136,7 +3084,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
      }
  
      public PrioritisedExecutor.PrioritisedTask createChunkTask(final int chunkX, final int chunkZ, final Runnable run) {
-@@ -669,28 +711,33 @@ public final class ChunkTaskScheduler {
+@@ -673,28 +715,33 @@ public final class ChunkTaskScheduler {
  
      public PrioritisedExecutor.PrioritisedTask createChunkTask(final int chunkX, final int chunkZ, final Runnable run,
                                                                 final PrioritisedExecutor.Priority priority) {
@@ -3182,7 +3130,7 @@ index 84cc9397237fa0c17aa1012dfb5683c90eb6d3b8..25db30284e3bab9ebad1ca7320db6611
  
      public boolean halt(final boolean sync, final long maxWaitNS) {
          this.lightExecutor.halt();
-@@ -699,6 +746,7 @@ public final class ChunkTaskScheduler {
+@@ -703,6 +750,7 @@ public final class ChunkTaskScheduler {
          this.loadExecutor.halt();
          final long time = System.nanoTime();
          if (sync) {
@@ -4419,10 +4367,10 @@ index 0000000000000000000000000000000000000000..6c1d55144f044f39926ddf998104950b
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ac043fbc74874c205b821c3d2d011b921d5704fa
+index 0000000000000000000000000000000000000000..18cbf9f1bcf39d607809627cb47332c27dabfe59
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
-@@ -0,0 +1,752 @@
+@@ -0,0 +1,745 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -4652,13 +4600,6 @@ index 0000000000000000000000000000000000000000..ac043fbc74874c205b821c3d2d011b92
 +        }
 +
 +        public void drainTasks() {
-+            // first, update chunk loader
-+            final ServerLevel world = this.worldRegionTaskData.world;
-+            if (world.playerChunkLoader.tickMidTick()) {
-+                // only process ticket updates if the player chunk loader did anything
-+                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
-+            }
-+
 +            final PrioritisedQueue tickTaskQueue = this.tickTaskQueue;
 +            final PrioritisedQueue chunkTaskQueue = this.chunkQueue;
 +
@@ -4677,7 +4618,7 @@ index 0000000000000000000000000000000000000000..ac043fbc74874c205b821c3d2d011b92
 +
 +            if (allowedChunkTasks > 0) {
 +                // if we executed chunk tasks, we should try to process ticket updates for full status changes
-+                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
++                this.worldRegionTaskData.world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
 +            }
 +        }
 +
@@ -8256,10 +8197,10 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c6bc546b67c701f932e69630db1a5f83efc255fa
+index 0000000000000000000000000000000000000000..6c76c70574642aa4f3a8fce74e4608781ce132ec
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,392 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -8626,13 +8567,6 @@ index 0000000000000000000000000000000000000000..c6bc546b67c701f932e69630db1a5f83
 +        protected boolean runRegionTasks(final BooleanSupplier canContinue) {
 +            final RegionizedTaskQueue.RegionTaskQueueData queue = this.region.taskQueueData;
 +
-+            // first, update chunk loader
-+            final ServerLevel world = this.region.world;
-+            if (world.playerChunkLoader.tickMidTick()) {
-+                // only process ticket updates if the player chunk loader did anything
-+                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
-+            }
-+
 +            boolean processedChunkTask = false;
 +
 +            boolean executeChunkTask = true;
@@ -8648,7 +8582,7 @@ index 0000000000000000000000000000000000000000..c6bc546b67c701f932e69630db1a5f83
 +
 +            if (processedChunkTask) {
 +                // if we processed any chunk tasks, try to process ticket level updates for full status changes
-+                world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
++                this.region.world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates();
 +            }
 +            return true;
 +        }
@@ -14467,7 +14401,7 @@ index 88fca8b160df6804f30ed2cf8cf1f645085434e2..341650384498eebe3f7a3315c398bec9
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index 736f37979c882e41e7571202df38eb6a2923fcb0..a493d8f2677c776951fbc20ebf1e61c91b9864ee 100644
+index 5c7b8041e96ede9e662dfdb5285539bf51304650..e664c568aba954e04878c06f3671ae74673dd342 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -61,73 +61,42 @@ public class ServerChunkCache extends ChunkSource {
@@ -14837,7 +14771,7 @@ index 736f37979c882e41e7571202df38eb6a2923fcb0..a493d8f2677c776951fbc20ebf1e61c9
 +                throw new IllegalStateException("Polling tasks from non-owned region");
 +            }
 +            // Folia end - region threading
-             ServerChunkCache.this.chunkMap.level.playerChunkLoader.tickMidTick(); // Paper - replace player chunk loader
+             // Paper - replace player chunk loader
              if (ServerChunkCache.this.runDistanceManagerUpdates()) {
                  return true;
              }
