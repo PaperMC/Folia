@@ -149,7 +149,7 @@ issues, which then become near impossible to debug.
 ### Current API additions
 
 To properly understand API additions, please read
-[PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md).
+[Project overview](https://docs.papermc.io/folia/reference/overview).
 
 - RegionScheduler, AsyncScheduler, GlobalRegionScheduler, and EntityScheduler 
   acting as a replacement for  the BukkitScheduler.
@@ -161,7 +161,7 @@ To properly understand API additions, please read
 ### Thread contexts for API
 
 To properly understand API additions, please read
-[PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md).
+[Project overview](https://docs.papermc.io/folia/reference/overview).
 
 General rules of thumb:
 
