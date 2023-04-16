@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Angelillo15 <contact@angelillo15.es>
+Date: Sun, 16 Apr 2023 15:11:27 +0200
+Subject: [PATCH] Fix-legacy-colors-in-console
+
+
+diff --git a/src/main/java/io/papermc/paper/console/HexFormattingConverter.java b/src/main/java/io/papermc/paper/console/HexFormattingConverter.java
+index b9922b07cb105618390187d98acdf89e728e1f5a..a971e82c6d9f6f2df25dbe5677498718565988f6 100644
+--- a/src/main/java/io/papermc/paper/console/HexFormattingConverter.java
++++ b/src/main/java/io/papermc/paper/console/HexFormattingConverter.java
+@@ -34,7 +34,7 @@ import static net.minecrell.terminalconsole.MinecraftFormattingConverter.KEEP_FO
+ public final class HexFormattingConverter extends LogEventPatternConverter {
+ 
+     private static final boolean KEEP_FORMATTING = PropertiesUtil.getProperties().getBooleanProperty(KEEP_FORMATTING_PROPERTY);
+-
++    private static final char LEGACY_CHAR = 0xa7;
+     private static final String ANSI_RESET = "\u001B[m";
+ 
+     private static final char COLOR_CHAR = 0x7f;
+@@ -50,6 +50,10 @@ public final class HexFormattingConverter extends LogEventPatternConverter {
+     private static final Pattern NAMED_PATTERN = Pattern.compile(COLOR_CHAR + "[0-9a-fk-orA-FK-OR]");
+     private static final Pattern RGB_PATTERN = Pattern.compile(COLOR_CHAR + "#([0-9a-fA-F]){6}");
+ 
++    private static final Pattern LEGACY_RGB_PATTERN = Pattern.compile(LEGACY_CHAR + "x((" + LEGACY_CHAR + "[0-9a-fA-F]){6})"); // Folia
++    private static final Pattern LEGACY_PATTERN = Pattern.compile(LEGACY_CHAR + "([0-9a-fk-orxA-FK-ORX])"); // Folia
++
++
+     private static final String[] RGB_ANSI_CODES = new String[]{
+         formatHexAnsi(NamedTextColor.BLACK),         // Black §0
+         formatHexAnsi(NamedTextColor.DARK_BLUE),     // Dark Blue §1
+@@ -91,11 +95,11 @@ public final class HexFormattingConverter extends LogEventPatternConverter {
+         ANSI_RESET + "\u001B[0;35;1m",  // Light Purple §d
+         ANSI_RESET + "\u001B[0;33;1m",  // Yellow §e
+         ANSI_RESET + "\u001B[0;37;1m",  // White §f
+-                     "\u001B[5m",       // Obfuscated §k
+-                     "\u001B[1m",       // Bold §l
+-                     "\u001B[9m",       // Strikethrough §m
+-                     "\u001B[4m",       // Underline §n
+-                     "\u001B[3m",       // Italic §o
++        "\u001B[5m",       // Obfuscated §k
++        "\u001B[1m",       // Bold §l
++        "\u001B[9m",       // Strikethrough §m
++        "\u001B[4m",       // Underline §n
++        "\u001B[3m",       // Italic §o
+         ANSI_RESET,                     // Reset §r
+     };
+ 
+@@ -134,7 +138,21 @@ public final class HexFormattingConverter extends LogEventPatternConverter {
+     }
+ 
+     private static String convertRGBColors(final String input) {
+-        return RGB_PATTERN.matcher(input).replaceAll(result -> {
++        // Folia start
++        Matcher matcher = LEGACY_RGB_PATTERN.matcher(input);
++        StringBuilder buffer = new StringBuilder();
++        while (matcher.find()) {
++            String s = matcher.group().replace(String.valueOf(LEGACY_CHAR), "").replace('x', '#');
++            int hex = Integer.decode(s);
++            int red = (hex >> 16) & 0xFF;
++            int green = (hex >> 8) & 0xFF;
++            int blue = hex & 0xFF;
++            String replacement = String.format(RGB_ANSI, red, green, blue);
++            matcher.appendReplacement(buffer, replacement);
++        }
++        matcher.appendTail(buffer);
++        return RGB_PATTERN.matcher(buffer.toString()).replaceAll(result -> {
++            // Folia end
+             final int hex = Integer.decode(result.group().substring(1));
+             return formatHexAnsi(hex);
+         });
+@@ -152,10 +170,11 @@ public final class HexFormattingConverter extends LogEventPatternConverter {
+     }
+ 
+     private static String stripRGBColors(final String input) {
+-        return RGB_PATTERN.matcher(input).replaceAll("");
++        return LEGACY_RGB_PATTERN.matcher(RGB_PATTERN.matcher(input).replaceAll("")).replaceAll(""); // Folia
+     }
+ 
+     static void format(String content, StringBuilder result, int start, boolean ansi) {
++        content = LEGACY_PATTERN.matcher(content).replaceAll(COLOR_CHAR + "$1"); // Folia
+         int next = content.indexOf(COLOR_CHAR);
+         int last = content.length() - 1;
+         if (next == -1 || next == last) {
