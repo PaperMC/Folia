@@ -1736,7 +1736,7 @@ index 6efb8b10f17c70b05128039376d254e6beda3841..c856a9a0d085b278da416c59996fc131
              worldData.addProperty("keep-spawn-loaded-range", world.paperConfig().spawn.keepSpawnLoadedRange * 16);
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index 904fcdeb7937d36208cc9a8d5eca9ef3a5b2cd9e..6fce2a9bce051e21eba8f331007a9752607f69f2 100644
+index 904fcdeb7937d36208cc9a8d5eca9ef3a5b2cd9e..a7013fdd8d82f24cadd90ea7e9ebc7c1501042d3 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -128,6 +128,26 @@ public class ChunkHolder {
@@ -1748,13 +1748,13 @@ index 904fcdeb7937d36208cc9a8d5eca9ef3a5b2cd9e..6fce2a9bce051e21eba8f331007a9752
 +
 +    public void addPlayer(ServerPlayer player) {
 +        if (!this.playersSentChunkTo.add(player)) {
-+            throw new IllegalStateException("Already sent chunk " + this.pos + " to player " + player);
++            throw new IllegalStateException("Already sent chunk " + this.pos + " in world '" + this.chunkMap.level.getWorld().getName() + "' to player " + player);
 +        }
 +    }
 +
 +    public void removePlayer(ServerPlayer player) {
 +        if (!this.playersSentChunkTo.remove(player)) {
-+            throw new IllegalStateException("Have not sent chunk " + this.pos + " to player " + player);
++            throw new IllegalStateException("Have not sent chunk " + this.pos + " in world '" + this.chunkMap.level.getWorld().getName() + "' to player " + player);
 +        }
 +    }
 +
@@ -1835,7 +1835,7 @@ index 904fcdeb7937d36208cc9a8d5eca9ef3a5b2cd9e..6fce2a9bce051e21eba8f331007a9752
  
      // Paper - rewrite chunk system
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index fbe209a66c77c47935ad026dd3e45e682af91fd8..2d133ae656f7420d6ceec14bc591721cff815479 100644
+index fbe209a66c77c47935ad026dd3e45e682af91fd8..78ccfe201f91b9d969766a6aed4ab033a8e1218f 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -199,7 +199,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
@@ -1878,7 +1878,7 @@ index fbe209a66c77c47935ad026dd3e45e682af91fd8..2d133ae656f7420d6ceec14bc591721c
      }
      // Paper end - replace player loader system
      public void setViewDistance(int watchDistance) {
-@@ -826,20 +830,22 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -826,20 +830,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              int k = this.viewDistance;
  
              this.viewDistance = j;
@@ -1889,6 +1889,8 @@ index fbe209a66c77c47935ad026dd3e45e682af91fd8..2d133ae656f7420d6ceec14bc591721c
      }
  
      public void updateChunkTracking(ServerPlayer player, ChunkPos pos, MutableObject<java.util.Map<Object, ClientboundLevelChunkWithLightPacket>> packet, boolean oldWithinViewDistance, boolean newWithinViewDistance) { // Paper - public // Paper - Anti-Xray - Bypass
++        io.papermc.paper.util.TickThread.ensureTickThread(this.level, pos, "May not update chunk tracking for chunk async"); // Paper - replace chunk loader system
++        io.papermc.paper.util.TickThread.ensureTickThread(player, "May not update chunk tracking for player async"); // Paper - replace chunk loader system
          if (player.level == this.level) {
 +            ChunkHolder playerchunk = this.getVisibleChunkIfPresent(pos.toLong()); // Paper - replace chunk loader system - move up
              if (newWithinViewDistance && !oldWithinViewDistance) {
@@ -1903,19 +1905,26 @@ index fbe209a66c77c47935ad026dd3e45e682af91fd8..2d133ae656f7420d6ceec14bc591721c
                          this.playerLoadedChunk(player, packet, chunk);
                      }
  
-@@ -848,6 +854,11 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -848,10 +856,17 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
  
              if (!newWithinViewDistance && oldWithinViewDistance) {
 +                // Paper start - replace chunk loader system
 +                if (playerchunk != null) {
 +                    playerchunk.removePlayer(player);
++                } else {
++                    LOGGER.warn("ChunkHolder at " + pos + " in world '" + this.level.getWorld().getName() + "' does not exist to untrack chunk for " + player, new Throwable());
 +                }
 +                // Paper end - replace chunk loader system
                  player.untrackChunk(pos);
              }
  
-@@ -1151,34 +1162,18 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+-        }
++        } else { LOGGER.warn("Mismatch in world for chunk " + pos + " in world '" + this.level.getWorld().getName() + "' for player " + player, new Throwable()); } // Paper - replace chunk loader system
+     }
+ 
+     public int size() {
+@@ -1151,34 +1166,18 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          // Paper - replaced by PlayerChunkLoader
  
          this.updateMaps(player); // Paper - distance maps
@@ -1955,7 +1964,7 @@ index fbe209a66c77c47935ad026dd3e45e682af91fd8..2d133ae656f7420d6ceec14bc591721c
          // Paper end - per player view distance
      }
  
-@@ -1612,7 +1607,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1612,7 +1611,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  double vec3d_dx = player.getX() - this.entity.getX();
                  double vec3d_dz = player.getZ() - this.entity.getZ();
                  // Paper end - remove allocation of Vec3D here
