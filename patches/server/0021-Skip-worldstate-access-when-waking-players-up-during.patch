@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sun, 23 Apr 2023 07:38:50 -0700
+Subject: [PATCH] Skip worldstate access when waking players up during data
+ deserialization
+
+In general, worldstate read/write is unacceptable during
+data deserialization and is racey even in Vanilla. But in Folia,
+some accesses may throw and as such we need to fix this directly.
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 5f53c9ad5d64053a2e29c58ddb62e7d2bd176efe..da47d47c1bdd2158e46418267151f40f879ea2af 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -570,7 +570,7 @@ public class ServerPlayer extends Player {
+         this.getBukkitEntity().readExtraData(nbt); // CraftBukkit
+ 
+         if (this.isSleeping()) {
+-            this.stopSleeping();
++            this.stopSleepingRaw(); // Folia - do not modify or read worldstate during data deserialization
+         }
+ 
+         // CraftBukkit start
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index 4f8062432cfe6480664e674fde0255f07b15c73a..49716190b784339b80c8a3ac8e5b13bc450284ee 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -4225,6 +4225,11 @@ public abstract class LivingEntity extends Entity implements Attackable {
+             }
+ 
+         });
++        // Folia start - separate out
++        this.stopSleepingRaw();
++    }
++    public void stopSleepingRaw() {
++        // Folia end - separate out
+         Vec3 vec3d = this.position();
+ 
+         this.setPose(Pose.STANDING);
