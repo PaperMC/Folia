@@ -1,0 +1,335 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: masmc05 <masmc05@gmail.com>
+Date: Wed, 26 Apr 2023 18:56:48 +0300
+Subject: [PATCH] World load/unload api
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
+index 5ca4e9c85c957c669d54fd9e5e52f13502b592da..bb078caad05aa2aeb1e79e5cc0cfd2608f82e239 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
+@@ -45,6 +45,7 @@ public final class ChunkTaskScheduler {
+     static int newChunkSystemLoadParallelism;
+ 
+     public static ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadPool workerThreads;
++    private boolean halted = false; //Folia, no need to worry about thread safety, only needed by global thread when set by global thread
+ 
+     public static int getWorkerCount() {
+         return workerThreads.getThreadCount();
+@@ -753,7 +754,16 @@ public final class ChunkTaskScheduler {
+                         !this.parallelGenExecutor.isActive() &&
+                         !this.loadExecutor.isActive()
+                 ) {
+-                    return true;
++                    AtomicBoolean bool = new AtomicBoolean(true);
++                    this.world.regioniser.computeForAllRegionsUnsynchronised(region -> {
++                        if (!region.halt()) {
++                            bool.set(false);
++                        }
++                    });
++                    if (bool.get()){
++                        this.halted = true;
++                        return true;
++                    }
+                 }
+                 if ((System.nanoTime() - time) >= maxWaitNS) {
+                     return false;
+@@ -761,9 +771,13 @@ public final class ChunkTaskScheduler {
+             }
+         }
+ 
++        this.halted = true;
+         return true;
+     }
+ 
++    public boolean isHalted() {
++        return this.halted;
++    }
+     public static final ArrayDeque<ChunkInfo> WAITING_CHUNKS = new ArrayDeque<>(); // stack
+ 
+     public static final class ChunkInfo {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
+index 6c1d55144f044f39926ddf998104950b9efe3ee1..dca81f7b3cfce853dbd80c04caf06d67bdd25ba4 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
++++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
+@@ -55,8 +55,14 @@ public final class RegionizedServer {
+     }
+ 
+     public void addWorld(final ServerLevel world) {
++        if (this.worlds.contains(world)) {
++            throw new IllegalStateException("World " + world.getTypeKey() + " was already there!");
++        }
+         this.worlds.add(world);
+     }
++    public void removeWorld(ServerLevel handle) {
++        this.worlds.remove(handle);
++    }
+ 
+     public void init() {
+         // call init event _before_ scheduling anything
+diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+index 5170b43743ea27a5c2aaee37d76f4e7e730fd808..aed8bf39b82c69a71cbe7ba195625edfdbc25004 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
++++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+@@ -859,6 +859,25 @@ public final class ThreadedRegionizer<R extends ThreadedRegionizer.ThreadedRegio
+                 }
+             }
+         }
++        public boolean halt() {
++            if (this.state == STATE_DEAD) return true; //Already killed, no need to lock
++            try {
++                this.regioniser.acquireWriteLock();
++                return switch (this.state) {
++                    case STATE_TRANSIENT, STATE_READY -> {
++                        //We shouldn't remove it from world, we just stop it from being scheduled
++                        this.regioniser.callbacks.onRegionInactive(this);
++                        this.state = STATE_DEAD;
++                        yield true;
++                    }
++                    case STATE_TICKING -> false;
++                    case STATE_DEAD -> true;
++                    default -> throw new IllegalStateException("Unknown state: " + this.state);
++                };
++            } finally {
++                this.regioniser.releaseWriteLock();
++            }
++        }
+ 
+         private boolean isDead() {
+             return this.state == STATE_DEAD;
+diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
+index 6c76c70574642aa4f3a8fce74e4608781ce132ec..0825069c79e25b56982f85cd880fd208e75f7b26 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
++++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
+@@ -196,6 +196,13 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+             return ret;
+         }
+ 
++        public <T> T getDataAfterHalt(final RegionizedData<T> regionizedData) {
++            if (!world.chunkTaskScheduler.isHalted()) {
++                throw new IllegalStateException("World isn't halted");
++            }
++            return this.getOrCreateRegionizedData(regionizedData);
++        }
++
+         @Override
+         public void split(final ThreadedRegionizer<TickRegionData, TickRegionSectionData> regioniser,
+                           final Long2ReferenceOpenHashMap<ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData>> into,
+diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
+index 294ea54d59e1e0b00f67d1623a5c807f9d368df6..6f0ce637423141ed1f3368a1d7a5c70cf25f062e 100644
+--- a/src/main/java/io/papermc/paper/util/TickThread.java
++++ b/src/main/java/io/papermc/paper/util/TickThread.java
+@@ -136,6 +136,9 @@ public class TickThread extends Thread {
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ) {
++        if (world.chunkTaskScheduler.isHalted()) { //As soon as we halt the activity, it's the global tick thread's propriety
++            return RegionizedServer.isGlobalTickThread() || isShutdownThread();
++        }
+         final ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region =
+             TickRegionScheduler.getCurrentRegion();
+         if (region == null) {
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index acc8af33ad8534d812908b0feb9a1963ee2c64fb..fa510665664bc756d76203e4bb3240d0f9de4238 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -2645,6 +2645,17 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         chunk.unpackTicks(this.getRedstoneGameTime()); // Folia - region threading
+     }
+ 
++    public long getRedstoneGameTime(int chunkX, int chunkZ) {
++        return this.getCurrentWorldData(chunkX, chunkZ).getRedstoneGameTime();
++    }
++
++    public io.papermc.paper.threadedregions.RegionizedWorldData getCurrentWorldData(int chunkX, int chunkZ) {
++        return chunkTaskScheduler.isHalted()
++            ? Objects.requireNonNull(regioniser.getRegionAtUnsynchronised(chunkX, chunkZ), "Chunk was not present on world activity halt")
++                .getData().getDataAfterHalt(worldRegionData)
++            : getCurrentWorldData();
++    }
++
+     public void onStructureStartsAvailable(ChunkAccess chunk) {
+         // Folia start - region threading
+         // no longer needs to be on main
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 08e61a8940c142c68ed93359084ea46c7fd52310..a8f72dce87efd45c6deda9ee4280dbffa54369a2 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -2920,8 +2920,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             if (!this.level.isClientSide && !pos.equals(this.portalEntrancePos)) {
+                 this.portalEntrancePos = pos.immutable();
+             }
+-
+-            this.isInsidePortal = true;
++            if (new org.bukkit.event.entity.EntityPortalEnterEvent(this.getBukkitEntity(), new Location(level.getWorld(), pos.getX(), pos.getY(), pos.getZ())).callEvent()) {
++                this.isInsidePortal = true;
++            }
+         }
+     }
+ 
+@@ -3864,8 +3865,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
+ 
+         ServerLevel destination = this.getServer().getLevel(this.getLevel().getTypeKey() == LevelStem.END ? Level.OVERWORLD : Level.END);
++        var event = new io.papermc.paper.event.entity.EntityPortalReadyEvent(this.getBukkitEntity(), destination == null ? null : destination.getWorld(), org.bukkit.PortalType.ENDER);
++        if (!event.callEvent()) {
++            return false;
++        }
++        destination = event.getTargetWorld() == null ? null : ((CraftWorld) event.getTargetWorld()).getHandle();
+         if (destination == null) {
+-            // wat
++            // Set to null or allow end to false
+             return false;
+         }
+ 
+@@ -3876,8 +3882,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
+ 
+         ServerLevel destination = this.getServer().getLevel(this.getLevel().getTypeKey() == LevelStem.NETHER ? Level.OVERWORLD : Level.NETHER);
++        var event = new io.papermc.paper.event.entity.EntityPortalReadyEvent(this.getBukkitEntity(), destination == null ? null : destination.getWorld(), org.bukkit.PortalType.NETHER);
++        if (!event.callEvent()) {
++            return false;
++        }
++        destination = event.getTargetWorld() == null ? null : ((CraftWorld) event.getTargetWorld()).getHandle();
+         if (destination == null) {
+-            // wat
++            // Set to null or allow nether to false
+             return false;
+         }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index f4c4951f815062c2791531a703ed8cbe9337d574..75544422930da46a127263d519c19ec84aaee093 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -562,7 +562,7 @@ public class LevelChunk extends ChunkAccess {
+     @Nullable
+     public BlockEntity getBlockEntity(BlockPos pos, LevelChunk.EntityCreationType creationType) {
+         // CraftBukkit start
+-        BlockEntity tileentity = level.getCurrentWorldData().capturedTileEntities.get(pos); // Folia - region threading
++        BlockEntity tileentity = this.level.getCurrentWorldData(locX, locZ).capturedTileEntities.get(pos); // Folia - region threading
+         if (tileentity == null) {
+             tileentity = (BlockEntity) this.blockEntities.get(pos);
+         }
+@@ -612,7 +612,7 @@ public class LevelChunk extends ChunkAccess {
+     }
+ 
+     private boolean isInLevel() {
+-        return this.loaded || this.level.isClientSide();
++        return this.loaded && !this.level.chunkTaskScheduler.isHalted(); //Folia, not loaded after halt
+     }
+ 
+     boolean isTicking(BlockPos pos) {
+@@ -902,7 +902,7 @@ public class LevelChunk extends ChunkAccess {
+     @Override
+     public boolean isUnsaved() {
+         // Paper start - add dirty system to tick lists
+-        long gameTime = this.level.getRedstoneGameTime(); // Folia - region threading
++        long gameTime = this.level.getRedstoneGameTime(this.locX, this.locZ); // Folia - region threading
+         if (this.blockTicks.isDirty(gameTime) || this.fluidTicks.isDirty(gameTime)) {
+             return true;
+         }
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+index 3c9ae42290c2e0cb70bb08e97f3ea2c3fb594c7d..1f670d603adea5e9c0e8a7d6e5e8a9d2c4ac06c7 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+@@ -457,7 +457,7 @@ public class ChunkSerializer {
+         org.spigotmc.AsyncCatcher.catchOp("preparation of chunk data for async save");
+ 
+         final CompoundTag tickLists = new CompoundTag();
+-        ChunkSerializer.saveTicks(world, tickLists, chunk.getTicksForSerialization());
++        ChunkSerializer.saveTicks(world, chunk.locX, chunk.locZ, tickLists, chunk.getTicksForSerialization()); //Folia - add coords in case of world halt
+ 
+         ListTag blockEntitiesSerialized = new ListTag();
+         for (final BlockPos blockPos : chunk.getBlockEntitiesPos()) {
+@@ -660,7 +660,7 @@ public class ChunkSerializer {
+             nbttagcompound.put(BLOCK_TICKS_TAG, asyncsavedata.blockTickList);
+             nbttagcompound.put(FLUID_TICKS_TAG, asyncsavedata.fluidTickList);
+         } else {
+-        ChunkSerializer.saveTicks(world, nbttagcompound, chunk.getTicksForSerialization());
++        ChunkSerializer.saveTicks(world, chunk.locX, chunk.locZ, nbttagcompound, chunk.getTicksForSerialization()); //Folia - add coords in case of world halt
+         }
+         // Paper end
+         nbttagcompound.put("PostProcessing", ChunkSerializer.packOffsets(chunk.getPostProcessing()));
+@@ -685,8 +685,8 @@ public class ChunkSerializer {
+         return nbttagcompound;
+     }
+ 
+-    private static void saveTicks(ServerLevel world, CompoundTag nbt, ChunkAccess.TicksToSave tickSchedulers) {
+-        long i = world.getRedstoneGameTime(); // Folia - region threading
++    private static void saveTicks(ServerLevel world, int x, int z, CompoundTag nbt, ChunkAccess.TicksToSave tickSchedulers) { //Folia - add coords in case of world halt
++        long i = world.getRedstoneGameTime(x, z); // Folia - region threading
+ 
+         nbt.put("block_ticks", tickSchedulers.blocks().save(i, (block) -> {
+             return BuiltInRegistries.BLOCK.getKey(block).toString();
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 32c9b38036052649b7b5fb25d7c4a49fdd1ca972..c4d19eccd3e6480382101052a4095e7e31b9d3ca 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -1245,10 +1245,10 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public World createWorld(WorldCreator creator) {
+-        if (true) throw new UnsupportedOperationException(); // Folia - not implemented properly yet
+         Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
+         //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
+         Validate.notNull(creator, "Creator may not be null");
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("World create can be done only on global tick thread");
+ 
+         String name = creator.name();
+         ChunkGenerator generator = creator.generator();
+@@ -1366,8 +1366,20 @@ public final class CraftServer implements Server {
+         }
+ 
+         this.console.addLevel(internal); // Paper - move up
+-        this.console.initWorld(internal, worlddata, worlddata, worlddata.worldGenOptions());
+-
++        //Folia start
++        //this.console.initWorld(internal, worlddata, worlddata, worlddata.worldGenOptions());
++        io.papermc.paper.threadedregions.RegionizedServer.getInstance().addWorld(internal);
++        int loadRegionRadius = ((32) >> 4);
++        internal.randomSpawnSelection = new net.minecraft.world.level.ChunkPos(internal.getChunkSource().randomState().sampler().findSpawnPosition());
++        for (int currX = -loadRegionRadius; currX <= loadRegionRadius; ++currX) {
++            for (int currZ = -loadRegionRadius; currZ <= loadRegionRadius; ++currZ) {
++                net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(currX, currZ);
++                internal.chunkSource.addTicketAtLevel(
++                    TicketType.UNKNOWN, pos, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL, pos
++                );
++            }
++        }
++        //Folia end
+         internal.setSpawnSettings(true, true);
+         // Paper - move up
+ 
+@@ -1386,8 +1398,8 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public boolean unloadWorld(World world, boolean save) {
+-        if (true) throw new UnsupportedOperationException(); // Folia - not implemented properly yet
+         //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot unload a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
++        io.papermc.paper.threadedregions.RegionizedServer.ensureGlobalTickThread("World unload can be done only on global tick thread");
+         if (world == null) {
+             return false;
+         }
+@@ -1414,17 +1426,18 @@ public final class CraftServer implements Server {
+         }
+ 
+         try {
++            handle.getChunkSource().close(save); //Folia, halt and save chunk, then everything else
+             if (save) {
+-                handle.save(null, true, false); // Paper - don't disable saving
++                //handle.save(null, true, false); // Paper - don't disable saving //Folia, saved on chunk source close
++                handle.saveLevelData(); //Folia
+             }
+-
+-            handle.getChunkSource().close(save);
++            //handle.getChunkSource().close(save); - Folia, move up
+             // handle.entityManager.close(save); // SPIGOT-6722: close entityManager // Paper - rewrite chunk system
+             handle.convertable.close();
+         } catch (Exception ex) {
+             this.getLogger().log(Level.SEVERE, null, ex);
+         }
+-
++        io.papermc.paper.threadedregions.RegionizedServer.getInstance().removeWorld(handle); //Folia
+         this.worlds.remove(world.getName().toLowerCase(java.util.Locale.ENGLISH));
+         this.console.removeLevel(handle);
+         return true;
