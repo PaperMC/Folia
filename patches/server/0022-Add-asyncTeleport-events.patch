@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: WillQi <williamqipizza@gmail.com>
+Date: Sat, 29 Apr 2023 20:23:43 -0600
+Subject: [PATCH] Add asyncTeleport events
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 08e61a8940c142c68ed93359084ea46c7fd52310..e7562a60729863077b83bf4cc3b97ed160e18234 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -125,6 +125,10 @@ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
+ import net.minecraft.world.scores.PlayerTeam;
+ import net.minecraft.world.scores.Team;
++import org.bukkit.entity.*;
++import org.bukkit.entity.LivingEntity;
++import org.bukkit.entity.Pose;
++import org.bukkit.event.entity.*;
+ import org.slf4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.Location;
+@@ -132,10 +136,6 @@ import org.bukkit.Server;
+ import org.bukkit.block.BlockFace;
+ import org.bukkit.command.CommandSender;
+ import org.bukkit.craftbukkit.event.CraftPortalEvent;
+-import org.bukkit.entity.Hanging;
+-import org.bukkit.entity.LivingEntity;
+-import org.bukkit.entity.Vehicle;
+-import org.bukkit.event.entity.EntityCombustByEntityEvent;
+ import org.bukkit.event.hanging.HangingBreakByEntityEvent;
+ import org.bukkit.event.vehicle.VehicleBlockCollisionEvent;
+ import org.bukkit.event.vehicle.VehicleEnterEvent;
+@@ -144,12 +144,6 @@ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.entity.CraftEntity;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
+-import org.bukkit.entity.Pose;
+-import org.bukkit.event.entity.EntityAirChangeEvent;
+-import org.bukkit.event.entity.EntityCombustEvent;
+-import org.bukkit.event.entity.EntityDropItemEvent;
+-import org.bukkit.event.entity.EntityPortalEvent;
+-import org.bukkit.event.entity.EntityPoseChangeEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.plugin.PluginManager;
+ // CraftBukkit end
+@@ -3741,16 +3735,42 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             }
+         }
+ 
+-        // TODO any events that can modify go HERE
++        // Call teleport event
++        Location targetLocation = new Location(destination.getWorld(), pos.x, pos.y, pos.z);
++        if (yaw != null) {
++            targetLocation.setYaw(yaw);
++        }
++        if (pitch != null) {
++            targetLocation.setPitch(pitch);
++        }
++
++        if (bukkitEntity instanceof org.bukkit.entity.Player) {
++            org.bukkit.entity.Player player = (org.bukkit.entity.Player) bukkitEntity;
++            PlayerTeleportEvent teleportEvent = new PlayerTeleportEvent(player, bukkitEntity.getLocation(), targetLocation, cause);
++            level.getCraftServer().getPluginManager().callEvent(teleportEvent);
++
++            if (teleportEvent.isCancelled()) {
++                return false;
++            }
++            targetLocation = teleportEvent.getTo();
++        } else {
++            EntityTeleportEvent teleportEvent = new EntityTeleportEvent(bukkitEntity, bukkitEntity.getLocation(), targetLocation);
++            level.getCraftServer().getPluginManager().callEvent(teleportEvent);
++
++            if (teleportEvent.isCancelled()) {
++                return false;
++            }
++            targetLocation = teleportEvent.getTo();
++        }
+ 
+         // check for same region
+-        if (destination == this.getLevel()) {
++        if (((CraftWorld) targetLocation.getWorld()).getHandle() == this.getLevel()) {
+             Vec3 currPos = this.position();
+             if (
+                 destination.regioniser.getRegionAtUnsynchronised(
+                     io.papermc.paper.util.CoordinateUtils.getChunkX(currPos), io.papermc.paper.util.CoordinateUtils.getChunkZ(currPos)
+                 ) == destination.regioniser.getRegionAtUnsynchronised(
+-                    io.papermc.paper.util.CoordinateUtils.getChunkX(pos), io.papermc.paper.util.CoordinateUtils.getChunkZ(pos)
++                    io.papermc.paper.util.CoordinateUtils.getChunkX(targetLocation.getBlockX() >> 4), io.papermc.paper.util.CoordinateUtils.getChunkZ(targetLocation.getBlockZ() >> 4)
+                 )
+             ) {
+                 EntityTreeNode passengerTree = this.detachPassengers();
