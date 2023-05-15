@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Mon, 15 May 2023 12:24:17 -0700
+Subject: [PATCH] Properly cancel chunk load tasks that were not scheduled
+
+Since the chunk load task was not scheduled, the entity/poi load
+task fields will not be set, but the task complete counter
+will not be adjusted. Thus, the chunk load task will not complete.
+
+To resolve this, detect when the entity/poi tasks were not scheduled
+and decrement the task complete counter in such cases.
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkLoadTask.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkLoadTask.java
+index 7b8362625b48f1829ed4fd3c7fde6a4bec8e4099..be53c4b4a10463ef27f6fa178f17f92ca866e2e6 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkLoadTask.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkLoadTask.java
+@@ -126,7 +126,9 @@ public final class ChunkLoadTask extends ChunkProgressionTask {
+     public void cancel() {
+         // must be before load task access, so we can synchronise with the writes to the fields
+         final ca.spottedleaf.concurrentutil.lock.ReentrantAreaLock.Node schedulingLock = this.scheduler.schedulingLockArea.lock(this.chunkX, this.chunkZ); // Folia - use area based lock to reduce contention
++        final boolean scheduled; // Folia - fix cancellation of chunk load task
+         try {
++            scheduled = this.scheduled; // Folia - fix cancellation of chunk load task - must read field here, as it may be written later conucrrently - we need to know if we scheduled _before_ cancellation
+             this.cancelled = true;
+         } finally {
+             this.scheduler.schedulingLockArea.unlock(schedulingLock); // Folia - use area based lock to reduce contention
+@@ -139,16 +141,29 @@ public final class ChunkLoadTask extends ChunkProgressionTask {
+         the chunk load task attempts to complete with a non-null value
+         */
+ 
+-        if (this.entityLoadTask != null) {
+-            if (this.entityLoadTask.cancel()) {
+-                this.tryCompleteLoad();
++        // Folia start - fix cancellation of chunk load task
++        if (scheduled) {
++            // since we scheduled, we need to cancel the tasks
++            if (this.entityLoadTask != null) {
++                if (this.entityLoadTask.cancel()) {
++                    this.tryCompleteLoad();
++                }
+             }
+-        }
+-        if (this.poiLoadTask != null) {
+-            if (this.poiLoadTask.cancel()) {
+-                this.tryCompleteLoad();
++            if (this.poiLoadTask != null) {
++                if (this.poiLoadTask.cancel()) {
++                    this.tryCompleteLoad();
++                }
+             }
++        } else {
++            // since nothing was scheduled, we need to decrement the task count here ourselves
++
++            // for entity load task
++            this.tryCompleteLoad();
++
++            // for poi load task
++            this.tryCompleteLoad();
+         }
++        // Folia end - fix cancellation of chunk load task
+         this.loadTask.cancel();
+     }
+ 
