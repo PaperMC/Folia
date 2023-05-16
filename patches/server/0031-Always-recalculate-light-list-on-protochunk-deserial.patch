@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Mon, 15 May 2023 20:31:36 -0700
+Subject: [PATCH] Always recalculate light list on protochunk deserialize
+
+I noticed during my stress testing that the total size of the
+light list was far too large, which indicates many duplicates.
+For me, this caused many GC problems which made stress testing
+harder.
+
+It turns out, it was possible for the light list recalculation
+logic to occur _and_ the addition of the light list data from
+the NBT data. Since there is no logic to de-duplicate this list,
+every chunk load would re-add all light sources into the light
+list and the light list would grow uncontrollably.
+
+Since the recalculation logic would often run, I have
+decided to solve this by discarding the data on disk and always
+just calculating the list from the chunk data alone. Additionally,
+I have applied an optimization from Vanilla 1.20 to avoid
+searching sections without light sources by first checking the
+palette for possible block sources.
+
+Now my stress tests do not have issues with GC at all.
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+index 3c9ae42290c2e0cb70bb08e97f3ea2c3fb594c7d..200915f5accdb26c634cc77300a7d3275a8b1e0a 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+@@ -321,7 +321,7 @@ public class ChunkSerializer {
+             BelowZeroRetrogen belowzeroretrogen = protochunk.getBelowZeroRetrogen();
+             boolean flag5 = chunkstatus.isOrAfter(ChunkStatus.LIGHT) || belowzeroretrogen != null && belowzeroretrogen.targetStatus().isOrAfter(ChunkStatus.LIGHT);
+ 
+-            if (!flag) { // Paper - fix incorrect parsing of blocks that emit light - it should always parse it, unless the chunk is marked as lit
++            if (true) { // Paper - fix incorrect parsing of blocks that emit light - it should always parse it, unless the chunk is marked as lit // Folia - always recalculate light data to eliminate duplicates
+                 // Paper start - let's make sure the implementation isn't as slow as possible
+                 int offX = chunkPos.x << 4;
+                 int offZ = chunkPos.z << 4;
+@@ -332,7 +332,7 @@ public class ChunkSerializer {
+                 LevelChunkSection[] sections = achunksection;
+                 for (int sectionY = minChunkSection; sectionY <= maxChunkSection; ++sectionY) {
+                     LevelChunkSection section = sections[sectionY - minChunkSection];
+-                    if (section == null || section.hasOnlyAir()) {
++                    if (section == null || section.hasOnlyAir() || !section.maybeHas((BlockState state) -> state.getLightEmission() > 0)) { // Folia - always recalculate light data to eliminate duplicates - skip sections that definitely have no sources
+                         // no sources in empty sections
+                         continue;
+                     }
+@@ -416,19 +416,7 @@ public class ChunkSerializer {
+                 ((ChunkAccess) object1).setBlockEntityNbt(nbttagcompound4);
+             }
+ 
+-            ListTag nbttaglist4 = nbt.getList("Lights", 9);
+-
+-            for (int l1 = 0; l1 < nbttaglist4.size(); ++l1) {
+-                LevelChunkSection chunksection1 = achunksection[l1];
+-
+-                if (chunksection1 != null && !chunksection1.hasOnlyAir()) {
+-                    ListTag nbttaglist5 = nbttaglist4.getList(l1);
+-
+-                    for (int i2 = 0; i2 < nbttaglist5.size(); ++i2) {
+-                        protochunk1.addLight(nbttaglist5.getShort(i2), l1);
+-                    }
+-                }
+-            }
++            // Folia - always recalculate light data to eliminate duplicates
+ 
+             nbttagcompound4 = nbt.getCompound("CarvingMasks");
+             Iterator iterator2 = nbttagcompound4.getAllKeys().iterator();
