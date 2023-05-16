@@ -3506,10 +3506,10 @@ index 5170b43743ea27a5c2aaee37d76f4e7e730fd808..1a4d820535f7b04671525c4f0e8691c9
              if (lock) {
 diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedTicketLevelPropagator.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedTicketLevelPropagator.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee7195d44c
+index 0000000000000000000000000000000000000000..b052dcc7745d461b3b26eebccb655606696bf692
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedTicketLevelPropagator.java
-@@ -0,0 +1,1415 @@
+@@ -0,0 +1,1480 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -3679,6 +3679,9 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +            if (section != this.sections.get(new Coordinate(sectionX, sectionZ))) {
 +                // occurs when a stolen update deletes this section
 +                // it is possible that another update is scheduled, but that one will have the correct section
++                if (node != null) {
++                    this.updateQueue.remove(node);
++                }
 +                return false;
 +            }
 +
@@ -4194,15 +4197,30 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +            this.sectionZ = sectionZ;
 +        }
 +
++        public boolean isZero() {
++            for (final short val : this.levels) {
++                if (val != 0) {
++                    return false;
++                }
++            }
++            return true;
++        }
++
 +        @Override
 +        public String toString() {
 +            final StringBuilder ret = new StringBuilder();
 +
 +            for (int x = 0; x < SECTION_SIZE; ++x) {
-+                ret.append("x=").append(x).append("\n");
++                ret.append("levels x=").append(x).append("\n");
 +                for (int z = 0; z < SECTION_SIZE; ++z) {
 +                    final short v = this.levels[x | (z << SECTION_SHIFT)];
 +                    ret.append(v & 0xFF).append(".");
++                }
++                ret.append("\n");
++                ret.append("sources x=").append(x).append("\n");
++                for (int z = 0; z < SECTION_SIZE; ++z) {
++                    final short v = this.levels[x | (z << SECTION_SHIFT)];
++                    ret.append((v >>> 8) & 0xFF).append(".");
 +                }
 +                ret.append("\n\n");
 +            }
@@ -4521,7 +4539,6 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +                    final int tailingBit = (-propagateDirectionBitset) & propagateDirectionBitset;
 +                    propagateDirectionBitset ^= tailingBit;
 +
-+
 +                    // pDecode is from [0, 2], and 1 must be subtracted to fully decode the offset
 +                    // it has been split to save some cycles via parallelism
 +                    final int pDecodeX = (set & 3);
@@ -4689,10 +4706,6 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +                    // nstartidx2 = x rel -1 for z rel 0 = line after line2, so we can just add 8 (row length of bitset)
 +                    final long bitsetLine3 = currentPropagation & (7L << (start + (8 + 8)));
 +
-+                    // remove ("take") lines from bitset
-+                    // can't do this during decrease, TODO WHY?
-+                    //currentPropagation ^= (bitsetLine1 | bitsetLine2 | bitsetLine3);
-+
 +                    // now try to propagate
 +                    final Section section = this.sections[sectionIndex];
 +
@@ -4716,6 +4729,10 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +                                (FLAG_RECHECK_LEVEL | (ALL_DIRECTIONS_BITSET << (COORDINATE_BITS + COORDINATE_BITS + LEVEL_BITS)));
 +                        continue;
 +                    }
++
++                    // remove ("take") lines from bitset
++                    // can't do this during decrease, TODO WHY?
++                    //currentPropagation ^= (bitsetLine1 | bitsetLine2 | bitsetLine3);
 +
 +                    // update level
 +                    section.levels[localIndex] = (short)((currentStoredLevel & ~0xFF));
@@ -4746,12 +4763,12 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +                    // don't queue update if toPropagate cannot propagate anything to neighbours
 +                    // (for increase, propagating 0 to neighbours is useless)
 +                    if (queueLength >= queue.length) {
-+                        queue = this.resizeIncreaseQueue();
++                        queue = this.resizeDecreaseQueue();
 +                    }
 +                    queue[queueLength++] =
 +                            ((long)(offX + (offZ << COORDINATE_BITS) + encodeOffset) & ((1L << (COORDINATE_BITS + COORDINATE_BITS)) - 1)) |
 +                            ((toPropagate & (LEVEL_COUNT - 1L)) << (COORDINATE_BITS + COORDINATE_BITS)) |
-+                            childPropagation; //(ALL_DIRECTIONS_BITSET << (COORDINATE_BITS + COORDINATE_BITS + LEVEL_BITS));
++                            (ALL_DIRECTIONS_BITSET << (COORDINATE_BITS + COORDINATE_BITS + LEVEL_BITS)); //childPropagation;
 +                    continue;
 +                }
 +            }
@@ -4821,7 +4838,7 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +    private static final java.util.Random random = new java.util.Random(4L);
 +    private static final List<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void>> walkers =
 +        new java.util.ArrayList<>();
-+    static final int PLAYERS = 100;
++    static final int PLAYERS = 0;
 +    static final int RAD_BLOCKS = 10000;
 +    static final int RAD = RAD_BLOCKS >> 4;
 +    static final int RAD_BIG_BLOCKS = 100_000;
@@ -4830,6 +4847,11 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +    static final int BIG_PLAYERS = 50;
 +    static final double WALK_CHANCE = 0.10;
 +    static final double TP_CHANCE = 0.01;
++    static final int TP_BACK_PLAYERS = 200;
++    static final double TP_BACK_CHANCE = 0.25;
++    static final double TP_STEAL_CHANCE = 0.25;
++    private static final List<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void>> tpBack =
++        new java.util.ArrayList<>();
 +
 +    public static void main(final String[] args) {
 +        final ReentrantAreaLock ticketLock = new ReentrantAreaLock(SECTION_SHIFT);
@@ -4861,7 +4883,7 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +        };
 +
 +        for (;;) {
-+            if (walkers.isEmpty()) {
++            if (walkers.isEmpty() && tpBack.isEmpty()) {
 +                for (int i = 0; i < PLAYERS; ++i) {
 +                    int rad = i < BIG_PLAYERS ? RAD_BIG : RAD;
 +                    int posX = random.nextInt(-rad, rad + 1);
@@ -4885,6 +4907,30 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +                    map.add(posX, posZ, VD);
 +
 +                    walkers.add(map);
++                }
++                for (int i = 0; i < TP_BACK_PLAYERS; ++i) {
++                    int rad = RAD_BIG;
++                    int posX = random.nextInt(-rad, rad + 1);
++                    int posZ = random.nextInt(-rad, rad + 1);
++
++                    io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void> map = new io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<>(null) {
++                        @Override
++                        protected void addCallback(Void parameter, int chunkX, int chunkZ) {
++                            int src = 45 - 31 + 1;
++                            ref.setSource(chunkX, chunkZ, src);
++                            propagator.setSource(chunkX, chunkZ, src);
++                        }
++
++                        @Override
++                        protected void removeCallback(Void parameter, int chunkX, int chunkZ) {
++                            ref.removeSource(chunkX, chunkZ);
++                            propagator.removeSource(chunkX, chunkZ);
++                        }
++                    };
++
++                    map.add(posX, posZ, random.nextInt(1, 63));
++
++                    tpBack.add(map);
 +                }
 +            } else {
 +                for (int i = 0; i < PLAYERS; ++i) {
@@ -4912,6 +4958,25 @@ index 0000000000000000000000000000000000000000..362d9f1c8551e6d94726764a9abaa3ee
 +                    io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void> map = walkers.get(i);
 +
 +                    map.update(posX, posZ, VD);
++                }
++
++                for (int i = 0; i < TP_BACK_PLAYERS; ++i) {
++                    if (random.nextDouble() > TP_BACK_CHANCE) {
++                        continue;
++                    }
++
++                    io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void> map = tpBack.get(i);
++
++                    map.update(-map.lastChunkX, -map.lastChunkZ, random.nextInt(1, 63));
++
++                    if (random.nextDouble() > TP_STEAL_CHANCE) {
++                        propagator.performUpdate(
++                            map.lastChunkX >> SECTION_SHIFT, map.lastChunkZ >> SECTION_SHIFT, schedulingLock, null, null
++                        );
++                        propagator.performUpdate(
++                            (-map.lastChunkX >> SECTION_SHIFT), (-map.lastChunkZ >> SECTION_SHIFT), schedulingLock, null, null
++                        );
++                    }
 +                }
 +            }
 +
