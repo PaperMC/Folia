@@ -16098,7 +16098,7 @@ index bf1a77cf9bbea4e2104b2a8c61309e740f28d51b..acc8af33ad8534d812908b0feb9a1963
                  for (ServerPlayer player : ServerLevel.this.players) {
                      player.getBukkitEntity().onEntityRemove(entity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 4231c3fe14a621d237bdc3d56c593f0adc0a7bc6..5f53c9ad5d64053a2e29c58ddb62e7d2bd176efe 100644
+index 4231c3fe14a621d237bdc3d56c593f0adc0a7bc6..7ed0787319341573416d1152e54a6b98fca86e92 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -188,7 +188,7 @@ import org.bukkit.inventory.MainHand;
@@ -16106,7 +16106,7 @@ index 4231c3fe14a621d237bdc3d56c593f0adc0a7bc6..5f53c9ad5d64053a2e29c58ddb62e7d2
  
      private static final Logger LOGGER = LogUtils.getLogger();
 -    public long lastSave = MinecraftServer.currentTick; // Paper
-+    public long lastSave = Long.MIN_VALUE; // Paper // Folia - threaded regions
++    public long lastSave = Long.MIN_VALUE; // Paper // Folia - threaded regions - changed to nanoTime
      private static final int NEUTRAL_MOB_DEATH_NOTIFICATION_RADII_XZ = 32;
      private static final int NEUTRAL_MOB_DEATH_NOTIFICATION_RADII_Y = 10;
      public ServerGamePacketListenerImpl connection;
@@ -17512,7 +17512,7 @@ index 7edd4b88eb0476f0630630bc4681e859bd145b2b..f3586a5c5b5d4cae817aa7c15fc0c2fc
              date1 = fallback;
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..b9bd88fa6536e17cccec8a4f482b9b272be9568f 100644
+index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..c6cfc5853869d0a356947b5cb83157a937acd91c 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -136,10 +136,10 @@ public abstract class PlayerList {
@@ -17621,7 +17621,7 @@ index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..b9bd88fa6536e17cccec8a4f482b9b27
 +    public void placeNewPlayer(Connection connection, ServerPlayer player, CompoundTag nbttagcompound, String s, Location selectedSpawn) {
 +        ServerLevel worldserver1 = ((CraftWorld)selectedSpawn.getWorld()).getHandle();
 +        player.setPosRaw(selectedSpawn.getX(), selectedSpawn.getY(), selectedSpawn.getZ());
-+        player.lastSave = io.papermc.paper.threadedregions.RegionizedServer.getCurrentTick();
++        player.lastSave = System.nanoTime(); // changed to nanoTime
 +        // Folia end - region threading - rewrite login process
          player.setLevel(worldserver1);
          String s1 = "local";
@@ -17685,7 +17685,7 @@ index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..b9bd88fa6536e17cccec8a4f482b9b27
      protected void save(ServerPlayer player) {
          if (!player.getBukkitEntity().isPersistent()) return; // CraftBukkit
 -        player.lastSave = MinecraftServer.currentTick; // Paper
-+        player.lastSave = io.papermc.paper.threadedregions.RegionizedServer.getCurrentTick(); // Folia - region threading
++        player.lastSave = System.nanoTime(); // Folia - region threading - changed to nanoTime tracking
          this.playerIo.save(player);
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
  
@@ -17870,23 +17870,34 @@ index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..b9bd88fa6536e17cccec8a4f482b9b27
  
              // CraftBukkit start - Test if player receiving packet can see the source of the packet
              if (player != null && !entityplayer.getBukkitEntity().canSee(player.getBukkitEntity())) {
-@@ -1196,9 +1266,12 @@ public abstract class PlayerList {
+@@ -1196,12 +1266,21 @@ public abstract class PlayerList {
          io.papermc.paper.util.MCUtil.ensureMain("Save Players" , () -> { // Paper - Ensure main
          MinecraftTimings.savePlayers.startTiming(); // Paper
          int numSaved = 0;
 -        long now = MinecraftServer.currentTick;
 -        for (int i = 0; i < this.players.size(); ++i) {
 -            ServerPlayer entityplayer = this.players.get(i);
-+        long now = io.papermc.paper.threadedregions.RegionizedServer.getCurrentTick(); // Folia - region threading
+-            if (interval == -1 || now - entityplayer.lastSave >= interval) {
++        long now = System.nanoTime(); // Folia - region threading
++        int max = io.papermc.paper.configuration.GlobalConfiguration.get().playerAutoSave.maxPerTick(); // Folia - region threading
++        long timeInterval = (long)interval * io.papermc.paper.threadedregions.TickRegionScheduler.TIME_BETWEEN_TICKS; // Folia - region threading
 +        for (ServerPlayer entityplayer : this.players) { // Folia start - region threading
 +            if (!io.papermc.paper.util.TickThread.isTickThreadFor(entityplayer)) {
 +                continue;
 +            }
 +            // Folia end - region threading
-             if (interval == -1 || now - entityplayer.lastSave >= interval) {
++            if (interval == -1 || now - entityplayer.lastSave >= timeInterval) { // Folia - region threading
                  this.save(entityplayer);
-                 if (interval != -1 && ++numSaved <= io.papermc.paper.configuration.GlobalConfiguration.get().playerAutoSave.maxPerTick()) { break; }
-@@ -1318,6 +1391,20 @@ public abstract class PlayerList {
+-                if (interval != -1 && ++numSaved <= io.papermc.paper.configuration.GlobalConfiguration.get().playerAutoSave.maxPerTick()) { break; }
++                // Folia start - region threading
++                if (interval != -1 && max != -1 && ++numSaved >= max) {
++                    break;
++                }
++                // Folia end - region threading
+             }
+             // Paper end
+         }
+@@ -1318,6 +1397,20 @@ public abstract class PlayerList {
      }
  
      public void removeAll(boolean isRestarting) {
@@ -17907,7 +17918,7 @@ index 0dbe182fbae5ce5ba182176eb5d5e3f1897e77f2..b9bd88fa6536e17cccec8a4f482b9b27
          // Paper end
          // CraftBukkit start - disconnect safely
          for (ServerPlayer player : this.players) {
-@@ -1327,7 +1414,7 @@ public abstract class PlayerList {
+@@ -1327,7 +1420,7 @@ public abstract class PlayerList {
          // CraftBukkit end
  
          // Paper start - Remove collideRule team if it exists
