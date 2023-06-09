@@ -1,0 +1,482 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Fri, 12 May 2023 20:37:56 -0700
+Subject: [PATCH] Use coordinate-based locking to increase chunk system
+ parallelism
+
+A significant overhead in Folia comes from the chunk system's
+locks, the ticket lock and the scheduling lock. The public
+test server, which had ~330 players, had signficant performance
+problems with these locks: ~80% of the time spent ticking
+was _waiting_ for the locks to free. Given that it used
+around 15 cores total at peak, this is a complete and utter loss
+of potential.
+
+To address this issue, I have replaced the ticket lock and scheduling
+lock with two ReentrantAreaLocks. The ReentrantAreaLock takes a
+shift, which is used internally to group positions into sections.
+This grouping is neccessary, as the possible radius of area that
+needs to be acquired for any given lock usage is up to 64. As such,
+the shift is critical to reduce the number of areas required to lock
+for any lock operation. Currently, it is set to a shift of 6, which
+is identical to the ticket level propagation shift (and, it must be
+at least the ticket level propagation shift AND the region shift).
+
+The chunk system locking changes required a complete rewrite of the
+chunk system tick, chunk system unload, and chunk system ticket level
+propagation - as all of the previous logic only works with a single
+global lock.
+
+This does introduce two other section shifts: the lock shift, and the
+ticket shift. The lock shift is simply what shift the area locks use,
+and the ticket shift represents the size of the ticket sections.
+Currently, these values are just set to the region shift for simplicity.
+However, they are not arbitrary: the lock shift must be at least the size
+of the ticket shift and must be at least the size of the region shift.
+The ticket shift must also be >= the ceil(log2(max ticket level source)).
+
+The chunk system's ticket propagator is now global state, instead of
+region state. This cleans up the logic for ticket levels significantly,
+and removes usage of the region lock in this area, but it also means
+that the addition of a ticket no longer creates a region. To alleviate
+the side effects of this change, the global tick thread now processes
+ticket level updates for each world every tick to guarantee eventual
+ticket level processing. The chunk system also provides a hook to
+process ticket level changes in a given _section_, so that the
+region queue can guarantee that after adding its reference counter
+that the region section is created/exists/wont be destroyed.
+
+The ticket propagator operates by updating the sources in a single ticket
+section, and propagating the updates to its 1 radius neighbours. This
+allows the ticket updates to occur in parallel or selectively (see above).
+Currently, the process ticket level update function operates by
+polling from a concurrent queue of sections to update and simply
+invoking the single section update logic. This allows the function
+to operate completely in parallel, provided the queue is ordered right.
+Additionally, this limits the area used in the ticket/scheduling lock
+when processing updates, which should massively increase parallelism compared
+to before.
+
+The chunk system ticket addition for expirable ticket types has been modified
+to no longer track exact tick deadlines, as this relies on what region the
+ticket is in. Instead, the chunk system tracks a map of
+lock section -> (chunk coordinate -> expire ticket count) and every ticket
+has been changed to have a removeDelay count that is decremented each tick.
+Each region searches its own sections to find tickets to try to expire.
+
+Chunk system unloading has been modified to track unloads by lock section.
+The ordering is determined by which section a chunk resides in.
+The unload process now removes from unload sections and processes
+the full unload stages (1, 2, 3) before moving to the next section, if possible.
+This allows the unload logic to only hold one lock section at a time for
+each lock, which is a massive parallelism increase.
+
+In stress testing, these changes lowered the locking overhead to only 5%
+from ~70%, which completely fix the original problem as described.
+
+diff --git a/src/main/java/ca/spottedleaf/concurrentutil/lock/AreaLock.java b/src/main/java/ca/spottedleaf/concurrentutil/lock/AreaLock.java
+deleted file mode 100644
+index 6a155b779914828a0d4199bdfcb0d6fca25e1581..0000000000000000000000000000000000000000
+--- a/src/main/java/ca/spottedleaf/concurrentutil/lock/AreaLock.java
++++ /dev/null
+@@ -1,146 +0,0 @@
+-package ca.spottedleaf.concurrentutil.lock;
+-
+-import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
+-import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
+-import java.util.ArrayList;
+-import java.util.List;
+-import java.util.concurrent.locks.LockSupport;
+-
+-public final class AreaLock {
+-
+-    private final int coordinateShift;
+-
+-    private final Long2ReferenceOpenHashMap<Node> nodesByPosition = new Long2ReferenceOpenHashMap<>(1024, 0.10f);
+-
+-    public AreaLock(final int coordinateShift) {
+-        this.coordinateShift = coordinateShift;
+-    }
+-
+-    private static long key(final int x, final int z) {
+-        return ((long)z << 32) | (x & 0xFFFFFFFFL);
+-    }
+-
+-    public Node lock(final int x, final int z, final int radius) {
+-        final Thread thread = Thread.currentThread();
+-        final int minX = (x - radius) >> this.coordinateShift;
+-        final int minZ = (z - radius) >> this.coordinateShift;
+-        final int maxX = (x + radius) >> this.coordinateShift;
+-        final int maxZ = (z + radius) >> this.coordinateShift;
+-
+-        final Node node = new Node(x, z, radius, thread);
+-
+-        synchronized (this) {
+-            ReferenceOpenHashSet<Node> parents = null;
+-            for (int currZ = minZ; currZ <= maxZ; ++currZ) {
+-                for (int currX = minX; currX <= maxX; ++currX) {
+-                    final Node dependency = this.nodesByPosition.put(key(currX, currZ), node);
+-                    if (dependency == null) {
+-                        continue;
+-                    }
+-
+-                    if (parents == null) {
+-                        parents = new ReferenceOpenHashSet<>();
+-                    }
+-
+-                    if (parents.add(dependency)) {
+-                        // added a dependency, so we need to add as a child to the dependency
+-                        if (dependency.children == null) {
+-                            dependency.children = new ArrayList<>();
+-                        }
+-                        dependency.children.add(node);
+-                    }
+-                }
+-            }
+-
+-            if (parents == null) {
+-                // no dependencies, so we can just return immediately
+-                return node;
+-            } // else: we need to lock
+-
+-            node.parents = parents;
+-        }
+-
+-        while (!node.unlocked) {
+-            LockSupport.park(node);
+-        }
+-
+-        return node;
+-    }
+-
+-    public void unlock(final Node node) {
+-        List<Node> toUnpark = null;
+-
+-        final int x = node.x;
+-        final int z = node.z;
+-        final int radius = node.radius;
+-
+-        final int minX = (x - radius) >> this.coordinateShift;
+-        final int minZ = (z - radius) >> this.coordinateShift;
+-        final int maxX = (x + radius) >> this.coordinateShift;
+-        final int maxZ = (z + radius) >> this.coordinateShift;
+-
+-        synchronized (this) {
+-            final List<Node> children = node.children;
+-            if (children != null) {
+-                // try to unlock children
+-                for (int i = 0, len = children.size(); i < len; ++i) {
+-                    final Node child = children.get(i);
+-                    if (!child.parents.remove(node)) {
+-                        throw new IllegalStateException();
+-                    }
+-                    if (child.parents.isEmpty()) {
+-                        // we can unlock, as it now has no dependencies in front
+-                        child.parents = null;
+-                        if (toUnpark == null) {
+-                            toUnpark = new ArrayList<>();
+-                            toUnpark.add(child);
+-                        } else {
+-                            toUnpark.add(child);
+-                        }
+-                    }
+-                }
+-            }
+-
+-            // remove node from dependency map
+-            for (int currZ = minZ; currZ <= maxZ; ++currZ) {
+-                for (int currX = minX; currX <= maxX; ++currX) {
+-                    // node: we only remove if we match, as a mismatch indicates a child node which of course has not
+-                    // yet been unlocked
+-                    this.nodesByPosition.remove(key(currX, currZ), node);
+-                }
+-            }
+-        }
+-
+-        if (toUnpark == null) {
+-            return;
+-        }
+-
+-        // we move the unpark / unlock logic here because we want to avoid performing work while holding the lock
+-
+-        for (int i = 0, len = toUnpark.size(); i < len; ++i) {
+-            final Node toUnlock = toUnpark.get(i);
+-            toUnlock.unlocked = true; // must be volatile and before unpark()
+-            LockSupport.unpark(toUnlock.thread);
+-        }
+-    }
+-
+-    public static final class Node {
+-
+-        public final int x;
+-        public final int z;
+-        public final int radius;
+-        public final Thread thread;
+-
+-        private List<Node> children;
+-        private ReferenceOpenHashSet<Node> parents;
+-
+-        private volatile boolean unlocked;
+-
+-        public Node(final int x, final int z, final int radius, final Thread thread) {
+-            this.x = x;
+-            this.z = z;
+-            this.radius = radius;
+-            this.thread = thread;
+-        }
+-    }
+-}
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
+index 8a5e3138c0f5e3f275c7352faf07bf39c04d00ca..daeed35877ffd0c110b2ec259030b038cf60cefb 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
+@@ -191,7 +191,7 @@ public final class ChunkTaskScheduler {
+     // it must be >= ticket propagator section shift so that the ticket propagator can assume that owning a position implies owning
+     // the entire section
+     // we just take the max, as we want the smallest shift that satifies these properties
+-    private static final int LOCK_SHIFT = ThreadedTicketLevelPropagator.SECTION_SHIFT;
++    private static final int LOCK_SHIFT = Math.max(io.papermc.paper.threadedregions.ThreadedTicketLevelPropagator.SECTION_SHIFT, io.papermc.paper.threadedregions.TickRegions.getRegionChunkShift()); // Folia - region threading
+     public static int getChunkSystemLockShift() {
+         return LOCK_SHIFT;
+     }
+diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
+index 6c1d55144f044f39926ddf998104950b9efe3ee1..8e31c6ee9ee16aff699e124a9b0554eaafa5c1ac 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
++++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
+@@ -185,7 +185,96 @@ public final class RegionizedServer {
+     private long lastServerStatus;
+     private long tickCount;
+ 
++    /*
++    private final java.util.Random random = new java.util.Random(4L);
++    private final List<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void>> walkers =
++        new java.util.ArrayList<>();
++    static final int PLAYERS = 100;
++    static final int RAD_BLOCKS = 10000;
++    static final int RAD = RAD_BLOCKS >> 4;
++    static final int RAD_BIG_BLOCKS = 100_000;
++    static final int RAD_BIG = RAD_BIG_BLOCKS >> 4;
++    static final int VD = 4;
++    static final int BIG_PLAYERS = 50;
++    static final double WALK_CHANCE = 0.10;
++    static final double TP_CHANCE = 0.01;
++
++    private ServerLevel getWorld() {
++        return this.worlds.get(0);
++    }
++
++    private void init2() {
++        for (int i = 0; i < PLAYERS; ++i) {
++            int rad = i < BIG_PLAYERS ? RAD_BIG : RAD;
++            int posX = this.random.nextInt(-rad, rad + 1);
++            int posZ = this.random.nextInt(-rad, rad + 1);
++
++            io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void> map = new io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<>(null) {
++                @Override
++                protected void addCallback(Void parameter, int chunkX, int chunkZ) {
++                    ServerLevel world = RegionizedServer.this.getWorld();
++                    world.chunkTaskScheduler.chunkHolderManager.addTicketAtLevel(
++                        net.minecraft.server.level.TicketType.PLAYER, chunkX, chunkZ, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.ENTITY_TICKING_TICKET_LEVEL, new net.minecraft.world.level.ChunkPos(posX, posZ)
++                    );
++                }
++
++                @Override
++                protected void removeCallback(Void parameter, int chunkX, int chunkZ) {
++                    ServerLevel world = RegionizedServer.this.getWorld();
++                    world.chunkTaskScheduler.chunkHolderManager.removeTicketAtLevel(
++                        net.minecraft.server.level.TicketType.PLAYER, chunkX, chunkZ, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.ENTITY_TICKING_TICKET_LEVEL, new net.minecraft.world.level.ChunkPos(posX, posZ)
++                    );
++                }
++            };
++
++            map.add(posX, posZ, VD);
++
++            walkers.add(map);
++        }
++    }
++
++    private void randomWalk() {
++        if (this.walkers.isEmpty()) {
++            this.init2();
++            return;
++        }
++
++        for (int i = 0; i < PLAYERS; ++i) {
++            if (this.random.nextDouble() > WALK_CHANCE) {
++                continue;
++            }
++
++            io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void> map = this.walkers.get(i);
++
++            int updateX = this.random.nextInt(-1, 2);
++            int updateZ = this.random.nextInt(-1, 2);
++
++            map.update(map.lastChunkX + updateX, map.lastChunkZ + updateZ, VD);
++        }
++
++        for (int i = 0; i < PLAYERS; ++i) {
++            if (random.nextDouble() >= TP_CHANCE) {
++                continue;
++            }
++
++            int rad = i < BIG_PLAYERS ? RAD_BIG : RAD;
++            int posX = random.nextInt(-rad, rad + 1);
++            int posZ = random.nextInt(-rad, rad + 1);
++
++            io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void> map = walkers.get(i);
++
++            map.update(posX, posZ, VD);
++        }
++    }
++     */
++
+     private void globalTick(final int tickCount) {
++        /*
++        if (false) {
++            io.papermc.paper.threadedregions.ThreadedTicketLevelPropagator.main(null);
++        }
++        this.randomWalk();
++         */
+         ++this.tickCount;
+         // expire invalid click command callbacks
+         io.papermc.paper.adventure.providers.ClickCallbackProviderImpl.CALLBACK_MANAGER.handleQueue((int)this.tickCount);
+@@ -311,6 +400,8 @@ public final class RegionizedServer {
+         this.tickTime(world, tickCount);
+ 
+         world.updateTickData();
++
++        world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates(); // Folia - use area based lock to reduce contention - required now to eventually process ticket updates
+     }
+ 
+     private void updateRaids(final ServerLevel world) {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
+index 4a095e69584d7dbbefafe6e0a4a1a1090172ac9e..2e4514e5a45db6e625ef7799b63a9285a3bc1030 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
++++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
+@@ -69,7 +69,7 @@ public final class RegionizedTaskQueue {
+     public static final class WorldRegionTaskData {
+         private final ServerLevel world;
+         private final MultiThreadedQueue<Runnable> globalChunkTask = new MultiThreadedQueue<>();
+-        private final SWMRLong2ObjectHashTable<AtomicLong> referenceCounters = new SWMRLong2ObjectHashTable<>();
++        private final java.util.concurrent.ConcurrentHashMap<io.papermc.paper.chunk.system.io.RegionFileIOThread.ChunkCoordinate, AtomicLong> referenceCounters = new java.util.concurrent.ConcurrentHashMap<>(); // Folia - use area based lock to reduce contention
+ 
+         public WorldRegionTaskData(final ServerLevel world) {
+             this.world = world;
+@@ -115,17 +115,25 @@ public final class RegionizedTaskQueue {
+             );
+         }
+ 
++        // Folia start - use area based lock to reduce contention
++        private void processTicketUpdates(final long coord) {
++            this.world.chunkTaskScheduler.chunkHolderManager.processTicketUpdates(CoordinateUtils.getChunkX(coord), CoordinateUtils.getChunkZ(coord));
++        }
++        // Folia end - use area based lock to reduce contention
++
+         private void decrementReference(final AtomicLong reference, final long coord) {
+             final long val = reference.decrementAndGet();
+             if (val == 0L) {
+-                final ReentrantLock ticketLock = this.world.chunkTaskScheduler.chunkHolderManager.ticketLock;
+-                ticketLock.lock();
++                final int chunkX = CoordinateUtils.getChunkX(coord); // Folia - use area based lock to reduce contention
++                final int chunkZ = CoordinateUtils.getChunkZ(coord); // Folia - use area based lock to reduce contention
++                final io.papermc.paper.chunk.system.io.RegionFileIOThread.ChunkCoordinate key = new io.papermc.paper.chunk.system.io.RegionFileIOThread.ChunkCoordinate(coord); // Folia - use area based lock to reduce contention
++                final ca.spottedleaf.concurrentutil.lock.ReentrantAreaLock.Node ticketLock = this.world.chunkTaskScheduler.chunkHolderManager.ticketLockArea.lock(chunkX, chunkZ); // Folia - use area based lock to reduce contention
+                 try {
+-                    if (this.referenceCounters.remove(coord, reference)) {
++                    if (this.referenceCounters.remove(key, reference)) { // Folia - use area based lock to reduce contention
+                         WorldRegionTaskData.this.removeTicket(coord);
+                     } // else: race condition, something replaced our reference - not our issue anymore
+                 } finally {
+-                    ticketLock.unlock();
++                    this.world.chunkTaskScheduler.chunkHolderManager.ticketLockArea.unlock(ticketLock); // Folia - use area based lock to reduce contention
+                 }
+             } else if (val < 0L) {
+                 throw new IllegalStateException("Reference count < 0: " + val);
+@@ -133,7 +141,8 @@ public final class RegionizedTaskQueue {
+         }
+ 
+         private AtomicLong incrementReference(final long coord) {
+-            final AtomicLong ret = this.referenceCounters.get(coord);
++            final io.papermc.paper.chunk.system.io.RegionFileIOThread.ChunkCoordinate key = new io.papermc.paper.chunk.system.io.RegionFileIOThread.ChunkCoordinate(coord); // Folia - use area based lock to reduce contention
++            final AtomicLong ret = this.referenceCounters.get(key); // Folia - use area based lock to reduce contention
+             if (ret != null) {
+                 // try to fast acquire counter
+                 int failures = 0;
+@@ -156,41 +165,54 @@ public final class RegionizedTaskQueue {
+             }
+ 
+             // slow acquire
+-            final ReentrantLock ticketLock = this.world.chunkTaskScheduler.chunkHolderManager.ticketLock;
+-            ticketLock.lock();
++            final int chunkX = CoordinateUtils.getChunkX(coord); // Folia - use area based lock to reduce contention
++            final int chunkZ = CoordinateUtils.getChunkZ(coord); // Folia - use area based lock to reduce contention
++            final ca.spottedleaf.concurrentutil.lock.ReentrantAreaLock.Node ticketLock = this.world.chunkTaskScheduler.chunkHolderManager.ticketLockArea.lock(chunkX, chunkZ); // Folia - use area based lock to reduce contention
++            final AtomicLong ret2;
++            final boolean processTicketUpdates;
+             try {
+                 final AtomicLong replace = new AtomicLong(1L);
+-                final AtomicLong valueInMap = this.referenceCounters.putIfAbsent(coord, replace);
++                final AtomicLong valueInMap = this.referenceCounters.putIfAbsent(key, replace); // Folia - use area based lock to reduce contention
+                 if (valueInMap == null) {
+                     // replaced, we should usually be here
+                     this.addTicket(coord);
+-                    return replace;
+-                } // else: need to attempt to acquire the reference
++                    ret2 = replace;
++                    processTicketUpdates = true;
++                } else {
++                    processTicketUpdates = false;
++                    int failures = 0;
++                    for (long curr = valueInMap.get();;) {
++                        if (curr == 0L) {
++                            // don't need to add ticket here, since ticket is only removed during the lock
++                            // we just need to replace the value in the map so that the thread removing fails and doesn't
++                            // remove the ticket (see decrementReference)
++                            this.referenceCounters.put(key, replace); // Folia - use area based lock to reduce contention
++                            ret2 = replace;
++                            break;
++                        }
+ 
+-                int failures = 0;
+-                for (long curr = valueInMap.get();;) {
+-                    if (curr == 0L) {
+-                        // don't need to add ticket here, since ticket is only removed during the lock
+-                        // we just need to replace the value in the map so that the thread removing fails and doesn't
+-                        // remove the ticket (see decrementReference)
+-                        this.referenceCounters.put(coord, replace);
+-                        return replace;
+-                    }
++                        for (int i = 0; i < failures; ++i) {
++                            ConcurrentUtil.backoff();
++                        }
+ 
+-                    for (int i = 0; i < failures; ++i) {
+-                        ConcurrentUtil.backoff();
+-                    }
++                        if (curr == (curr = valueInMap.compareAndExchange(curr, curr + 1L))) {
++                            // acquired
++                            ret2 = valueInMap;
++                            break;
++                        }
+ 
+-                    if (curr == (curr = valueInMap.compareAndExchange(curr, curr + 1L))) {
+-                        // acquired
+-                        return valueInMap;
++                        ++failures;
+                     }
+-
+-                    ++failures;
+                 }
+             } finally {
+-                ticketLock.unlock();
++                this.world.chunkTaskScheduler.chunkHolderManager.ticketLockArea.unlock(ticketLock); // Folia - use area based lock to reduce contention
++            }
++
++            if (processTicketUpdates) {
++                this.processTicketUpdates(coord);
+             }
++
++            return ret2;
+         }
+     }
+ 

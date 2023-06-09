@@ -3,7 +3,7 @@ import io.papermc.paperweight.tasks.RebuildGitPatches
 plugins {
     java
     `maven-publish`
-    id("com.github.johnrengelman.shadow") version "8.1.0" apply false
+    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
     id("io.papermc.paperweight.patcher") version "1.5.5"
 }
 
