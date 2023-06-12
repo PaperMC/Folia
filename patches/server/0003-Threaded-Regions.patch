@@ -1838,7 +1838,7 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
      }
  
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-index abd0217cf0bff183c8e262edc173a53403797c1a..33524deb5e1eda5be53e5b426c88f5837eb3e512 100644
+index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a026fdf4d 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 @@ -53,6 +53,14 @@ import java.util.concurrent.atomic.AtomicReference;
@@ -2192,6 +2192,15 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..33524deb5e1eda5be53e5b426c88f583
          synchronized (this.chunkHolders) {
              this.chunkHolders.remove(CoordinateUtils.getChunkKey(holder.chunkX, holder.chunkZ));
          }
+@@ -1058,7 +1195,7 @@ public final class ChunkHolderManager {
+             throw new IllegalStateException("Cannot unload chunks recursively");
+         }
+         final int sectionShift = this.unloadQueue.coordinateShift; // sectionShift <= lock shift
+-        final List<ChunkQueue.SectionToUnload> unloadSectionsForRegion = this.unloadQueue.retrieveForAllRegions();
++        final List<ChunkQueue.SectionToUnload> unloadSectionsForRegion = this.unloadQueue.retrieveForCurrentRegion(); // Folia - threaded regions
+         int unloadCountTentative = 0;
+         for (final ChunkQueue.SectionToUnload sectionRef : unloadSectionsForRegion) {
+             final ChunkQueue.UnloadSection section
 @@ -1371,7 +1508,13 @@ public final class ChunkHolderManager {
  
      // only call on tick thread
@@ -2227,6 +2236,59 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..33524deb5e1eda5be53e5b426c88f583
  
          final JsonArray unloadQueue = new JsonArray();
          ret.add("unload_queue", unloadQueue);
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkQueue.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkQueue.java
+index 4cc1b3ba6d093a9683dbd8b7fe76106ae391e019..47bbd5de5849bef5392e3783322a19de5b351beb 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkQueue.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkQueue.java
+@@ -1,5 +1,8 @@
+ package io.papermc.paper.chunk.system.scheduling;
+ 
++import io.papermc.paper.threadedregions.ThreadedRegionizer;
++import io.papermc.paper.threadedregions.TickRegionScheduler;
++import io.papermc.paper.threadedregions.TickRegions;
+ import it.unimi.dsi.fastutil.HashCommon;
+ import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
+ import java.util.ArrayList;
+@@ -45,6 +48,39 @@ public final class ChunkQueue {
+         return ret;
+     }
+ 
++    // Folia start - threaded regions
++    public List<SectionToUnload> retrieveForCurrentRegion() {
++        final ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region =
++            TickRegionScheduler.getCurrentRegion();
++        final ThreadedRegionizer<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> regionizer = region.regioniser;
++        final int shift = this.coordinateShift;
++
++        final List<SectionToUnload> ret = new ArrayList<>();
++
++        for (final Map.Entry<Coordinate, UnloadSection> entry : this.unloadSections.entrySet()) {
++            final Coordinate coord = entry.getKey();
++            final long key = coord.key;
++            final UnloadSection section = entry.getValue();
++            final int sectionX = Coordinate.x(key);
++            final int sectionZ = Coordinate.z(key);
++            final int chunkX = sectionX << shift;
++            final int chunkZ = sectionZ << shift;
++
++            if (regionizer.getRegionAtUnsynchronised(chunkX, chunkZ) != region) {
++                continue;
++            }
++
++            ret.add(new SectionToUnload(sectionX, sectionZ, coord, section.order, section.chunks.size()));
++        }
++
++        ret.sort((final SectionToUnload s1, final SectionToUnload s2) -> {
++            return Long.compare(s1.order, s2.order);
++        });
++
++        return ret;
++    }
++    // Folia end - threaded regions
++
+     public UnloadSection getSectionUnsynchronized(final int sectionX, final int sectionZ) {
+         final Coordinate coordinate = new Coordinate(Coordinate.key(sectionX, sectionZ));
+         return this.unloadSections.get(coordinate);
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
 index f975cb93716e137d973ff2f9011acdbef58859a2..b84bfc9513a13e365f2bd471b3c77058638d1384 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
