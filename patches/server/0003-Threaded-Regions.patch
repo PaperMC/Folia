@@ -1382,71 +1382,102 @@ index 0000000000000000000000000000000000000000..63688716244066581d5b505703576e33
 +}
 diff --git a/src/main/java/ca/spottedleaf/leafprofiler/LProfileGraph.java b/src/main/java/ca/spottedleaf/leafprofiler/LProfileGraph.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..14a4778f7913b849fabbd772f9cb8a0bc5a6ed6c
+index 0000000000000000000000000000000000000000..1083a3dc0fc824da176e6ee64654b8c01b80ca4b
 --- /dev/null
 +++ b/src/main/java/ca/spottedleaf/leafprofiler/LProfileGraph.java
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,89 @@
 +package ca.spottedleaf.leafprofiler;
 +
-+import ca.spottedleaf.concurrentutil.map.SWMRInt2IntHashTable;
++import it.unimi.dsi.fastutil.ints.Int2IntMap;
++import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
++import java.util.ArrayDeque;
++import java.util.ArrayList;
 +import java.util.Arrays;
++import java.util.Iterator;
++import java.util.List;
 +
 +public final class LProfileGraph {
 +
 +    public static final int ROOT_NODE = 0;
-+
-+    // volatile required for correct publishing after resizing
-+    private volatile SWMRInt2IntHashTable[] nodes = new SWMRInt2IntHashTable[16];
++    // Array idx is the graph node id, where the int->int mapping is a mapping of profile timer id to graph node id
++    private Int2IntOpenHashMap[] nodes;
 +    private int nodeCount;
 +
 +    public LProfileGraph() {
-+        this.nodes[ROOT_NODE] = new SWMRInt2IntHashTable();
++        final Int2IntOpenHashMap[] nodes = new Int2IntOpenHashMap[16];
++        nodes[ROOT_NODE] = new Int2IntOpenHashMap();
++
++        this.nodes = nodes;
 +        this.nodeCount = 1;
 +    }
 +
-+    private int createNode(final int parent, final int type) {
-+        synchronized (this) {
-+            SWMRInt2IntHashTable[] nodes = this.nodes;
++    public static record GraphNode(GraphNode parent, int nodeId, int timerId) {}
 +
-+            final SWMRInt2IntHashTable node = nodes[parent];
++    public List<GraphNode> getDFS() {
++        final List<GraphNode> ret = new ArrayList<>();
++        final ArrayDeque<GraphNode> queue = new ArrayDeque<>();
 +
-+            final int newNode = this.nodeCount;
-+            final int prev = node.putIfAbsent(type, newNode);
++        queue.addFirst(new GraphNode(null, ROOT_NODE, -1));
++        final Int2IntOpenHashMap[] nodes = this.nodes;
 +
-+            if (prev != 0) {
-+                // already exists
-+                return prev;
++        GraphNode graphNode;
++        while ((graphNode = queue.pollFirst()) != null) {
++            ret.add(graphNode);
++
++            final int parent = graphNode.nodeId;
++
++            final Int2IntOpenHashMap children = nodes[parent];
++
++            for (final Iterator<Int2IntMap.Entry> iterator = children.int2IntEntrySet().fastIterator(); iterator.hasNext();) {
++                final Int2IntMap.Entry entry = iterator.next();
++                queue.addFirst(new GraphNode(graphNode, entry.getIntValue(), entry.getIntKey()));
 +            }
-+
-+            // insert new node
-+            ++this.nodeCount;
-+
-+            if (newNode >= nodes.length) {
-+                this.nodes = nodes = Arrays.copyOf(nodes, nodes.length * 2);
-+            }
-+
-+            nodes[newNode] = new SWMRInt2IntHashTable();
-+
-+            return newNode;
 +        }
++
++        return ret;
 +    }
 +
-+    public int getOrCreateNode(final int parent, final int type) {
-+        // note: requires parent node to exist
-+        final SWMRInt2IntHashTable[] nodes = this.nodes;
++    private int createNode(final int parent, final int timerId) {
++        Int2IntOpenHashMap[] nodes = this.nodes;
 +
-+        final int mapping = nodes[parent].get(type);
++        final Int2IntOpenHashMap node = nodes[parent];
++
++        final int newNode = this.nodeCount;
++        final int prev = node.putIfAbsent(timerId, newNode);
++
++        if (prev != 0) {
++            // already exists
++            return prev;
++        }
++
++        // insert new node
++        ++this.nodeCount;
++
++        if (newNode >= nodes.length) {
++            this.nodes = (nodes = Arrays.copyOf(nodes, nodes.length * 2));
++        }
++
++        nodes[newNode] = new Int2IntOpenHashMap();
++
++        return newNode;
++    }
++
++    public int getOrCreateNode(final int parent, final int timerId) {
++        // note: requires parent node to exist
++        final Int2IntOpenHashMap[] nodes = this.nodes;
++
++        final int mapping = nodes[parent].get(timerId);
 +
 +        if (mapping != 0) {
 +            return mapping;
 +        }
 +
-+        return this.createNode(parent, type);
++        return this.createNode(parent, timerId);
 +    }
 +}
 diff --git a/src/main/java/ca/spottedleaf/leafprofiler/LProfilerRegistry.java b/src/main/java/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ffa32c1eae22bda371dd1d0318cc7c587f8e5a5c
+index 0000000000000000000000000000000000000000..66200c6f4bcf27d060eedf066f56b70bd0cc3929
 --- /dev/null
 +++ b/src/main/java/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
 @@ -0,0 +1,59 @@
@@ -1504,29 +1535,42 @@ index 0000000000000000000000000000000000000000..ffa32c1eae22bda371dd1d0318cc7c58
 +    }
 +
 +    public static enum ProfileType {
-+        TIMER, COUNTER
++        COUNTER, TIMER;
 +    }
 +
 +    public static record ProfilerEntry(ProfileType type, String name, int id) {}
 +}
 diff --git a/src/main/java/ca/spottedleaf/leafprofiler/LeafProfiler.java b/src/main/java/ca/spottedleaf/leafprofiler/LeafProfiler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ad8c590fe7479fcb3c7ff5dc3ac3a4d6f33c5938
+index 0000000000000000000000000000000000000000..24d041db762f82c16a735271dd4266b8630666ca
 --- /dev/null
 +++ b/src/main/java/ca/spottedleaf/leafprofiler/LeafProfiler.java
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,313 @@
 +package ca.spottedleaf.leafprofiler;
 +
 +import it.unimi.dsi.fastutil.ints.IntArrayFIFOQueue;
 +import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
++import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
++import java.text.DecimalFormat;
++import java.util.ArrayDeque;
++import java.util.ArrayList;
 +import java.util.Arrays;
++import java.util.List;
 +
 +public final class LeafProfiler {
 +
-+    public final LProfilerRegistry registry;
-+    public final LProfileGraph graph;
++    private static final ThreadLocal<DecimalFormat> THREE_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
++        return new DecimalFormat("#,##0.000");
++    });
++    private static final ThreadLocal<DecimalFormat> NO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
++        return new DecimalFormat("#,##0");
++    });
 +
-+    private long[] data;
++    public final LProfilerRegistry registry;
++    private final LProfileGraph graph;
++
++    private long[] timers = new long[16];
++    private long[] counters = new long[16];
 +    private final IntArrayFIFOQueue callStack = new IntArrayFIFOQueue();
 +    private int topOfStack = LProfileGraph.ROOT_NODE;
 +    private final LongArrayFIFOQueue timerStack = new LongArrayFIFOQueue();
@@ -1537,44 +1581,283 @@ index 0000000000000000000000000000000000000000..ad8c590fe7479fcb3c7ff5dc3ac3a4d6
 +        this.graph = graph;
 +    }
 +
-+    private long[] resizeData(final long[] old, final int least) {
-+        return this.data = Arrays.copyOf(old, Math.max(old.length * 2, least * 2));
++    private long[] resizeTimers(final long[] old, final int least) {
++        return this.timers = Arrays.copyOf(old, Math.max(old.length * 2, least * 2));
 +    }
 +
-+    private void incrementDirect(final int nodeId, final long count) {
-+        final long[] data = this.data;
-+        if (nodeId >= data.length) {
-+            this.resizeData(data, nodeId)[nodeId] += count;
++    private void incrementTimersDirect(final int nodeId, final long count) {
++        final long[] timers = this.timers;
++        if (nodeId >= timers.length) {
++            this.resizeTimers(timers, nodeId)[nodeId] += count;
 +        } else {
-+            data[nodeId] += count;
++            timers[nodeId] += count;
 +        }
 +    }
 +
-+    public void incrementCounter(final int type, final long count) {
-+        // this is supposed to be an optimised version of startTimer then stopTimer
-+        final int node = this.graph.getOrCreateNode(this.topOfStack, type);
-+        this.incrementDirect(node, count);
++    private long[] resizeCounters(final long[] old, final int least) {
++        return this.counters = Arrays.copyOf(old, Math.max(old.length * 2, least * 2));
 +    }
 +
-+    public void startTimer(final int type, final long startTime) {
++    private void incrementCountersDirect(final int nodeId, final long count) {
++        final long[] counters = this.counters;
++        if (nodeId >= counters.length) {
++            this.resizeTimers(counters, nodeId)[nodeId] += count;
++        } else {
++            counters[nodeId] += count;
++        }
++    }
++
++    public void incrementCounter(final int timerId, final long count) {
++        final int node = this.graph.getOrCreateNode(this.topOfStack, timerId);
++        this.incrementCountersDirect(node, count);
++    }
++
++    public void incrementTimer(final int timerId, final long count) {
++        final int node = this.graph.getOrCreateNode(this.topOfStack, timerId);
++        this.incrementTimersDirect(node, count);
++    }
++
++    public void startTimer(final int timerId, final long startTime) {
++        final long lastTimerStart = this.lastTimerStart;
++        final LProfileGraph graph = this.graph;
 +        final int parentNode = this.topOfStack;
-+        final int newNode = this.graph.getOrCreateNode(parentNode, type);
-+        this.callStack.enqueue(parentNode);
-+        this.topOfStack = newNode;
++        final IntArrayFIFOQueue callStack = this.callStack;
++        final LongArrayFIFOQueue timerStack = this.timerStack;
 +
-+        this.timerStack.enqueue(this.lastTimerStart);
 +        this.lastTimerStart = startTime;
++        this.topOfStack = graph.getOrCreateNode(parentNode, timerId);
++
++        callStack.enqueue(parentNode);
++        timerStack.enqueue(lastTimerStart);
 +    }
 +
-+    public void stopTimer(final int type, final long endTime) {
-+        final int currentNode = this.topOfStack;
-+        this.topOfStack = this.callStack.dequeueLastInt();
-+
++    public void stopTimer(final int timerId, final long endTime) {
 +        final long lastStart = this.lastTimerStart;
-+        this.lastTimerStart = this.timerStack.dequeueLastLong();
++        final int currentNode = this.topOfStack;
++        final IntArrayFIFOQueue callStack = this.callStack;
++        final LongArrayFIFOQueue timerStack = this.timerStack;
++        this.lastTimerStart = timerStack.dequeueLastLong();
++        this.topOfStack = callStack.dequeueLastInt();
 +
-+        this.incrementDirect(currentNode, endTime - lastStart);
++        this.incrementTimersDirect(currentNode, endTime - lastStart);
++        this.incrementCountersDirect(currentNode, 1L);
 +    }
++
++    private static final char[][] INDENT_PATTERNS = new char[][] {
++        "|---".toCharArray(),
++        "|+++".toCharArray(),
++    };
++
++    public List<String> dumpToString() {
++        final List<LProfileGraph.GraphNode> graphDFS = this.graph.getDFS();
++        final Reference2ReferenceOpenHashMap<LProfileGraph.GraphNode, ProfileNode> nodeMap = new Reference2ReferenceOpenHashMap<>();
++
++        final ArrayDeque<ProfileNode> orderedNodes = new ArrayDeque<>();
++
++        for (int i = 0, len = graphDFS.size(); i < len; ++i) {
++            final LProfileGraph.GraphNode graphNode = graphDFS.get(i);
++            final ProfileNode parent = nodeMap.get(graphNode.parent());
++            final int nodeId = graphNode.nodeId();
++
++            final long totalTime = this.timers[nodeId];
++            final long totalCount = this.counters[nodeId];
++            final LProfilerRegistry.ProfilerEntry profiler = this.registry.getById(graphNode.timerId());
++
++            final ProfileNode profileNode = new ProfileNode(parent, nodeId, profiler, totalTime, totalCount);
++
++            if (parent != null) {
++                parent.childrenTimingCount += totalTime;
++                parent.children.add(profileNode);
++            } else if (i != 0) { // i == 0 is root
++                throw new IllegalStateException("Node " + nodeId + " must have parent");
++            } else {
++                // set up
++                orderedNodes.add(profileNode);
++            }
++
++            nodeMap.put(graphNode, profileNode);
++        }
++
++        final List<String> ret = new ArrayList<>();
++
++        long totalTime = 0L;
++
++        // totalTime = sum of times for root node's children
++        for (final ProfileNode node : orderedNodes.peekFirst().children) {
++            totalTime += node.totalTime;
++        }
++
++        ProfileNode profileNode;
++        final StringBuilder builder = new StringBuilder();
++        while ((profileNode = orderedNodes.pollFirst()) != null) {
++            if (profileNode.nodeId != LProfileGraph.ROOT_NODE && profileNode.totalCount == 0L) {
++                // skip nodes not recorded
++                continue;
++            }
++
++            final int depth = profileNode.depth;
++            profileNode.children.sort((final ProfileNode p1, final ProfileNode p2) -> {
++                final int typeCompare = p1.profiler.type().compareTo(p2.profiler.type());
++                if (typeCompare != 0) {
++                    // first count, then profiler
++                    return typeCompare;
++                }
++
++                if (p1.profiler.type() == LProfilerRegistry.ProfileType.COUNTER) {
++                    // highest count first
++                    return Long.compare(p2.totalCount, p1.totalCount);
++                } else {
++                    // highest time first
++                    return Long.compare(p2.totalTime, p1.totalTime);
++                }
++            });
++
++            for (int i = profileNode.children.size() - 1; i >= 0; --i) {
++                final ProfileNode child = profileNode.children.get(i);
++                child.depth = depth + 1;
++                orderedNodes.addFirst(child);
++            }
++
++            if (profileNode.nodeId == LProfileGraph.ROOT_NODE) {
++                // don't display root
++                continue;
++            }
++
++            final boolean noParent = profileNode.parent == null || profileNode.parent.nodeId == LProfileGraph.ROOT_NODE;
++
++            final long parentTime = noParent ? totalTime : profileNode.parent.totalTime;
++            final LProfilerRegistry.ProfilerEntry profilerEntry = profileNode.profiler;
++
++            // format:
++            // For profiler type:
++            // <indent><name> X% of total, Y% of parent, self A% of total, self B% of children, Dms raw sum
++            // For counter type:
++            // <indent>#<name> avg X sum Y
++            builder.setLength(0);
++            // prepare indent
++            final char[] indent = INDENT_PATTERNS[ret.size() % INDENT_PATTERNS.length];
++            for (int i = 0; i < depth; ++i) {
++                builder.append(indent);
++            }
++
++            switch (profilerEntry.type()) {
++                case TIMER: {
++                    ret.add(
++                        builder
++                            .append(profilerEntry.name())
++                            .append(' ')
++                            .append(THREE_DECIMAL_PLACES.get().format(((double)profileNode.totalTime / (double)totalTime) * 100.0))
++                            .append("% of total, ")
++                            .append(THREE_DECIMAL_PLACES.get().format(((double)profileNode.totalTime / (double)parentTime) * 100.0))
++                            .append("% of parent, self ")
++                            .append(THREE_DECIMAL_PLACES.get().format(((double)(profileNode.totalTime - profileNode.childrenTimingCount) / (double)totalTime) * 100.0))
++                            .append("% of total, self ")
++                            .append(THREE_DECIMAL_PLACES.get().format(((double)(profileNode.totalTime - profileNode.childrenTimingCount) / (double)profileNode.totalTime) * 100.0))
++                            .append("% of children, ")
++                            .append(THREE_DECIMAL_PLACES.get().format((double)profileNode.totalTime / 1.0E6))
++                            .append("ms raw sum")
++                            .toString()
++                    );
++                    break;
++                }
++                case COUNTER: {
++                    ret.add(
++                        builder
++                            .append('#')
++                            .append(profilerEntry.name())
++                            .append(" avg ")
++                            .append(THREE_DECIMAL_PLACES.get().format((double)profileNode.totalCount / (double)(noParent ? 1L : profileNode.parent.totalCount)))
++                            .append(" sum ")
++                            .append(NO_DECIMAL_PLACES.get().format(profileNode.totalCount))
++                            .toString()
++                    );
++                    break;
++                }
++                default: {
++                    throw new IllegalStateException("Unknown type " + profilerEntry.type());
++                }
++            }
++        }
++
++        return ret;
++    }
++
++    private static final class ProfileNode {
++
++        public final ProfileNode parent;
++        public final int nodeId;
++        public final LProfilerRegistry.ProfilerEntry profiler;
++        public final long totalTime;
++        public final long totalCount;
++        public final List<ProfileNode> children = new ArrayList<>();
++        public long childrenTimingCount;
++        public int depth = -1;
++
++        private ProfileNode(final ProfileNode parent, final int nodeId, final LProfilerRegistry.ProfilerEntry profiler,
++                            final long totalTime, final long totalCount) {
++            this.parent = parent;
++            this.nodeId = nodeId;
++            this.profiler = profiler;
++            this.totalTime = totalTime;
++            this.totalCount = totalCount;
++        }
++    }
++
++    /*
++    public static void main(final String[] args) throws Throwable {
++        final Thread timerHack = new Thread("Timer hack thread") {
++            @Override
++            public void run() {
++                for (;;) {
++                    try {
++                        Thread.sleep(Long.MAX_VALUE);
++                    } catch (final InterruptedException ex) {
++                        continue;
++                    }
++                }
++            }
++        };
++        timerHack.setDaemon(true);
++        timerHack.start();
++
++        final LProfilerRegistry registry = new LProfilerRegistry();
++
++        final int tickId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "tick");
++        final int entityTickId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "entity tick");
++        final int getEntitiesId = registry.createType(LProfilerRegistry.ProfileType.COUNTER, "getEntities call");
++        final int tileEntityId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "tile entity tick");
++        final int creeperEntityId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "creeper entity tick");
++        final int furnaceId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "furnace tile entity tick");
++
++        final LeafProfiler profiler = new LeafProfiler(registry, new LProfileGraph());
++
++        profiler.startTimer(tickId, System.nanoTime());
++        Thread.sleep(10L);
++
++        profiler.startTimer(entityTickId, System.nanoTime());
++        Thread.sleep(1L);
++
++        profiler.startTimer(creeperEntityId, System.nanoTime());
++        Thread.sleep(15L);
++        profiler.incrementCounter(getEntitiesId, 50L);
++        profiler.stopTimer(creeperEntityId, System.nanoTime());
++
++        profiler.stopTimer(entityTickId, System.nanoTime());
++
++        profiler.startTimer(tileEntityId, System.nanoTime());
++        Thread.sleep(1L);
++
++        profiler.startTimer(furnaceId, System.nanoTime());
++        Thread.sleep(20L);
++        profiler.stopTimer(furnaceId, System.nanoTime());
++
++        profiler.stopTimer(tileEntityId, System.nanoTime());
++
++        profiler.stopTimer(tickId, System.nanoTime());
++
++        System.out.println("Done.");
++    }
++     */
 +}
 diff --git a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java b/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
 index 22a2547810d0c029f29685faddf7ac21cde2df0b..e36b4053eb2676e934b8c9c401bf58cfa7dd969c 100644
