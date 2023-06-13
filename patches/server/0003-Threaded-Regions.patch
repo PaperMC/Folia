@@ -15648,7 +15648,7 @@ index 18aac3da3c88f33b1a71a5920a8daa27e9723913..b126435b07572e7b8f41647a0179164b
                  for (ServerPlayer player : ServerLevel.this.players) {
                      player.getBukkitEntity().onEntityRemove(entity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461cac43edc 100644
+index 5fad40fa88f697108e42461c41012d5964ed7d75..93330f077afb241763f186f9ecdf359e2907d027 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -190,7 +190,7 @@ import org.bukkit.inventory.MainHand;
@@ -15793,7 +15793,7 @@ index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461
          return horizontalSpawnArea <= 16 ? horizontalSpawnArea - 1 : 17;
      }
  
-@@ -1161,6 +1200,344 @@ public class ServerPlayer extends Player {
+@@ -1161,6 +1200,345 @@ public class ServerPlayer extends Player {
          }
      }
  
@@ -15985,6 +15985,7 @@ index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461
 +        }
 +        this.connection.internalTeleport(pos.x, pos.y, pos.z, this.getYRot(), this.getXRot(), java.util.Collections.emptySet());
 +        this.connection.resetPosition();
++        this.mainSupportingBlockPos = Optional.empty();
 +    }
 +
 +    @Override
@@ -16138,7 +16139,7 @@ index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461
      @Nullable
      @Override
      public Entity changeDimension(ServerLevel destination) {
-@@ -1170,6 +1547,11 @@ public class ServerPlayer extends Player {
+@@ -1170,6 +1548,11 @@ public class ServerPlayer extends Player {
  
      @Nullable
      public Entity changeDimension(ServerLevel worldserver, PlayerTeleportEvent.TeleportCause cause) {
@@ -16150,7 +16151,7 @@ index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461
          // CraftBukkit end
          if (this.isSleeping()) return this; // CraftBukkit - SPIGOT-3154
          // this.isChangingDimension = true; // CraftBukkit - Moved down and into PlayerList#changeDimension
-@@ -2114,6 +2496,12 @@ public class ServerPlayer extends Player {
+@@ -2114,6 +2497,12 @@ public class ServerPlayer extends Player {
      public void setCamera(@Nullable Entity entity) {
          Entity entity1 = this.getCamera();
  
@@ -16163,7 +16164,7 @@ index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461
          this.camera = (Entity) (entity == null ? this : entity);
          if (entity1 != this.camera) {
              // Paper start - Add PlayerStartSpectatingEntityEvent and PlayerStopSpectatingEntity Event
-@@ -2307,7 +2695,7 @@ public class ServerPlayer extends Player {
+@@ -2307,7 +2696,7 @@ public class ServerPlayer extends Player {
      }
  
      public void untrackChunk(ChunkPos chunkPos) {
@@ -16172,7 +16173,7 @@ index 5fad40fa88f697108e42461c41012d5964ed7d75..ab8fb605bf35a3d74af5ede6fcde1461
              this.connection.send(new ClientboundForgetLevelChunkPacket(chunkPos.x, chunkPos.z));
              // Paper start
              if(io.papermc.paper.event.packet.PlayerChunkUnloadEvent.getHandlerList().getRegisteredListeners().length > 0){
-@@ -2626,7 +3014,7 @@ public class ServerPlayer extends Player {
+@@ -2626,7 +3015,7 @@ public class ServerPlayer extends Player {
          this.experienceLevel = this.newLevel;
          this.totalExperience = this.newTotalExp;
          this.experienceProgress = 0;
@@ -17626,7 +17627,7 @@ index 25a5a3b949a0eb632611355e74ccd4865be108ca..1df8d601e41c2ab35921b6a1534fdec6
  
                  itemstack = entityliving2.getMainHandItem();
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85df384447b 100644
+index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..4e78647f1bba68741eeef08a85caf2d053436472 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -166,7 +166,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17809,7 +17810,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
              return;
          }
          // CraftBukkit end
-@@ -3506,6 +3532,763 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3506,6 +3532,764 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -18079,6 +18080,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
 +            this.setDeltaMovement(speedDirectionUpdate.normalize().scale(this.getDeltaMovement().length()));
 +        }
 +        this.moveTo(pos.x, pos.y, pos.z);
++        this.mainSupportingBlockPos = Optional.empty();
 +    }
 +
 +    protected void transform(Vec3 pos, Float yaw, Float pitch, Vec3 speedDirectionUpdate) {
@@ -18205,7 +18207,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
 +    }
 +
 +    public void postChangeDimension() {
-+
++        this.mainSupportingBlockPos = Optional.empty();
 +    }
 +
 +    protected static enum PortalType {
@@ -18573,7 +18575,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3514,6 +4297,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3514,6 +4298,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Nullable
      public Entity teleportTo(ServerLevel worldserver, PositionImpl location) {
@@ -18585,7 +18587,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
          // CraftBukkit end
          // Paper start - fix bad state entities causing dupes
          if (!this.isAlive() || !this.valid) {
-@@ -3597,6 +4385,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3597,6 +4386,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          }
      }
  
@@ -18598,7 +18600,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION);
      }
-@@ -4041,17 +4835,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4041,17 +4836,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // Paper start
      public void startSeenByPlayer(ServerPlayer player) {
@@ -18618,7 +18620,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
      }
      // Paper end
  
-@@ -4546,7 +5336,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4546,7 +5337,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
          // Paper end - fix MC-4
@@ -18628,7 +18630,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4567,7 +5358,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4567,7 +5359,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          // Paper start - never allow AABB to become desynced from position
          // hanging has its own special logic
@@ -18637,7 +18639,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4654,6 +5445,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4654,6 +5446,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return this.removalReason != null;
      }
  
@@ -18650,7 +18652,7 @@ index 92202262eff01ae3bbeff0e6ebdcf26ad613c169..131bf7600ee4a476fb387dea9e0bc85d
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4678,7 +5475,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4678,7 +5476,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
          this.levelCallback.onRemove(reason);
