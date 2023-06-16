@@ -216,7 +216,7 @@ even though there is no main thread anymore.
 <dependency>
     <groupId>dev.folia</groupId>
     <artifactId>folia-api</artifactId>
-    <version>1.19.4-R0.1-SNAPSHOT</version>
+    <version>1.20.1-R0.1-SNAPSHOT</version>
     <scope>provided</scope>
 </dependency>
  ```
