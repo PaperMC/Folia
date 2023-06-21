@@ -18691,7 +18691,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
      public void unsetRemoved() {
          this.removalReason = null;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500dd9db958 100644
+index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f77172762d 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -482,7 +482,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
@@ -18703,7 +18703,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500
  
          if (this.lastHurtByPlayerTime > 0) {
              --this.lastHurtByPlayerTime;
-@@ -628,11 +628,13 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -628,11 +628,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
          return true;
      }
  
@@ -18714,12 +18714,13 @@ index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500
 +        if (this.deathTime >= 20 && !this.level().isClientSide() && !this.isRemoved() && !this.broadcastedDeath) { // Folia - region threading
              this.level().broadcastEntityEvent(this, (byte) 60);
 -            this.remove(Entity.RemovalReason.KILLED);
++            this.broadcastedDeath = true; // Folia - region threading - death has been broadcasted
 +            if (!(this instanceof ServerPlayer)) this.remove(Entity.RemovalReason.KILLED); // Folia - region threading - don't remove, we want the tick scheduler to be running
 +            if ((this instanceof ServerPlayer)) this.unRide(); // Folia - region threading - unmount player when dead
          }
  
      }
-@@ -853,9 +855,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -853,9 +856,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
          }
  
          this.hurtTime = nbt.getShort("HurtTime");
@@ -18731,7 +18732,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level().getScoreboard().getPlayerTeam(s);
              if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper
-@@ -1135,7 +1137,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1135,7 +1138,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
      }
  
      public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause) {
@@ -18740,7 +18741,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500
          if (this.isTickingEffects) {
              this.effectsToProcess.add(new ProcessableEffect(mobeffect, cause));
              return true;
-@@ -2310,7 +2312,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -2310,7 +2313,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      @Nullable
      public LivingEntity getKillCredit() {
@@ -18749,7 +18750,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500
      }
  
      public final float getMaxHealth() {
-@@ -3446,7 +3448,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -3446,7 +3449,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          this.pushEntities();
          this.level().getProfiler().pop();
          // Paper start
@@ -18758,7 +18759,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..99192dd2da243b3e5992adcef525c500
              if (this.xo != this.getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
                  Location from = new Location(this.level().getWorld(), this.xo, this.yo, this.zo, this.yRotO, this.xRotO);
                  Location to = new Location (this.level().getWorld(), this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
-@@ -4106,7 +4108,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -4106,7 +4109,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          BlockPos blockposition = BlockPos.containing(d0, d1, d2);
          Level world = this.level();
  
