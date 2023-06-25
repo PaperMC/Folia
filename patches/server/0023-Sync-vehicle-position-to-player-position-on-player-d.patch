@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sun, 25 Jun 2023 13:57:30 -0700
+Subject: [PATCH] Sync vehicle position to player position on player data load
+
+This allows the player to be re-positioned before logging into
+the world without causing thread checks to trip on Folia.
+
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index d4620ddfcd06a037f647ab0a8938797405e001b2..654ab7fc8caa9af7dc665391a197b41599c2bc8f 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -498,7 +498,13 @@ public abstract class PlayerList {
+             CompoundTag nbttagcompound1 = nbttagcompound.getCompound("RootVehicle");
+             // CraftBukkit start
+             ServerLevel finalWorldServer = worldserver1;
++            Vec3 playerPos = player.position(); // Paper - force sync root vehicle to player position
+             Entity entity = EntityType.loadEntityRecursive(nbttagcompound1.getCompound("Entity"), finalWorldServer, (entity1) -> {
++                // Paper start - force sync root vehicle to player position
++                if (entity1.distanceToSqr(player) > (5.0 * 5.0)) {
++                    entity1.setPosRaw(playerPos.x, playerPos.y, playerPos.z, true);
++                }
++                // Paper end - force sync root vehicle to player position
+                 return !finalWorldServer.addWithUUID(entity1, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.MOUNT) ? null : entity1; // Paper
+                 // CraftBukkit end
+             });
