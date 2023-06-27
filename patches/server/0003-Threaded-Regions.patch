@@ -4064,7 +4064,7 @@ index 0000000000000000000000000000000000000000..8e31c6ee9ee16aff699e124a9b0554ea
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2e4514e5a45db6e625ef7799b63a9285a3bc1030
+index 0000000000000000000000000000000000000000..98ddb674b63a4777a98152ea960debf48aa2bc35
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedTaskQueue.java
 @@ -0,0 +1,768 @@
@@ -4382,26 +4382,26 @@ index 0000000000000000000000000000000000000000..2e4514e5a45db6e625ef7799b63a9285
 +        public void mergeInto(final PrioritisedQueue target) {
 +            synchronized (this) {
 +                this.isDestroyed = true;
-+                synchronized (target) {
-+                    mergeInto(target, this.queues);
-+                }
++                mergeInto(target, this.queues);
 +            }
 +        }
 +
 +        private static void mergeInto(final PrioritisedQueue target, final ArrayDeque<ChunkBasedPriorityTask>[] thisQueues) {
-+            final ArrayDeque<ChunkBasedPriorityTask>[] otherQueues = target.queues;
-+            for (int i = 0; i < thisQueues.length; ++i) {
-+                final ArrayDeque<ChunkBasedPriorityTask> fromQ = thisQueues[i];
-+                final ArrayDeque<ChunkBasedPriorityTask> intoQ = otherQueues[i];
++            synchronized (target) {
++                final ArrayDeque<ChunkBasedPriorityTask>[] otherQueues = target.queues;
++                for (int i = 0; i < thisQueues.length; ++i) {
++                    final ArrayDeque<ChunkBasedPriorityTask> fromQ = thisQueues[i];
++                    final ArrayDeque<ChunkBasedPriorityTask> intoQ = otherQueues[i];
 +
-+                // it is possible for another thread to queue tasks into the target queue before we do
-+                // since only the ticking region can poll, we don't have to worry about it when they are being queued -
-+                // but when we are merging, we need to ensure order is maintained (notwithstanding priority changes)
-+                // we can ensure order is maintained by adding all of the tasks from the fromQ into the intoQ at the
-+                // front of the queue, but we need to use descending iterator to ensure we do not reverse
-+                // the order of elements from fromQ
-+                for (final Iterator<ChunkBasedPriorityTask> iterator = fromQ.descendingIterator(); iterator.hasNext();) {
-+                    intoQ.addFirst(iterator.next());
++                    // it is possible for another thread to queue tasks into the target queue before we do
++                    // since only the ticking region can poll, we don't have to worry about it when they are being queued -
++                    // but when we are merging, we need to ensure order is maintained (notwithstanding priority changes)
++                    // we can ensure order is maintained by adding all of the tasks from the fromQ into the intoQ at the
++                    // front of the queue, but we need to use descending iterator to ensure we do not reverse
++                    // the order of elements from fromQ
++                    for (final Iterator<ChunkBasedPriorityTask> iterator = fromQ.descendingIterator(); iterator.hasNext();) {
++                        intoQ.addFirst(iterator.next());
++                    }
 +                }
 +            }
 +        }
