@@ -2121,7 +2121,7 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
      }
  
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a026fdf4d 100644
+index abd0217cf0bff183c8e262edc173a53403797c1a..40411b335e99f67d6a82e70db6e5e4c0372102ec 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 @@ -53,6 +53,14 @@ import java.util.concurrent.atomic.AtomicReference;
@@ -2199,7 +2199,9 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
 +            for (final NewChunkHolder fullLoadUpdate : this.pendingFullLoadUpdate) {
 +                final int regionCoordinateX = fullLoadUpdate.chunkX >> chunkToRegionShift;
 +                final int regionCoordinateZ = fullLoadUpdate.chunkZ >> chunkToRegionShift;
-+
+ 
+-        if (saveTickCompare != 0) {
+-            return saveTickCompare;
 +                final HolderManagerRegionData data = regionToData.get(CoordinateUtils.getChunkKey(regionCoordinateX, regionCoordinateZ));
 +                if (data != null) {
 +                    data.pendingFullLoadUpdate.add(fullLoadUpdate);
@@ -2209,9 +2211,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
 +            for (final NewChunkHolder autoSave : this.autoSaveQueue) {
 +                final int regionCoordinateX = autoSave.chunkX >> chunkToRegionShift;
 +                final int regionCoordinateZ = autoSave.chunkZ >> chunkToRegionShift;
- 
--        if (saveTickCompare != 0) {
--            return saveTickCompare;
++
 +                final HolderManagerRegionData data = regionToData.get(CoordinateUtils.getChunkKey(regionCoordinateX, regionCoordinateZ));
 +                if (data != null) {
 +                    data.autoSaveQueue.add(autoSave);
@@ -2314,7 +2314,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
  
              holder.lastAutoSave = currentTick;
              if (holder.save(false, false) != null) {
-@@ -234,15 +320,20 @@ public final class ChunkHolderManager {
+@@ -234,15 +320,38 @@ public final class ChunkHolderManager {
  
          for (final NewChunkHolder holder : reschedule) {
              if (holder.getChunkStatus().isOrAfter(FullChunkStatus.FULL)) {
@@ -2325,19 +2325,38 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
      }
  
      public void saveAllChunks(final boolean flush, final boolean shutdown, final boolean logProgress) {
+-        final List<NewChunkHolder> holders = this.getChunkHolders();
 +        // Folia start - region threading
 +        this.saveAllChunksRegionised(flush, shutdown, logProgress, true, true, true);
 +    }
 +    public void saveAllChunksRegionised(final boolean flush, final boolean shutdown, final boolean logProgress, final boolean first, final boolean last, final boolean checkRegion) {
++        final List<NewChunkHolder> holders = new java.util.ArrayList<>(this.chunkHolders.size() / 10);
++        // we could iterate through all chunk holders with thread checks, however for many regions the iteration cost alone
++        // will multiply. to avoid this, we can simply iterate through all owned sections
++        final int regionShift = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion().regioniser.sectionChunkShift;
++        for (final LongIterator iterator = io.papermc.paper.threadedregions.TickRegionScheduler.getCurrentRegion().getOwnedSectionsUnsynchronised(); iterator.hasNext();) {
++            final long sectionKey = iterator.nextLong();
++            final int width = 1 << regionShift;
++            final int offsetX = CoordinateUtils.getChunkX(sectionKey) << regionShift;
++            final int offsetZ = CoordinateUtils.getChunkZ(sectionKey) << regionShift;
++
++            for (int dz = 0; dz < width; ++dz) {
++                for (int dx = 0; dx < width; ++dx) {
++                    final NewChunkHolder holder = this.getChunkHolder(offsetX | dx, offsetZ | dz);
++                    if (holder != null) {
++                        holders.add(holder);
++                    }
++                }
++            }
++        }
 +        // Folia end - region threading
-         final List<NewChunkHolder> holders = this.getChunkHolders();
  
 -        if (logProgress) {
 +        if (first && logProgress) { // Folia - region threading
              LOGGER.info("Saving all chunkholders for world '" + this.world.getWorld().getName() + "'");
          }
  
-@@ -250,7 +341,7 @@ public final class ChunkHolderManager {
+@@ -250,7 +359,7 @@ public final class ChunkHolderManager {
  
          int saved = 0;
  
@@ -2346,7 +2365,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
          long lastLog = start;
          boolean needsFlush = false;
          final int flushInterval = 50;
-@@ -261,6 +352,12 @@ public final class ChunkHolderManager {
+@@ -261,6 +370,12 @@ public final class ChunkHolderManager {
  
          for (int i = 0, len = holders.size(); i < len; ++i) {
              final NewChunkHolder holder = holders.get(i);
@@ -2359,7 +2378,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
              try {
                  final NewChunkHolder.SaveStat saveStat = holder.save(shutdown, false);
                  if (saveStat != null) {
-@@ -293,7 +390,7 @@ public final class ChunkHolderManager {
+@@ -293,7 +408,7 @@ public final class ChunkHolderManager {
                  }
              }
          }
@@ -2368,7 +2387,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
              RegionFileIOThread.flush();
              if (this.world.paperConfig().chunks.flushRegionsOnSave) {
                  try {
-@@ -706,6 +803,13 @@ public final class ChunkHolderManager {
+@@ -706,6 +821,13 @@ public final class ChunkHolderManager {
      }
  
      public void tick() {
@@ -2382,7 +2401,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
          final int sectionShift = TickRegions.getRegionChunkShift();
  
          final Predicate<Ticket<?>> expireNow = (final Ticket<?> ticket) -> {
-@@ -715,12 +819,12 @@ public final class ChunkHolderManager {
+@@ -715,12 +837,12 @@ public final class ChunkHolderManager {
              return --ticket.removeDelay <= 0L;
          };
  
@@ -2400,7 +2419,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
                  continue;
              }
  
-@@ -1023,19 +1127,51 @@ public final class ChunkHolderManager {
+@@ -1023,19 +1145,51 @@ public final class ChunkHolderManager {
          if (changedFullStatus.isEmpty()) {
              return;
          }
@@ -2464,7 +2483,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
              }
          }
      }
-@@ -1043,8 +1179,9 @@ public final class ChunkHolderManager {
+@@ -1043,8 +1197,9 @@ public final class ChunkHolderManager {
      private void removeChunkHolder(final NewChunkHolder holder) {
          holder.killed = true;
          holder.vanillaChunkHolder.onChunkRemove();
@@ -2475,7 +2494,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
          synchronized (this.chunkHolders) {
              this.chunkHolders.remove(CoordinateUtils.getChunkKey(holder.chunkX, holder.chunkZ));
          }
-@@ -1058,7 +1195,7 @@ public final class ChunkHolderManager {
+@@ -1058,7 +1213,7 @@ public final class ChunkHolderManager {
              throw new IllegalStateException("Cannot unload chunks recursively");
          }
          final int sectionShift = this.unloadQueue.coordinateShift; // sectionShift <= lock shift
@@ -2484,7 +2503,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
          int unloadCountTentative = 0;
          for (final ChunkQueue.SectionToUnload sectionRef : unloadSectionsForRegion) {
              final ChunkQueue.UnloadSection section
-@@ -1371,7 +1508,13 @@ public final class ChunkHolderManager {
+@@ -1371,7 +1526,13 @@ public final class ChunkHolderManager {
  
      // only call on tick thread
      protected final boolean processPendingFullUpdate() {
@@ -2499,7 +2518,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
  
          boolean ret = false;
  
-@@ -1382,9 +1525,7 @@ public final class ChunkHolderManager {
+@@ -1382,9 +1543,7 @@ public final class ChunkHolderManager {
              ret |= holder.handleFullStatusChange(changedFullStatus);
  
              if (!changedFullStatus.isEmpty()) {
@@ -2510,7 +2529,7 @@ index abd0217cf0bff183c8e262edc173a53403797c1a..d496ea6a583f71ddfc17ada1424c8c7a
                  changedFullStatus.clear();
              }
          }
-@@ -1398,7 +1539,7 @@ public final class ChunkHolderManager {
+@@ -1398,7 +1557,7 @@ public final class ChunkHolderManager {
  
      private JsonObject getDebugJsonNoLock() {
          final JsonObject ret = new JsonObject();
@@ -3619,10 +3638,10 @@ index 0000000000000000000000000000000000000000..1f48ada99d6d24880f9bda1cd05d41a4
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8e31c6ee9ee16aff699e124a9b0554eaafa5c1ac
+index 0000000000000000000000000000000000000000..00d79c8095ec689b4a30648665c8fc0843783fd9
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -0,0 +1,439 @@
+@@ -0,0 +1,450 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -3814,15 +3833,16 @@ index 0000000000000000000000000000000000000000..8e31c6ee9ee16aff699e124a9b0554ea
 +    private final java.util.Random random = new java.util.Random(4L);
 +    private final List<io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader.SingleUserAreaMap<Void>> walkers =
 +        new java.util.ArrayList<>();
-+    static final int PLAYERS = 100;
-+    static final int RAD_BLOCKS = 10000;
++    static final int PLAYERS = 500;
++    static final int RAD_BLOCKS = 1000;
 +    static final int RAD = RAD_BLOCKS >> 4;
 +    static final int RAD_BIG_BLOCKS = 100_000;
 +    static final int RAD_BIG = RAD_BIG_BLOCKS >> 4;
-+    static final int VD = 4;
-+    static final int BIG_PLAYERS = 50;
-+    static final double WALK_CHANCE = 0.10;
-+    static final double TP_CHANCE = 0.01;
++    static final int VD = 4 + 12;
++    static final int BIG_PLAYERS = 250;
++    static final double WALK_CHANCE = 0.3;
++    static final double TP_CHANCE = 0.2;
++    static final double TASK_CHANCE = 0.2;
 +
 +    private ServerLevel getWorld() {
 +        return this.worlds.get(0);
@@ -3838,16 +3858,26 @@ index 0000000000000000000000000000000000000000..8e31c6ee9ee16aff699e124a9b0554ea
 +                @Override
 +                protected void addCallback(Void parameter, int chunkX, int chunkZ) {
 +                    ServerLevel world = RegionizedServer.this.getWorld();
++                    if (RegionizedServer.this.random.nextDouble() <= TASK_CHANCE) {
++                        RegionizedServer.this.taskQueue.queueChunkTask(world, chunkX, chunkZ, () -> {
++                            RegionizedServer.this.taskQueue.queueChunkTask(world, chunkX, chunkZ, () -> {});
++                        });
++                    }
 +                    world.chunkTaskScheduler.chunkHolderManager.addTicketAtLevel(
-+                        net.minecraft.server.level.TicketType.PLAYER, chunkX, chunkZ, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.ENTITY_TICKING_TICKET_LEVEL, new net.minecraft.world.level.ChunkPos(posX, posZ)
++                        net.minecraft.server.level.TicketType.PLAYER, chunkX, chunkZ, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL, new net.minecraft.world.level.ChunkPos(posX, posZ)
 +                    );
 +                }
 +
 +                @Override
 +                protected void removeCallback(Void parameter, int chunkX, int chunkZ) {
 +                    ServerLevel world = RegionizedServer.this.getWorld();
++                    if (RegionizedServer.this.random.nextDouble() <= TASK_CHANCE) {
++                        RegionizedServer.this.taskQueue.queueChunkTask(world, chunkX, chunkZ, () -> {
++                            RegionizedServer.this.taskQueue.queueChunkTask(world, chunkX, chunkZ, () -> {});
++                        });
++                    }
 +                    world.chunkTaskScheduler.chunkHolderManager.removeTicketAtLevel(
-+                        net.minecraft.server.level.TicketType.PLAYER, chunkX, chunkZ, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.ENTITY_TICKING_TICKET_LEVEL, new net.minecraft.world.level.ChunkPos(posX, posZ)
++                        net.minecraft.server.level.TicketType.PLAYER, chunkX, chunkZ, io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL, new net.minecraft.world.level.ChunkPos(posX, posZ)
 +                    );
 +                }
 +            };
