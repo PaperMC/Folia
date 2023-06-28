@@ -15692,7 +15692,7 @@ index 18aac3da3c88f33b1a71a5920a8daa27e9723913..f95f1d1bc08b3c8f331a4f760e321823
                  for (ServerPlayer player : ServerLevel.this.players) {
                      player.getBukkitEntity().onEntityRemove(entity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 9d46536f80b5b3e6641fd377c02166a431edfd77..84dce5ec9d43d6f148cd8a7d19e503ce4c9900fd 100644
+index 9d46536f80b5b3e6641fd377c02166a431edfd77..aa42c1a05f12a614c0a7553d52efa1137b9363f9 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -190,7 +190,7 @@ import org.bukkit.inventory.MainHand;
@@ -16029,7 +16029,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..84dce5ec9d43d6f148cd8a7d19e503ce
 +        }
 +        this.connection.internalTeleport(pos.x, pos.y, pos.z, this.getYRot(), this.getXRot(), java.util.Collections.emptySet());
 +        this.connection.resetPosition();
-+        this.mainSupportingBlockPos = Optional.empty();
++        this.resetStoredPositions();
 +    }
 +
 +    @Override
@@ -17670,8 +17670,21 @@ index 25a5a3b949a0eb632611355e74ccd4865be108ca..1df8d601e41c2ab35921b6a1534fdec6
                  LivingEntity entityliving2 = (LivingEntity) entity;
  
                  itemstack = entityliving2.getMainHandItem();
+diff --git a/src/main/java/net/minecraft/world/damagesource/FallLocation.java b/src/main/java/net/minecraft/world/damagesource/FallLocation.java
+index ea27b46eec01bda427653335f922ccd068cffcb5..e551d3b875eab6851b75041f418c9a085a8903b6 100644
+--- a/src/main/java/net/minecraft/world/damagesource/FallLocation.java
++++ b/src/main/java/net/minecraft/world/damagesource/FallLocation.java
+@@ -39,7 +39,7 @@ public record FallLocation(String id) {
+     @Nullable
+     public static FallLocation getCurrentFallLocation(LivingEntity entity) {
+         Optional<BlockPos> optional = entity.getLastClimbablePos();
+-        if (optional.isPresent()) {
++        if (optional.isPresent() && io.papermc.paper.util.TickThread.isTickThreadFor((net.minecraft.server.level.ServerLevel)entity.level(), optional.get())) { // Folia - region threading
+             BlockState blockState = entity.level().getBlockState(optional.get());
+             return blockToFallLocation(blockState);
+         } else {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716ab89998c 100644
+index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53dc49cb336 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -166,7 +166,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17854,7 +17867,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
              return;
          }
          // CraftBukkit end
-@@ -3506,6 +3532,764 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3506,6 +3532,771 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -18112,6 +18125,13 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
 +        return !this.hasNullCallback() && !this.isRemoved() && this.isAlive() && (!(this instanceof net.minecraft.world.entity.LivingEntity livingEntity) || !livingEntity.isSleeping());
 +    }
 +
++    // Mojang for whatever reason has started storing positions to cache certain physics properties that entities collide with
++    // As usual though, they don't properly do anything to prevent serious desync with respect to the current entity position
++    // We add additional logic to reset these before teleporting to prevent issues with them possibly tripping thread checks.
++    protected void resetStoredPositions() {
++        this.mainSupportingBlockPos = Optional.empty();
++    }
++
 +    protected void teleportSyncSameRegion(Vec3 pos, Float yaw, Float pitch, Vec3 speedDirectionUpdate) {
 +        if (yaw != null) {
 +            this.setYRot(yaw.floatValue());
@@ -18124,7 +18144,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
 +            this.setDeltaMovement(speedDirectionUpdate.normalize().scale(this.getDeltaMovement().length()));
 +        }
 +        this.moveTo(pos.x, pos.y, pos.z);
-+        this.mainSupportingBlockPos = Optional.empty();
++        this.resetStoredPositions();
 +    }
 +
 +    protected void transform(Vec3 pos, Float yaw, Float pitch, Vec3 speedDirectionUpdate) {
@@ -18251,7 +18271,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
 +    }
 +
 +    public void postChangeDimension() {
-+        this.mainSupportingBlockPos = Optional.empty();
++        this.resetStoredPositions();
 +    }
 +
 +    protected static enum PortalType {
@@ -18619,7 +18639,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3514,6 +4298,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3514,6 +4305,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Nullable
      public Entity teleportTo(ServerLevel worldserver, PositionImpl location) {
@@ -18631,7 +18651,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
          // CraftBukkit end
          // Paper start - fix bad state entities causing dupes
          if (!this.isAlive() || !this.valid) {
-@@ -3597,6 +4386,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3597,6 +4393,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          }
      }
  
@@ -18644,7 +18664,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION);
      }
-@@ -4041,17 +4836,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4041,17 +4843,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // Paper start
      public void startSeenByPlayer(ServerPlayer player) {
@@ -18664,7 +18684,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
      }
      // Paper end
  
-@@ -4546,7 +5337,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4546,7 +5344,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
          // Paper end - fix MC-4
@@ -18674,7 +18694,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4567,7 +5359,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4567,7 +5366,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          // Paper start - never allow AABB to become desynced from position
          // hanging has its own special logic
@@ -18683,7 +18703,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4654,6 +5446,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4654,6 +5453,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return this.removalReason != null;
      }
  
@@ -18696,7 +18716,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4678,7 +5476,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4678,7 +5483,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
          this.levelCallback.onRemove(reason);
@@ -18721,10 +18741,24 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..37b90c70196717c3a68b6d3b652e5716
      public void unsetRemoved() {
          this.removalReason = null;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f77172762d 100644
+index a189461330a4d427a7450d504ef13de3605497e3..c52203f828f13f407c3878e73687a10a3f2bee55 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -482,7 +482,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -277,6 +277,13 @@ public abstract class LivingEntity extends Entity implements Attackable {
+         ++this.noActionTime; // Above all the floats
+     }
+     // Spigot end
++    // Folia start - region threading
++    @Override
++    protected void resetStoredPositions() {
++        super.resetStoredPositions();
++        this.lastClimbablePos = Optional.empty();
++    }
++    // Folia end - region threading
+ 
+     protected LivingEntity(EntityType<? extends LivingEntity> type, Level world) {
+         super(type, world);
+@@ -482,7 +489,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
          if (this.isDeadOrDying() && this.level().shouldTickDeath(this)) {
              this.tickDeath();
@@ -18733,7 +18767,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f7
  
          if (this.lastHurtByPlayerTime > 0) {
              --this.lastHurtByPlayerTime;
-@@ -628,11 +628,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -628,11 +635,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
          return true;
      }
  
@@ -18750,7 +18784,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f7
          }
  
      }
-@@ -853,9 +856,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -853,9 +863,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
          }
  
          this.hurtTime = nbt.getShort("HurtTime");
@@ -18762,7 +18796,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f7
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level().getScoreboard().getPlayerTeam(s);
              if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper
-@@ -1135,7 +1138,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1135,7 +1145,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
      }
  
      public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause) {
@@ -18771,7 +18805,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f7
          if (this.isTickingEffects) {
              this.effectsToProcess.add(new ProcessableEffect(mobeffect, cause));
              return true;
-@@ -2310,7 +2313,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -2310,7 +2320,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      @Nullable
      public LivingEntity getKillCredit() {
@@ -18780,7 +18814,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f7
      }
  
      public final float getMaxHealth() {
-@@ -3446,7 +3449,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -3446,7 +3456,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          this.pushEntities();
          this.level().getProfiler().pop();
          // Paper start
@@ -18789,7 +18823,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..302d380985ffa28e21f592d163e1a0f7
              if (this.xo != this.getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
                  Location from = new Location(this.level().getWorld(), this.xo, this.yo, this.zo, this.yRotO, this.xRotO);
                  Location to = new Location (this.level().getWorld(), this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
-@@ -4106,7 +4109,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -4106,7 +4116,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          BlockPos blockposition = BlockPos.containing(d0, d1, d2);
          Level world = this.level();
  
