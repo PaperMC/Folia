@@ -11513,7 +11513,7 @@ index d2f0a0755317f5fa9a1ccf7db346aa77fd287d80..b07df826a3028c14b48b09dbaeccc907
              // CraftBukkit start - SPIGOT-5477, MC-142590
          } else if (MinecraftServer.getServer().hasStopped() || (listener instanceof ServerGamePacketListenerImpl && ((ServerGamePacketListenerImpl) listener).processedDisconnect)) {
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index c7a762abdfdc88fd26ec751c34e7b42bb3514515..26d332a46556416bb70b6276786b43e1a8ec8449 100644
+index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d98f1267b9 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -242,7 +242,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -12006,8 +12006,9 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..26d332a46556416bb70b6276786b43e1
              final long dayTime = level.getDayTime();
              long worldTime = level.getGameTime();
              final ClientboundSetTimePacket worldPacket = new ClientboundSetTimePacket(worldTime, dayTime, doDaylight);
-             for (Player entityhuman : level.players()) {
+-            for (Player entityhuman : level.players()) {
 -                if (!(entityhuman instanceof ServerPlayer) || (tickCount + entityhuman.getId()) % 20 != 0) {
++            for (Player entityhuman : level.getLocalPlayers()) { // Folia - region threading
 +                if (!(entityhuman instanceof ServerPlayer) || (io.papermc.paper.threadedregions.RegionizedServer.getCurrentTick() + entityhuman.getId()) % 20 != 0) { // Folia - region threading
                      continue;
                  }
