@@ -17703,7 +17703,7 @@ index ea27b46eec01bda427653335f922ccd068cffcb5..e551d3b875eab6851b75041f418c9a08
              return blockToFallLocation(blockState);
          } else {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53dc49cb336 100644
+index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..edf569f2c7c3178e03898f2aa26c0da4586c2cb4 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -166,7 +166,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17886,7 +17886,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              return;
          }
          // CraftBukkit end
-@@ -3506,6 +3532,771 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3506,6 +3532,773 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -18395,11 +18395,13 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
 +                        ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
 +                        (chunks) -> {
 +                            ServerLevel.makeObsidianPlatform(destination, null, targetPos);
-+
++                            Vec3 finalPos;
++                            if (this instanceof Player) finalPos = Vec3.atBottomCenterOf(targetPos.below());
++                            else finalPos = Vec3.atBottomCenterOf(targetPos);
 +                            // the portal obsidian is placed at targetPos.y - 2, so if we want to place the entity
 +                            // on the obsidian, we need to spawn at targetPos.y - 1
 +                            portalInfoCompletable.complete(
-+                                new PortalInfo(Vec3.atBottomCenterOf(targetPos.below()), Vec3.ZERO, 90.0f, 0.0f, destination, null)
++                                new PortalInfo(finalPos, this.getDeltaMovement(), 90.0f, 0.0f, destination, null)
 +                            );
 +                        }
 +                    );
@@ -18658,7 +18660,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3514,6 +4305,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3514,6 +4307,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Nullable
      public Entity teleportTo(ServerLevel worldserver, PositionImpl location) {
@@ -18670,7 +18672,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
          // CraftBukkit end
          // Paper start - fix bad state entities causing dupes
          if (!this.isAlive() || !this.valid) {
-@@ -3597,6 +4393,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3597,6 +4395,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          }
      }
  
@@ -18683,7 +18685,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION);
      }
-@@ -4041,17 +4843,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4041,17 +4845,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // Paper start
      public void startSeenByPlayer(ServerPlayer player) {
@@ -18703,7 +18705,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      }
      // Paper end
  
-@@ -4546,7 +5344,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4546,7 +5346,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
          // Paper end - fix MC-4
@@ -18713,7 +18715,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4567,7 +5366,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4567,7 +5368,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          // Paper start - never allow AABB to become desynced from position
          // hanging has its own special logic
@@ -18722,7 +18724,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4654,6 +5453,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4654,6 +5455,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return this.removalReason != null;
      }
  
@@ -18735,7 +18737,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4678,7 +5483,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4678,7 +5485,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
          this.levelCallback.onRemove(reason);
