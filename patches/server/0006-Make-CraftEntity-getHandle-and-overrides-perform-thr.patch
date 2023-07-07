@@ -28,49 +28,27 @@ index 41bf71d116ffc5431586ce54abba7f8def6c1dcf..519da6886613b8460e989767b1a21e31
          return (AbstractSchoolingFish) super.getHandle();
      }
  
-diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-index d9687722e02dfd4088c7030abbf5008eb0a092c8..62484ebf4550b05182f693a3180bbac5d5fd906d 100644
---- a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-+++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-@@ -68,7 +68,7 @@ public final class EntityScheduler {
-             this.tickCount = RETIRED_TICK_COUNT;
-         }
- 
--        final Entity thisEntity = this.entity.getHandle();
-+        final Entity thisEntity = this.entity.getHandleRaw();
- 
-         // correctly handle and order retiring while running executeTick
-         for (int i = 0, len = this.currentlyExecuting.size(); i < len; ++i) {
-@@ -138,7 +138,7 @@ public final class EntityScheduler {
-      * @throws IllegalStateException If the scheduler is retired.
-      */
-     public void executeTick() {
--        final Entity thisEntity = this.entity.getHandle();
-+        final Entity thisEntity = this.entity.getHandleRaw();
- 
-         TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
-         final List<ScheduledTask> toRun;
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 5a71b5a37a55baea204821aba734d53dc49cb336..27b57db24587337ccdce29e492052ca419863323 100644
+index bce3c60667ca11a062f1e83cbf125b1d5182e392..52aa759db930c04a051686766c1b822a5131a20a 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -2889,6 +2889,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-             // CraftBukkit start
-             com.google.common.base.Preconditions.checkState(!entity.passengers.contains(this), "Circular entity riding! %s %s", this, entity);
- 
-+            if (this.valid) { // Folia - region threading - suppress entire event logic during worldgen
-             CraftEntity craft = (CraftEntity) entity.getBukkitEntity().getVehicle();
-             Entity orig = craft == null ? null : craft.getHandle();
-             if (this.getBukkitEntity() instanceof Vehicle && entity.getBukkitEntity() instanceof LivingEntity) {
-@@ -2916,6 +2917,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-             if (event.isCancelled()) {
+@@ -2820,6 +2820,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             if (!force && (!this.canRide(entity) || !entity.canAddPassenger(this))) {
                  return false;
-             }
-+            } // Folia - region threading - suppress entire event logic during worldgen
-             // Spigot end
-             if (this.passengers.isEmpty()) {
-                 this.passengers = ImmutableList.of(entity);
-@@ -2944,6 +2946,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             } else {
++                if (this.valid) { // Folia - region threading - suppress entire event logic during worldgen
+                 // CraftBukkit start
+                 if (entity.getBukkitEntity() instanceof Vehicle && this.getBukkitEntity() instanceof LivingEntity) {
+                     VehicleEnterEvent event = new VehicleEnterEvent((Vehicle) entity.getBukkitEntity(), this.getBukkitEntity());
+@@ -2841,6 +2842,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                 if (event.isCancelled()) {
+                     return false;
+                 }
++                } // Folia - region threading - suppress entire event logic during worldgen
+                 // Spigot end
+                 if (this.isPassenger()) {
+                     this.stopRiding();
+@@ -2923,6 +2925,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              throw new IllegalStateException("Use x.stopRiding(y), not y.removePassenger(x)");
          } else {
              // CraftBukkit start
@@ -78,7 +56,7 @@ index 5a71b5a37a55baea204821aba734d53dc49cb336..27b57db24587337ccdce29e492052ca4
              CraftEntity craft = (CraftEntity) entity.getBukkitEntity().getVehicle();
              Entity orig = craft == null ? null : craft.getHandle();
              if (this.getBukkitEntity() instanceof Vehicle && entity.getBukkitEntity() instanceof LivingEntity) {
-@@ -2971,6 +2974,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2950,6 +2953,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              if (event.isCancelled()) {
                  return false;
              }
@@ -86,19 +64,6 @@ index 5a71b5a37a55baea204821aba734d53dc49cb336..27b57db24587337ccdce29e492052ca4
              // Spigot end
              if (this.passengers.size() == 1 && this.passengers.get(0) == entity) {
                  this.passengers = ImmutableList.of();
-diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 29b5427316b23ea36e035330b303a41a2ba46f47..5fc4bf032986599232fddff8b27cd3a85ecd1cd4 100644
---- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-+++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -375,7 +375,7 @@ public final class CraftServer implements Server {
- 
-     @Override
-     public final boolean isOwnedByCurrentRegion(Entity entity) {
--        return io.papermc.paper.util.TickThread.isTickThreadFor(((org.bukkit.craftbukkit.entity.CraftEntity)entity).getHandle());
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(((org.bukkit.craftbukkit.entity.CraftEntity)entity).getHandleRaw()); // Folia - add thread checks to getHandle
-     }
- 
-     @Override
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java b/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
 index 5e82b2d57833fea1adb342f5c8d25f55491945cb..2c46527dfe832919b055579a0876a043c06d8b67 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
@@ -281,10 +246,10 @@ index 56bc26f227b97e8e935a20c6393d3f2eb806b285..5cf8ea3a7dd4e8ea96ca6061aa1aaefc
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java
-index 0f9e1d7aaee8ae870acd41934d52964c4d1aaff3..2e5cc1c7cbe4fc7cbcc2b2aeb37d497e4909053d 100644
+index 3034a3902a946162f48840682d434e554de4eae9..f67a9f77039c29daac80359e2793bee4baf3b3c4 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java
-@@ -24,8 +24,16 @@ public class CraftAreaEffectCloud extends CraftEntity implements AreaEffectCloud
+@@ -26,8 +26,16 @@ public class CraftAreaEffectCloud extends CraftEntity implements AreaEffectCloud
          super(server, entity);
      }
  
@@ -932,10 +897,10 @@ index 75c7645fb5732c43d1da15181cf5c7ee4c3ecd6c..6d3325436a77153438bc40aa86819562
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 2fe15f615522b60bba8e7551eef182458d163cd5..bcb85a4253b5e44b78cbadfb16c3bf0d47d7369e 100644
+index dafac02b73326aa04093f16ac2f142004abe26be..19b47478d318edce1242c2a5ddd73da963a24595 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -822,7 +822,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -821,7 +821,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public UUID getUniqueId() {
@@ -944,16 +909,9 @@ index 2fe15f615522b60bba8e7551eef182458d163cd5..bcb85a4253b5e44b78cbadfb16c3bf0d
      }
  
      @Override
-@@ -836,7 +836,14 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
-         this.getHandle().tickCount = value;
+@@ -836,6 +836,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
      }
  
-+    // Folia start - region threading
-+    public Entity getHandleRaw() {
-+        return this.entity;
-+    }
-+    // Folia end - region threading
-+
      public Entity getHandle() {
 +        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return this.entity;
@@ -1023,7 +981,7 @@ index 84899284703baeb04bfc79251941265d52ac07e8..5b8333e342c639f33acf62e5f8eb72d0
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java
-index e99314b905a7ed54ceeb156ed92ff1a5793df99a..61bed78df554dc6a9689ea19e159fde990082a1e 100644
+index d17808d132b332d51189067fed245eb6bb904968..fc7d7c0645ff9a8b4d6a0bc78cf6bd64d1a0d858 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java
 @@ -15,8 +15,16 @@ public class CraftFallingBlock extends CraftEntity implements FallingBlock {
@@ -1611,10 +1569,10 @@ index e515e819774bfb31ec03f05a5502921e66f2b0e2..80cac5d7362577e53ef5ca215ab32618
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
-index 7880631fe8a4b06f29ef69ab850129737a99521b..564c72d6351721505dbffaf5af732db2dd3210ac 100644
+index 6095d43e08bc1ffc4e9a4796fc7adbd07d69d716..fae85d064bcea3589a69483ec6ac6c4cca73ad9a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
-@@ -415,8 +415,16 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+@@ -417,6 +417,13 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
          this.getHandle().invulnerableTime = ticks;
      }
  
@@ -1625,6 +1583,11 @@ index 7880631fe8a4b06f29ef69ab850129737a99521b..564c72d6351721505dbffaf5af732db2
 +    }
 +    // Folia end - region threading
 +
+     @Override
+     public int getNoActionTicks() {
+         return this.getHandle().getNoActionTime();
+@@ -430,6 +437,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+ 
      @Override
      public net.minecraft.world.entity.LivingEntity getHandle() {
 +        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
@@ -2146,10 +2109,10 @@ index beea227855f0b978e655efc298024120df8f4945..e1b7922ed298b6b3068c3f5fbe3b4030
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 5e362b1b7b95c908b0ea13a355c85386582b3f98..43c899d466bfffec4ea5ce1a4ed988f9ce4ecf42 100644
+index b291941717b6f9e1bed2c8e89bdd15200f8b8699..66f4e0578e7682d732ba4b36f5c3344d1d0e3d68 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -594,7 +594,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -600,7 +600,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
  
      @Override
      public void kick(net.kyori.adventure.text.Component message, org.bukkit.event.player.PlayerKickEvent.Cause cause) {
@@ -2158,7 +2121,7 @@ index 5e362b1b7b95c908b0ea13a355c85386582b3f98..43c899d466bfffec4ea5ce1a4ed988f9
          final ServerGamePacketListenerImpl connection = this.getHandle().connection;
          if (connection != null) {
              connection.disconnect(message == null ? net.kyori.adventure.text.Component.empty() : message, cause);
-@@ -2024,9 +2024,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -2054,9 +2054,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          return this;
      }
  
@@ -2176,7 +2139,7 @@ index 5e362b1b7b95c908b0ea13a355c85386582b3f98..43c899d466bfffec4ea5ce1a4ed988f9
      }
  
      public void setHandle(final ServerPlayer entity) {
-@@ -3032,7 +3039,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -3061,7 +3068,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          {
              if ( CraftPlayer.this.getHealth() <= 0 && CraftPlayer.this.isOnline() )
              {
@@ -2250,10 +2213,10 @@ index bb9722a2cf5f05d1488f7fec2851644ea3e8b975..ed0e5d32a187dd41952b923e4a1734af
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java
-index 3cb4860fea30bfaf2147b4f29a34336b6e417d6c..5d852e0a34004b877555157dd45020e5a5d30fd1 100644
+index 3cd6052ae1e2db15d26157679506ba63a9a59a2f..34a1b2853023006d3ef255651ffa58452ce4cc79 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java
-@@ -14,8 +14,16 @@ public class CraftRabbit extends CraftAnimals implements Rabbit {
+@@ -12,8 +12,16 @@ public class CraftRabbit extends CraftAnimals implements Rabbit {
          super(server, entity);
      }
  
@@ -2271,10 +2234,10 @@ index 3cb4860fea30bfaf2147b4f29a34336b6e417d6c..5d852e0a34004b877555157dd45020e5
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java
-index f0b061979f9acdce6d06f70b651692c841418d96..6fb31c15d65885614b3878b5bcce08567d5b2089 100644
+index c3185e189ed06e27e518d29b8577b8f694220b12..cfb231848766414297a13fea16308597546c86ce 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java
-@@ -14,8 +14,16 @@ public abstract class CraftRaider extends CraftMonster implements Raider {
+@@ -16,8 +16,16 @@ public abstract class CraftRaider extends CraftMonster implements Raider {
          super(server, entity);
      }
  
@@ -2839,10 +2802,10 @@ index 5c3bc680c4e4e6dc4b2d9edc666d6a8d95c2e7b7..6c15ba92215634a06a1d95fbd7d64bff
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTippedArrow.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTippedArrow.java
-index 0b39bb689717c13f03753f49d66b85cb2b964d83..8c4c07db82ed8aa1a1f746cfc43eef5ff81d085b 100644
+index 6dde7fdff3943e5d58d1dd5debadbf7de569f8e2..64058e89a029a75c112569c40d7216a4d349f3e8 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTippedArrow.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTippedArrow.java
-@@ -20,8 +20,16 @@ public class CraftTippedArrow extends CraftArrow implements Arrow {
+@@ -22,8 +22,16 @@ public class CraftTippedArrow extends CraftArrow implements Arrow {
          super(server, entity);
      }
  

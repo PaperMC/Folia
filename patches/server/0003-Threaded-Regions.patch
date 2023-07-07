@@ -2038,10 +2038,10 @@ index 924539d4ac50c70178ba220424ffacd6ff277c8b..7b664f32868028758d0c6ee1eaa82efc
              if (loader == null || loader.world != this.world) {
                  // not our problem anymore
 diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
-index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f606f0374c 100644
+index 41791c7331c80d496cde4e3d1846a178bef0bbe3..a295f7a7c59f0a291aec4f9f1a08f6b2798689f6 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
-@@ -188,7 +188,12 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -189,7 +189,12 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
  
      @Override
      public Iterable<Entity> getAll() {
@@ -2054,8 +2054,8 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
 +        // Folia end - region threading
      }
  
-     @Override
-@@ -262,7 +267,9 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+     public Entity[] getAllCopy() {
+@@ -267,7 +272,9 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
                      if (newVisibility.ordinal() > oldVisibility.ordinal()) {
                          // status upgrade
                          if (!oldVisibility.isAccessible() && newVisibility.isAccessible()) {
@@ -2065,7 +2065,7 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
                              EntityLookup.this.worldCallback.onTrackingStart(entity);
                          }
  
-@@ -276,7 +283,9 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -281,7 +288,9 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
                          }
  
                          if (oldVisibility.isAccessible() && !newVisibility.isAccessible()) {
@@ -2075,7 +2075,7 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
                              EntityLookup.this.worldCallback.onTrackingEnd(entity);
                          }
                      }
-@@ -386,11 +395,26 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -391,11 +400,26 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
  
          entity.setLevelCallback(new EntityCallback(entity));
  
@@ -2102,7 +2102,7 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
      private void removeEntity(final Entity entity) {
          final int sectionX = entity.sectionX;
          final int sectionY = entity.sectionY;
-@@ -408,6 +432,7 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -413,6 +437,7 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
                  LOGGER.warn("Failed to remove entity " + entity + " from entity slices (" + sectionX + "," + sectionZ + ")");
              }
          }
@@ -2110,7 +2110,7 @@ index 82ccaf612548a7dbab7e5aeffb6eb8db84367477..b9095f559472dd92375ea719886913f6
          entity.sectionX = entity.sectionY = entity.sectionZ = Integer.MIN_VALUE;
  
          this.entityByLock.writeLock();
-@@ -824,6 +849,9 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -829,6 +854,9 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
              EntityLookup.this.entityStatusChange(entity, null, tickingState, Visibility.HIDDEN, false, false, reason.shouldDestroy());
  
              this.entity.setLevelCallback(NoOpCallback.INSTANCE);
@@ -2950,11 +2950,11 @@ index bd68139ae635f2ad7ec8e7a21e0056a139c4c62e..48a43341b17247355a531164019d5cc9
      }
  
 diff --git a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
-index ffbab76e55807f04ebb25242eadbea114004b1b3..1dc4f0c50f14e94b6f5c3ec397e72b82e8417c95 100644
+index 4ac3fa45cd155ae8a852e26d4d4d1f16b28efdc2..6b495ac21a8ad4a810997c10cdf528e1762fabc1 100644
 --- a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
 +++ b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
-@@ -272,6 +272,18 @@ public class GlobalConfiguration extends ConfigurationPart {
-         public boolean strictAdvancementDimensionCheck = false;
+@@ -279,6 +279,19 @@ public class GlobalConfiguration extends ConfigurationPart {
+         public boolean disableTripwireUpdates = false;
      }
  
 +    // Folia start - threaded regions
@@ -2969,6 +2969,7 @@ index ffbab76e55807f04ebb25242eadbea114004b1b3..1dc4f0c50f14e94b6f5c3ec397e72b82
 +        }
 +    }
 +    // Folia end - threaded regions
++
      public ChunkLoadingBasic chunkLoadingBasic;
  
      public class ChunkLoadingBasic extends ConfigurationPart {
@@ -3027,193 +3028,6 @@ index 9c7552968b8c017c71a7a77557a66a03ed89f125..3b5572662c53715cd63772db90904dd1
                  + pluginName + " (Is it up to date?)", ex, plugin); // Paper
          }
  
-diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..d9687722e02dfd4088c7030abbf5008eb0a092c8
---- /dev/null
-+++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-@@ -0,0 +1,181 @@
-+package io.papermc.paper.threadedregions;
-+
-+import ca.spottedleaf.concurrentutil.util.Validate;
-+import io.papermc.paper.util.TickThread;
-+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-+import net.minecraft.world.entity.Entity;
-+import org.bukkit.craftbukkit.entity.CraftEntity;
-+
-+import java.util.ArrayDeque;
-+import java.util.ArrayList;
-+import java.util.List;
-+import java.util.function.Consumer;
-+
-+/**
-+ * An entity can move between worlds with an arbitrary tick delay, be temporarily removed
-+ * for players (i.e end credits), be partially removed from world state (i.e inactive but not removed),
-+ * teleport between ticking regions, teleport between worlds (which will change the underlying Entity object
-+ * for non-players), and even be removed entirely from the server. The uncertainty of an entity's state can make
-+ * it difficult to schedule tasks without worrying about undefined behaviors resulting from any of the states listed
-+ * previously.
-+ *
-+ * <p>
-+ * This class is designed to eliminate those states by providing an interface to run tasks only when an entity
-+ * is contained in a world, on the owning thread for the region, and by providing the current Entity object.
-+ * The scheduler also allows a task to provide a callback, the "retired" callback, that will be invoked
-+ * if the entity is removed before a task that was scheduled could be executed. The scheduler is also
-+ * completely thread-safe, allowing tasks to be scheduled from any thread context. The scheduler also indicates
-+ * properly whether a task was scheduled successfully (i.e scheduler not retired), thus the code scheduling any task
-+ * knows whether the given callbacks will be invoked eventually or not - which may be critical for off-thread
-+ * contexts.
-+ * </p>
-+ */
-+public final class EntityScheduler {
-+
-+    /**
-+     * The Entity. Note that it is the CraftEntity, since only that class properly tracks world transfers.
-+     */
-+    public final CraftEntity entity;
-+
-+    private static final record ScheduledTask(Consumer<? extends Entity> run, Consumer<? extends Entity> retired) {}
-+
-+    private long tickCount = 0L;
-+    private static final long RETIRED_TICK_COUNT = -1L;
-+    private final Object stateLock = new Object();
-+    private final Long2ObjectOpenHashMap<List<ScheduledTask>> oneTimeDelayed = new Long2ObjectOpenHashMap<>();
-+
-+    private final ArrayDeque<ScheduledTask> currentlyExecuting = new ArrayDeque<>();
-+
-+    public EntityScheduler(final CraftEntity entity) {
-+        this.entity = Validate.notNull(entity);
-+    }
-+
-+    /**
-+     * Retires the scheduler, preventing new tasks from being scheduled and invoking the retired callback
-+     * on all currently scheduled tasks.
-+     *
-+     * <p>
-+     * Note: This should only be invoked after synchronously removing the entity from the world.
-+     * </p>
-+     *
-+     * @throws IllegalStateException If the scheduler is already retired.
-+     */
-+    public void retire() {
-+        synchronized (this.stateLock) {
-+            if (this.tickCount == RETIRED_TICK_COUNT) {
-+                throw new IllegalStateException("Already retired");
-+            }
-+            this.tickCount = RETIRED_TICK_COUNT;
-+        }
-+
-+        final Entity thisEntity = this.entity.getHandle();
-+
-+        // correctly handle and order retiring while running executeTick
-+        for (int i = 0, len = this.currentlyExecuting.size(); i < len; ++i) {
-+            final ScheduledTask task = this.currentlyExecuting.pollFirst();
-+            final Consumer<Entity> retireTask = (Consumer<Entity>)task.retired;
-+            if (retireTask == null) {
-+                continue;
-+            }
-+
-+            retireTask.accept(thisEntity);
-+        }
-+
-+        for (final List<ScheduledTask> tasks : this.oneTimeDelayed.values()) {
-+            for (int i = 0, len = tasks.size(); i < len; ++i) {
-+                final ScheduledTask task = tasks.get(i);
-+                final Consumer<Entity> retireTask = (Consumer<Entity>)task.retired;
-+                if (retireTask == null) {
-+                    continue;
-+                }
-+
-+                retireTask.accept(thisEntity);
-+            }
-+        }
-+    }
-+
-+    /**
-+     * Schedules a task with the given delay. If the task failed to schedule because the scheduler is retired (entity
-+     * removed), then returns {@code false}. Otherwise, either the run callback will be invoked after the specified delay,
-+     * or the retired callback will be invoked if the scheduler is retired.
-+     * Note that the retired callback is invoked in critical code, so it should not attempt to remove the entity, remove
-+     * other entities, load chunks, load worlds, modify ticket levels, etc.
-+     *
-+     * <p>
-+     * It is guaranteed that the run and retired callback are invoked on the region which owns the entity.
-+     * </p>
-+     * <p>
-+     * The run and retired callback take an Entity parameter representing the current object entity that the scheduler
-+     * is tied to. Since the scheduler is transferred when an entity changes dimensions, it is possible the entity parameter
-+     * is not the same when the task was first scheduled. Thus, <b>only</b> the parameter provided should be used.
-+     * </p>
-+     * @param run The callback to run after the specified delay, may not be null.
-+     * @param retired Retire callback to run if the entity is retired before the run callback can be invoked, may be null.
-+     * @param delay The delay in ticks before the run callback is invoked. Any value less-than 1 is treated as 1.
-+     * @return {@code true} if the task was scheduled, which means that either the run function or the retired function
-+     *         will be invoked (but never both), or {@code false} indicating neither the run nor retired function will be invoked
-+     *         since the scheduler has been retired.
-+     */
-+    public boolean schedule(final Consumer<? extends Entity> run, final Consumer<? extends Entity> retired, final long delay) {
-+        Validate.notNull(run, "Run task may not be null");
-+
-+        final ScheduledTask task = new ScheduledTask(run, retired);
-+        synchronized (this.stateLock) {
-+            if (this.tickCount == RETIRED_TICK_COUNT) {
-+                return false;
-+            }
-+            this.oneTimeDelayed.computeIfAbsent(this.tickCount + Math.max(1L, delay), (final long keyInMap) -> {
-+                return new ArrayList<>();
-+            }).add(task);
-+        }
-+
-+        return true;
-+    }
-+
-+    /**
-+     * Executes a tick for the scheduler.
-+     *
-+     * @throws IllegalStateException If the scheduler is retired.
-+     */
-+    public void executeTick() {
-+        final Entity thisEntity = this.entity.getHandle();
-+
-+        TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
-+        final List<ScheduledTask> toRun;
-+        synchronized (this.stateLock) {
-+            if (this.tickCount == RETIRED_TICK_COUNT) {
-+                throw new IllegalStateException("Ticking retired scheduler");
-+            }
-+            ++this.tickCount;
-+            if (this.oneTimeDelayed.isEmpty()) {
-+                toRun = null;
-+            } else {
-+                toRun = this.oneTimeDelayed.remove(this.tickCount);
-+            }
-+        }
-+
-+        if (toRun != null) {
-+            for (int i = 0, len = toRun.size(); i < len; ++i) {
-+                this.currentlyExecuting.addLast(toRun.get(i));
-+            }
-+        }
-+
-+        // Note: It is allowed for the tasks executed to retire the entity in a given task.
-+        for (int i = 0, len = this.currentlyExecuting.size(); i < len; ++i) {
-+            if (!TickThread.isTickThreadFor(thisEntity)) {
-+                // tp has been queued sync by one of the tasks
-+                // in this case, we need to delay the tasks for next tick
-+                break;
-+            }
-+            final ScheduledTask task = this.currentlyExecuting.pollFirst();
-+
-+            if (this.tickCount != RETIRED_TICK_COUNT) {
-+                ((Consumer<Entity>)task.run).accept(thisEntity);
-+            } else {
-+                // retired synchronously
-+                // note: here task is null
-+                break;
-+            }
-+        }
-+    }
-+}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..2b48833023771fa965f131890ade98e9da3f5976
@@ -8851,884 +8665,6 @@ index 0000000000000000000000000000000000000000..d016294fc7eafbddf6d2a758e5803498
 +
 +    private CommandUtil() {}
 +}
-diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaAsyncScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaAsyncScheduler.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..4874ca2ddf6b7bf7b818f97cfbc59d349a69f5ce
---- /dev/null
-+++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaAsyncScheduler.java
-@@ -0,0 +1,327 @@
-+package io.papermc.paper.threadedregions.scheduler;
-+
-+import ca.spottedleaf.concurrentutil.util.Validate;
-+import com.mojang.logging.LogUtils;
-+import org.bukkit.plugin.IllegalPluginAccessException;
-+import org.bukkit.plugin.Plugin;
-+import org.slf4j.Logger;
-+import java.util.Set;
-+import java.util.concurrent.ConcurrentHashMap;
-+import java.util.concurrent.Executor;
-+import java.util.concurrent.Executors;
-+import java.util.concurrent.ScheduledExecutorService;
-+import java.util.concurrent.ScheduledFuture;
-+import java.util.concurrent.SynchronousQueue;
-+import java.util.concurrent.ThreadFactory;
-+import java.util.concurrent.ThreadPoolExecutor;
-+import java.util.concurrent.TimeUnit;
-+import java.util.concurrent.atomic.AtomicInteger;
-+import java.util.function.Consumer;
-+import java.util.logging.Level;
-+
-+public final class FoliaAsyncScheduler implements AsyncScheduler {
-+
-+    private static final Logger LOGGER = LogUtils.getLogger();
-+
-+    private final Executor executors = new ThreadPoolExecutor(Math.max(4, Runtime.getRuntime().availableProcessors() / 2), Integer.MAX_VALUE,
-+        30L, TimeUnit.SECONDS, new SynchronousQueue<>(),
-+        new ThreadFactory() {
-+            private final AtomicInteger idGenerator = new AtomicInteger();
-+
-+            @Override
-+            public Thread newThread(final Runnable run) {
-+                final Thread ret = new Thread(run);
-+
-+                ret.setName("Folia Async Scheduler Thread #" + this.idGenerator.getAndIncrement());
-+                ret.setPriority(Thread.NORM_PRIORITY - 1);
-+                ret.setUncaughtExceptionHandler((final Thread thread, final Throwable thr) -> {
-+                    LOGGER.error("Uncaught exception in thread: " + thread.getName(), thr);
-+                });
-+
-+                return ret;
-+            }
-+        }
-+    );
-+
-+    private final ScheduledExecutorService timerThread = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-+        @Override
-+        public Thread newThread(final Runnable run) {
-+            final Thread ret = new Thread(run);
-+
-+            ret.setName("Folia Async Scheduler Thread Timer");
-+            ret.setPriority(Thread.NORM_PRIORITY + 1);
-+            ret.setUncaughtExceptionHandler((final Thread thread, final Throwable thr) -> {
-+                LOGGER.error("Uncaught exception in thread: " + thread.getName(), thr);
-+            });
-+
-+            return ret;
-+        }
-+    });
-+
-+    private final Set<AsyncScheduledTask> tasks = ConcurrentHashMap.newKeySet();
-+
-+    @Override
-+    public ScheduledTask runNow(final Plugin plugin, final Consumer<ScheduledTask> task) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        final AsyncScheduledTask ret = new AsyncScheduledTask(plugin, -1L, task, null, -1L);
-+
-+        this.tasks.add(ret);
-+        this.executors.execute(ret);
-+
-+        if (!plugin.isEnabled()) {
-+            // handle race condition where plugin is disabled asynchronously
-+            ret.cancel();
-+        }
-+
-+        return ret;
-+    }
-+
-+    @Override
-+    public ScheduledTask runDelayed(final Plugin plugin, final Consumer<ScheduledTask> task, final long delay,
-+                                    final TimeUnit unit) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+        Validate.notNull(unit, "Time unit may not be null");
-+        if (delay < 0L) {
-+            throw new IllegalArgumentException("Delay may not be < 0");
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        return this.scheduleTimerTask(plugin, task, delay, -1L, unit);
-+    }
-+
-+    @Override
-+    public ScheduledTask runAtFixedRate(final Plugin plugin, final Consumer<ScheduledTask> task, final long initialDelay,
-+                                        final long period, final TimeUnit unit) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+        Validate.notNull(unit, "Time unit may not be null");
-+        if (initialDelay < 0L) {
-+            throw new IllegalArgumentException("Initial delay may not be < 0");
-+        }
-+        if (period <= 0L) {
-+            throw new IllegalArgumentException("Period may not be <= 0");
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        return this.scheduleTimerTask(plugin, task, initialDelay, period, unit);
-+    }
-+
-+    private AsyncScheduledTask scheduleTimerTask(final Plugin plugin, final Consumer<ScheduledTask> task, final long initialDelay,
-+                                                 final long period, final TimeUnit unit) {
-+        final AsyncScheduledTask ret = new AsyncScheduledTask(
-+            plugin, period <= 0 ? period : unit.toNanos(period), task, null,
-+            System.nanoTime() + unit.toNanos(initialDelay)
-+        );
-+
-+        synchronized (ret) {
-+            // even though ret is not published, we need to synchronise while scheduling to avoid a race condition
-+            // for when a scheduled task immediately executes before we update the delay field and state field
-+            ret.setDelay(this.timerThread.schedule(ret, initialDelay, unit));
-+            this.tasks.add(ret);
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            // handle race condition where plugin is disabled asynchronously
-+            ret.cancel();
-+        }
-+
-+        return ret;
-+    }
-+
-+    @Override
-+    public void cancelTasks(final Plugin plugin) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+
-+        for (final AsyncScheduledTask task : this.tasks) {
-+            if (task.plugin == plugin) {
-+                task.cancel();
-+            }
-+        }
-+    }
-+
-+    private final class AsyncScheduledTask implements ScheduledTask, Runnable {
-+
-+        private static final int STATE_ON_TIMER            = 0;
-+        private static final int STATE_SCHEDULED_EXECUTOR  = 1;
-+        private static final int STATE_EXECUTING           = 2;
-+        private static final int STATE_EXECUTING_CANCELLED = 3;
-+        private static final int STATE_FINISHED            = 4;
-+        private static final int STATE_CANCELLED           = 5;
-+
-+        private final Plugin plugin;
-+        private final long repeatDelay; // in ns
-+        private Consumer<ScheduledTask> run;
-+        private ScheduledFuture<?> delay;
-+        private int state;
-+        private long scheduleTarget;
-+
-+        public AsyncScheduledTask(final Plugin plugin, final long repeatDelay, final Consumer<ScheduledTask> run,
-+                                  final ScheduledFuture<?> delay, final long firstTarget) {
-+            this.plugin = plugin;
-+            this.repeatDelay = repeatDelay;
-+            this.run = run;
-+            this.delay = delay;
-+            this.state = delay == null ? STATE_SCHEDULED_EXECUTOR : STATE_ON_TIMER;
-+            this.scheduleTarget = firstTarget;
-+        }
-+
-+        private void setDelay(final ScheduledFuture<?> delay) {
-+            this.delay = delay;
-+            this.state = STATE_SCHEDULED_EXECUTOR;
-+        }
-+
-+        @Override
-+        public void run() {
-+            final boolean repeating = this.isRepeatingTask();
-+            // try to advance state
-+            final boolean timer;
-+            synchronized (this) {
-+                if (this.state == STATE_ON_TIMER) {
-+                    timer = true;
-+                    this.delay = null;
-+                    this.state = STATE_SCHEDULED_EXECUTOR;
-+                } else if (this.state != STATE_SCHEDULED_EXECUTOR) {
-+                    // cancelled
-+                    if (this.state != STATE_CANCELLED) {
-+                        throw new IllegalStateException("Wrong state: " + this.state);
-+                    }
-+                    return;
-+                } else {
-+                    timer = false;
-+                    this.state = STATE_EXECUTING;
-+                }
-+            }
-+
-+            if (timer) {
-+                // the scheduled executor is single thread, and unfortunately not expandable with threads
-+                // so we just schedule onto the executor
-+                FoliaAsyncScheduler.this.executors.execute(this);
-+                return;
-+            }
-+
-+            try {
-+                this.run.accept(this);
-+            } catch (final Throwable throwable) {
-+                this.plugin.getLogger().log(Level.WARNING, "Async task for " + this.plugin.getDescription().getFullName() + " generated an exception", throwable);
-+            } finally {
-+                boolean removeFromTasks = false;
-+                synchronized (this) {
-+                    if (!repeating) {
-+                        // only want to execute once, so we're done
-+                        removeFromTasks = true;
-+                        this.state = STATE_FINISHED;
-+                    } else if (this.state != STATE_EXECUTING_CANCELLED) {
-+                        this.state = STATE_ON_TIMER;
-+                        // account for any delays, whether it be by task exec. or scheduler issues so that we keep
-+                        // the fixed schedule
-+                        final long currTime = System.nanoTime();
-+                        final long delay = Math.max(0L, this.scheduleTarget + this.repeatDelay - currTime);
-+                        this.scheduleTarget = currTime + delay;
-+                        this.delay = FoliaAsyncScheduler.this.timerThread.schedule(this, delay, TimeUnit.NANOSECONDS);
-+                    } else {
-+                        // cancelled repeating task
-+                        removeFromTasks = true;
-+                    }
-+                }
-+
-+                if (removeFromTasks) {
-+                    this.run = null;
-+                    FoliaAsyncScheduler.this.tasks.remove(this);
-+                }
-+            }
-+        }
-+
-+        @Override
-+        public Plugin getOwningPlugin() {
-+            return this.plugin;
-+        }
-+
-+        @Override
-+        public boolean isRepeatingTask() {
-+            return this.repeatDelay > 0L;
-+        }
-+
-+        @Override
-+        public CancelledState cancel() {
-+            ScheduledFuture<?> delay = null;
-+            CancelledState ret;
-+            synchronized (this) {
-+                switch (this.state) {
-+                    case STATE_ON_TIMER: {
-+                        delay = this.delay;
-+                        this.delay = null;
-+                        this.state = STATE_CANCELLED;
-+                        ret = CancelledState.CANCELLED_BY_CALLER;
-+                        break;
-+                    }
-+                    case STATE_SCHEDULED_EXECUTOR: {
-+                        this.state = STATE_CANCELLED;
-+                        ret = CancelledState.CANCELLED_BY_CALLER;
-+                        break;
-+                    }
-+                    case STATE_EXECUTING: {
-+                        if (!this.isRepeatingTask()) {
-+                            return CancelledState.RUNNING;
-+                        }
-+                        this.state = STATE_EXECUTING_CANCELLED;
-+                        return CancelledState.NEXT_RUNS_CANCELLED;
-+                    }
-+                    case STATE_EXECUTING_CANCELLED: {
-+                        return CancelledState.NEXT_RUNS_CANCELLED_ALREADY;
-+                    }
-+                    case STATE_FINISHED: {
-+                        return CancelledState.ALREADY_EXECUTED;
-+                    }
-+                    case STATE_CANCELLED: {
-+                        return CancelledState.CANCELLED_ALREADY;
-+                    }
-+                    default: {
-+                        throw new IllegalStateException("Unknown state: " + this.state);
-+                    }
-+                }
-+            }
-+
-+            if (delay != null) {
-+                delay.cancel(false);
-+            }
-+            this.run = null;
-+            FoliaAsyncScheduler.this.tasks.remove(this);
-+            return ret;
-+        }
-+
-+        @Override
-+        public ExecutionState getExecutionState() {
-+            synchronized (this) {
-+                switch (this.state) {
-+                    case STATE_ON_TIMER:
-+                    case STATE_SCHEDULED_EXECUTOR:
-+                        return ExecutionState.IDLE;
-+                    case STATE_EXECUTING:
-+                        return ExecutionState.RUNNING;
-+                    case STATE_EXECUTING_CANCELLED:
-+                        return ExecutionState.CANCELLED_RUNNING;
-+                    case STATE_FINISHED:
-+                        return ExecutionState.FINISHED;
-+                    case STATE_CANCELLED:
-+                        return ExecutionState.CANCELLED;
-+                    default: {
-+                        throw new IllegalStateException("Unknown state: " + this.state);
-+                    }
-+                }
-+            }
-+        }
-+    }
-+}
-diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..2899d2fc3b9bd620ee838e24bcecc4587c9bd65c
---- /dev/null
-+++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
-@@ -0,0 +1,267 @@
-+package io.papermc.paper.threadedregions.scheduler;
-+
-+import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
-+import ca.spottedleaf.concurrentutil.util.Validate;
-+import net.minecraft.world.entity.Entity;
-+import org.bukkit.craftbukkit.entity.CraftEntity;
-+import org.bukkit.plugin.IllegalPluginAccessException;
-+import org.bukkit.plugin.Plugin;
-+import org.jetbrains.annotations.Nullable;
-+import java.lang.invoke.VarHandle;
-+import java.util.function.Consumer;
-+import java.util.logging.Level;
-+
-+public final class FoliaEntityScheduler implements EntityScheduler {
-+
-+    private final CraftEntity entity;
-+
-+    public FoliaEntityScheduler(final CraftEntity entity) {
-+        this.entity = entity;
-+    }
-+
-+    private static Consumer<? extends net.minecraft.world.entity.Entity> wrap(final Plugin plugin, final Runnable runnable) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(runnable, "Runnable may not be null");
-+
-+        return (final net.minecraft.world.entity.Entity nmsEntity) -> {
-+            if (!plugin.isEnabled()) {
-+                // don't execute if the plugin is disabled
-+                return;
-+            }
-+            try {
-+                runnable.run();
-+            } catch (final Throwable throwable) {
-+                plugin.getLogger().log(Level.WARNING, "Entity task for " + plugin.getDescription().getFullName() + " generated an exception", throwable);
-+            }
-+        };
-+    }
-+
-+    @Override
-+    public boolean execute(final Plugin plugin, final Runnable run, final Runnable retired,
-+                           final long delay) {
-+        final Consumer<? extends net.minecraft.world.entity.Entity> runNMS = wrap(plugin, run);
-+        final Consumer<? extends net.minecraft.world.entity.Entity> runRetired = retired == null ? null : wrap(plugin, retired);
-+
-+        return this.entity.taskScheduler.schedule(runNMS, runRetired, delay);
-+    }
-+
-+    @Override
-+    public @Nullable ScheduledTask run(final Plugin plugin, final Consumer<ScheduledTask> task, final Runnable retired) {
-+        return this.runDelayed(plugin, task, retired, 1);
-+    }
-+
-+    @Override
-+    public @Nullable ScheduledTask runDelayed(final Plugin plugin, final Consumer<ScheduledTask> task, final Runnable retired,
-+                                              final long delayTicks) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+        if (delayTicks <= 0) {
-+            throw new IllegalArgumentException("Delay ticks may not be <= 0");
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        final EntityScheduledTask ret = new EntityScheduledTask(plugin, -1, task, retired);
-+
-+        if (!this.scheduleInternal(ret, delayTicks)) {
-+            return null;
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            // handle race condition where plugin is disabled asynchronously
-+            ret.cancel();
-+        }
-+
-+        return ret;
-+    }
-+
-+    @Override
-+    public @Nullable ScheduledTask runAtFixedRate(final Plugin plugin, final Consumer<ScheduledTask> task,
-+                                                  final Runnable retired, final long initialDelayTicks, final long periodTicks) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+        if (initialDelayTicks <= 0) {
-+            throw new IllegalArgumentException("Initial delay ticks may not be <= 0");
-+        }
-+        if (periodTicks <= 0) {
-+            throw new IllegalArgumentException("Period ticks may not be <= 0");
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        final EntityScheduledTask ret = new EntityScheduledTask(plugin, periodTicks, task, retired);
-+
-+        if (!this.scheduleInternal(ret, initialDelayTicks)) {
-+            return null;
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            // handle race condition where plugin is disabled asynchronously
-+            ret.cancel();
-+        }
-+
-+        return ret;
-+    }
-+
-+    private boolean scheduleInternal(final EntityScheduledTask ret, final long delay) {
-+        return this.entity.taskScheduler.schedule(ret, ret, delay);
-+    }
-+
-+    private final class EntityScheduledTask implements ScheduledTask, Consumer<Entity> {
-+
-+        private static final int STATE_IDLE                = 0;
-+        private static final int STATE_EXECUTING           = 1;
-+        private static final int STATE_EXECUTING_CANCELLED = 2;
-+        private static final int STATE_FINISHED            = 3;
-+        private static final int STATE_CANCELLED           = 4;
-+
-+        private final Plugin plugin;
-+        private final long repeatDelay; // in ticks
-+        private Consumer<ScheduledTask> run;
-+        private Runnable retired;
-+        private volatile int state;
-+
-+        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(FoliaEntityScheduler.EntityScheduledTask.class, "state", int.class);
-+
-+        private EntityScheduledTask(final Plugin plugin, final long repeatDelay, final Consumer<ScheduledTask> run, final Runnable retired) {
-+            this.plugin = plugin;
-+            this.repeatDelay = repeatDelay;
-+            this.run = run;
-+            this.retired = retired;
-+        }
-+
-+        private final int getStateVolatile() {
-+            return (int)STATE_HANDLE.get(this);
-+        }
-+
-+        private final int compareAndExchangeStateVolatile(final int expect, final int update) {
-+            return (int)STATE_HANDLE.compareAndExchange(this, expect, update);
-+        }
-+
-+        private final void setStateVolatile(final int value) {
-+            STATE_HANDLE.setVolatile(this, value);
-+        }
-+
-+        @Override
-+        public void accept(final Entity entity) {
-+            if (!this.plugin.isEnabled()) {
-+                // don't execute if the plugin is disabled
-+                this.setStateVolatile(STATE_CANCELLED);
-+                return;
-+            }
-+
-+            final boolean repeating = this.isRepeatingTask();
-+            if (STATE_IDLE != this.compareAndExchangeStateVolatile(STATE_IDLE, STATE_EXECUTING)) {
-+                // cancelled
-+                return;
-+            }
-+
-+            final boolean retired = entity.isRemoved();
-+
-+            try {
-+                if (!retired) {
-+                    this.run.accept(this);
-+                } else {
-+                    if (this.retired != null) {
-+                        this.retired.run();
-+                    }
-+                }
-+            } catch (final Throwable throwable) {
-+                this.plugin.getLogger().log(Level.WARNING, "Entity task for " + this.plugin.getDescription().getFullName() + " generated an exception", throwable);
-+            } finally {
-+                boolean reschedule = false;
-+                 if (!repeating && !retired) {
-+                    this.setStateVolatile(STATE_FINISHED);
-+                } else if (retired || !this.plugin.isEnabled()) {
-+                     this.setStateVolatile(STATE_CANCELLED);
-+                } else if (STATE_EXECUTING == this.compareAndExchangeStateVolatile(STATE_EXECUTING, STATE_IDLE)) {
-+                    reschedule = true;
-+                } // else: cancelled repeating task
-+
-+                if (!reschedule) {
-+                    this.run = null;
-+                    this.retired = null;
-+                } else {
-+                    if (!FoliaEntityScheduler.this.scheduleInternal(this, this.repeatDelay)) {
-+                        // the task itself must have removed the entity, so in this case we need to mark as cancelled
-+                        this.setStateVolatile(STATE_CANCELLED);
-+                    }
-+                }
-+            }
-+        }
-+
-+        @Override
-+        public Plugin getOwningPlugin() {
-+            return this.plugin;
-+        }
-+
-+        @Override
-+        public boolean isRepeatingTask() {
-+            return this.repeatDelay > 0;
-+        }
-+
-+        @Override
-+        public CancelledState cancel() {
-+            for (int curr = this.getStateVolatile();;) {
-+                switch (curr) {
-+                    case STATE_IDLE: {
-+                        if (STATE_IDLE == (curr = this.compareAndExchangeStateVolatile(STATE_IDLE, STATE_CANCELLED))) {
-+                            this.state = STATE_CANCELLED;
-+                            this.run = null;
-+                            this.retired = null;
-+                            return CancelledState.CANCELLED_BY_CALLER;
-+                        }
-+                        // try again
-+                        continue;
-+                    }
-+                    case STATE_EXECUTING: {
-+                        if (!this.isRepeatingTask()) {
-+                            return CancelledState.RUNNING;
-+                        }
-+                        if (STATE_EXECUTING == (curr = this.compareAndExchangeStateVolatile(STATE_EXECUTING, STATE_EXECUTING_CANCELLED))) {
-+                            return CancelledState.NEXT_RUNS_CANCELLED;
-+                        }
-+                        // try again
-+                        continue;
-+                    }
-+                    case STATE_EXECUTING_CANCELLED: {
-+                        return CancelledState.NEXT_RUNS_CANCELLED_ALREADY;
-+                    }
-+                    case STATE_FINISHED: {
-+                        return CancelledState.ALREADY_EXECUTED;
-+                    }
-+                    case STATE_CANCELLED: {
-+                        return CancelledState.CANCELLED_ALREADY;
-+                    }
-+                    default: {
-+                        throw new IllegalStateException("Unknown state: " + curr);
-+                    }
-+                }
-+            }
-+        }
-+
-+        @Override
-+        public ExecutionState getExecutionState() {
-+            final int state = this.getStateVolatile();
-+            switch (state) {
-+                case STATE_IDLE:
-+                    return ExecutionState.IDLE;
-+                case STATE_EXECUTING:
-+                    return ExecutionState.RUNNING;
-+                case STATE_EXECUTING_CANCELLED:
-+                    return ExecutionState.CANCELLED_RUNNING;
-+                case STATE_FINISHED:
-+                    return ExecutionState.FINISHED;
-+                case STATE_CANCELLED:
-+                    return ExecutionState.CANCELLED;
-+                default: {
-+                    throw new IllegalStateException("Unknown state: " + state);
-+                }
-+            }
-+        }
-+    }
-+}
-diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..eac8bc531dc11aa652bafd73e50d7930cbca19e5
---- /dev/null
-+++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
-@@ -0,0 +1,266 @@
-+package io.papermc.paper.threadedregions.scheduler;
-+
-+import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
-+import ca.spottedleaf.concurrentutil.util.Validate;
-+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-+import org.bukkit.plugin.IllegalPluginAccessException;
-+import org.bukkit.plugin.Plugin;
-+import java.lang.invoke.VarHandle;
-+import java.util.ArrayList;
-+import java.util.List;
-+import java.util.function.Consumer;
-+import java.util.logging.Level;
-+
-+public final class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
-+
-+    private long tickCount = 0L;
-+    private final Object stateLock = new Object();
-+    private final Long2ObjectOpenHashMap<List<GlobalScheduledTask>> tasksByDeadline = new Long2ObjectOpenHashMap<>();
-+
-+    public void tick() {
-+        final List<GlobalScheduledTask> run;
-+        synchronized (this.stateLock) {
-+            ++this.tickCount;
-+            if (this.tasksByDeadline.isEmpty()) {
-+                run = null;
-+            } else {
-+                run = this.tasksByDeadline.remove(this.tickCount);
-+            }
-+        }
-+
-+        if (run == null) {
-+            return;
-+        }
-+
-+        for (int i = 0, len = run.size(); i < len; ++i) {
-+            run.get(i).run();
-+        }
-+    }
-+
-+    @Override
-+    public void execute(final Plugin plugin, final Runnable run) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(run, "Runnable may not be null");
-+
-+        this.run(plugin, (final ScheduledTask task) -> {
-+            run.run();
-+        });
-+    }
-+
-+    @Override
-+    public ScheduledTask run(final Plugin plugin, final Consumer<ScheduledTask> task) {
-+        return this.runDelayed(plugin, task, 1);
-+    }
-+
-+    @Override
-+    public ScheduledTask runDelayed(final Plugin plugin, final Consumer<ScheduledTask> task, final long delayTicks) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+        if (delayTicks <= 0) {
-+            throw new IllegalArgumentException("Delay ticks may not be <= 0");
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        final GlobalScheduledTask ret = new GlobalScheduledTask(plugin, -1, task);
-+
-+        this.scheduleInternal(ret, delayTicks);
-+
-+        if (!plugin.isEnabled()) {
-+            // handle race condition where plugin is disabled asynchronously
-+            ret.cancel();
-+        }
-+
-+        return ret;
-+    }
-+
-+    @Override
-+    public ScheduledTask runAtFixedRate(final Plugin plugin, final Consumer<ScheduledTask> task, final long initialDelayTicks, final long periodTicks) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+        Validate.notNull(task, "Task may not be null");
-+        if (initialDelayTicks <= 0) {
-+            throw new IllegalArgumentException("Initial delay ticks may not be <= 0");
-+        }
-+        if (periodTicks <= 0) {
-+            throw new IllegalArgumentException("Period ticks may not be <= 0");
-+        }
-+
-+        if (!plugin.isEnabled()) {
-+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
-+        }
-+
-+        final GlobalScheduledTask ret = new GlobalScheduledTask(plugin, periodTicks, task);
-+
-+        this.scheduleInternal(ret, initialDelayTicks);
-+
-+        if (!plugin.isEnabled()) {
-+            // handle race condition where plugin is disabled asynchronously
-+            ret.cancel();
-+        }
-+
-+        return ret;
-+    }
-+
-+    @Override
-+    public void cancelTasks(final Plugin plugin) {
-+        Validate.notNull(plugin, "Plugin may not be null");
-+
-+        final List<GlobalScheduledTask> toCancel = new ArrayList<>();
-+        synchronized (this.stateLock) {
-+            for (final List<GlobalScheduledTask> tasks : this.tasksByDeadline.values()) {
-+                for (int i = 0, len = tasks.size(); i < len; ++i) {
-+                    final GlobalScheduledTask task = tasks.get(i);
-+                    if (task.plugin == plugin) {
-+                        toCancel.add(task);
-+                    }
-+                }
-+            }
-+        }
-+
-+        for (int i = 0, len = toCancel.size(); i < len; ++i) {
-+            toCancel.get(i).cancel();
-+        }
-+    }
-+
-+    private void scheduleInternal(final GlobalScheduledTask task, final long delay) {
-+        // note: delay > 0
-+        synchronized (this.stateLock) {
-+            this.tasksByDeadline.computeIfAbsent(this.tickCount + delay, (final long keyInMap) -> {
-+                return new ArrayList<>();
-+            }).add(task);
-+        }
-+    }
-+
-+    private final class GlobalScheduledTask implements ScheduledTask, Runnable {
-+
-+        private static final int STATE_IDLE                = 0;
-+        private static final int STATE_EXECUTING           = 1;
-+        private static final int STATE_EXECUTING_CANCELLED = 2;
-+        private static final int STATE_FINISHED            = 3;
-+        private static final int STATE_CANCELLED           = 4;
-+
-+        private final Plugin plugin;
-+        private final long repeatDelay; // in ticks
-+        private Consumer<ScheduledTask> run;
-+        private volatile int state;
-+
-+        private static final VarHandle STATE_HANDLE = ConcurrentUtil.getVarHandle(GlobalScheduledTask.class, "state", int.class);
-+
-+        private GlobalScheduledTask(final Plugin plugin, final long repeatDelay, final Consumer<ScheduledTask> run) {
-+            this.plugin = plugin;
-+            this.repeatDelay = repeatDelay;
-+            this.run = run;
-+        }
-+
-+        private final int getStateVolatile() {
-+            return (int)STATE_HANDLE.get(this);
-+        }
-+
-+        private final int compareAndExchangeStateVolatile(final int expect, final int update) {
-+            return (int)STATE_HANDLE.compareAndExchange(this, expect, update);
-+        }
-+
-+        private final void setStateVolatile(final int value) {
-+            STATE_HANDLE.setVolatile(this, value);
-+        }
-+
-+        @Override
-+        public void run() {
-+            final boolean repeating = this.isRepeatingTask();
-+            if (STATE_IDLE != this.compareAndExchangeStateVolatile(STATE_IDLE, STATE_EXECUTING)) {
-+                // cancelled
-+                return;
-+            }
-+
-+            try {
-+                this.run.accept(this);
-+            } catch (final Throwable throwable) {
-+                this.plugin.getLogger().log(Level.WARNING, "Global task for " + this.plugin.getDescription().getFullName() + " generated an exception", throwable);
-+            } finally {
-+                boolean reschedule = false;
-+                if (!repeating) {
-+                    this.setStateVolatile(STATE_FINISHED);
-+                } else if (STATE_EXECUTING == this.compareAndExchangeStateVolatile(STATE_EXECUTING, STATE_IDLE)) {
-+                    reschedule = true;
-+                } // else: cancelled repeating task
-+
-+                if (!reschedule) {
-+                    this.run = null;
-+                } else {
-+                    FoliaGlobalRegionScheduler.this.scheduleInternal(this, this.repeatDelay);
-+                }
-+            }
-+        }
-+
-+        @Override
-+        public Plugin getOwningPlugin() {
-+            return this.plugin;
-+        }
-+
-+        @Override
-+        public boolean isRepeatingTask() {
-+            return this.repeatDelay > 0;
-+        }
-+
-+        @Override
-+        public CancelledState cancel() {
-+            for (int curr = this.getStateVolatile();;) {
-+                switch (curr) {
-+                    case STATE_IDLE: {
-+                        if (STATE_IDLE == (curr = this.compareAndExchangeStateVolatile(STATE_IDLE, STATE_CANCELLED))) {
-+                            this.state = STATE_CANCELLED;
-+                            this.run = null;
-+                            return CancelledState.CANCELLED_BY_CALLER;
-+                        }
-+                        // try again
-+                        continue;
-+                    }
-+                    case STATE_EXECUTING: {
-+                        if (!this.isRepeatingTask()) {
-+                            return CancelledState.RUNNING;
-+                        }
-+                        if (STATE_EXECUTING == (curr = this.compareAndExchangeStateVolatile(STATE_EXECUTING, STATE_EXECUTING_CANCELLED))) {
-+                            return CancelledState.NEXT_RUNS_CANCELLED;
-+                        }
-+                        // try again
-+                        continue;
-+                    }
-+                    case STATE_EXECUTING_CANCELLED: {
-+                        return CancelledState.NEXT_RUNS_CANCELLED_ALREADY;
-+                    }
-+                    case STATE_FINISHED: {
-+                        return CancelledState.ALREADY_EXECUTED;
-+                    }
-+                    case STATE_CANCELLED: {
-+                        return CancelledState.CANCELLED_ALREADY;
-+                    }
-+                    default: {
-+                        throw new IllegalStateException("Unknown state: " + curr);
-+                    }
-+                }
-+            }
-+        }
-+
-+        @Override
-+        public ExecutionState getExecutionState() {
-+            final int state = this.getStateVolatile();
-+            switch (state) {
-+                case STATE_IDLE:
-+                    return ExecutionState.IDLE;
-+                case STATE_EXECUTING:
-+                    return ExecutionState.RUNNING;
-+                case STATE_EXECUTING_CANCELLED:
-+                    return ExecutionState.CANCELLED_RUNNING;
-+                case STATE_FINISHED:
-+                    return ExecutionState.FINISHED;
-+                case STATE_CANCELLED:
-+                    return ExecutionState.CANCELLED;
-+                default: {
-+                    throw new IllegalStateException("Unknown state: " + state);
-+                }
-+            }
-+        }
-+    }
-+}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..aa10f3273e3bb35cf59d324644c269893cc12e99
@@ -10815,7 +9751,7 @@ index f40d6eaa6ebbd775cd3feb41546423fe4cbf2b22..e43c95e3be6cb41eab0a1cecbf154350
          } catch (ParseException var3) {
              throw new JsonSyntaxException("Invalid datetime: " + datetime, var3);
 diff --git a/src/main/java/net/minecraft/commands/CommandSourceStack.java b/src/main/java/net/minecraft/commands/CommandSourceStack.java
-index 22884a2b148b9a5af8655bb754ebe73618218a83..2183c3b68808bfd489e3cb7223567ff2ec5c895b 100644
+index 0de2eae2d448ac9e269a4edf48406d5ea8af8059..f026dce09c49cbea3b3c207c12d0e4e718063c83 100644
 --- a/src/main/java/net/minecraft/commands/CommandSourceStack.java
 +++ b/src/main/java/net/minecraft/commands/CommandSourceStack.java
 @@ -69,7 +69,7 @@ public class CommandSourceStack implements SharedSuggestionProvider, com.destroy
@@ -10979,7 +9915,7 @@ index 1e6ba6d9cceda1d4867b183c3dbc03d317ed287f..de8cf0f0d34708b960f1c81cb10d813a
          }
  
 diff --git a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
-index b4f5dbe9022dd20437c15c4f6fbe2ac06dacbadb..d4480c4f10e4e412259d1a8493199f36e56022a9 100644
+index 70aade6a8d36f8376cc567800258ea6fabb0607f..ab5b07a50f1742acb175a5fc0446e9c6064029c4 100644
 --- a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
 +++ b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
 @@ -222,7 +222,7 @@ public interface DispenseItemBehavior {
@@ -11174,7 +10110,7 @@ index 0159ed9cbc644c39fa79e62327f13375193fdc98..a930c8eb64d6c7044646d6b0156e202e
              }
  
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50d3408308 100644
+index cf20f0983fc25b26cf92b9d3a28746b1909fc56b..f6ccb6eab566b44c3460376d46df1f2cf3d7b19d 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
 @@ -73,7 +73,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
@@ -11237,7 +10173,7 @@ index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50
      }
  
      public void setProtocol(ConnectionProtocol state) {
-@@ -382,13 +408,6 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -385,13 +411,6 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
              return; // Do nothing
          }
          packet.onPacketDispatch(getPlayer());
@@ -11251,7 +10187,7 @@ index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50
          // write the packets to the queue, then flush - antixray hooks there already
          java.util.List<Packet> extraPackets = InnerUtil.buildExtraPackets(packet);
          boolean hasExtraPackets = extraPackets != null && !extraPackets.isEmpty();
-@@ -510,66 +529,58 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -513,66 +532,58 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
  
      // Paper start - rewrite this to be safer if ran off main thread
      private boolean flushQueue() { // void -> boolean
@@ -11357,7 +10293,7 @@ index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50
      }
      // Paper end
  
-@@ -578,21 +589,41 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -581,21 +592,41 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
      private static int currTick; // Paper
      public void tick() {
          this.flushQueue();
@@ -11407,7 +10343,7 @@ index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50
              // Paper start - detailed watchdog information
              net.minecraft.network.protocol.PacketUtils.packetProcessing.push(this.packetListener);
              try { // Paper end - detailed watchdog information
-@@ -632,13 +663,21 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -635,13 +666,21 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
      // Paper start
      public void clearPacketQueue() {
          net.minecraft.server.level.ServerPlayer player = getPlayer();
@@ -11432,7 +10368,7 @@ index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50
      }
      // Paper end
      public void disconnect(Component disconnectReason) {
-@@ -654,6 +693,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -657,6 +696,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
              this.channel.close(); // We can't wait as this may be called from an event loop.
              this.disconnectedReason = disconnectReason;
          }
@@ -11440,7 +10376,7 @@ index 1b634b303105a0f8424e1e40b7c39f9938232d95..619040e7197153af4c4a3fae62ce9d50
  
      }
  
-@@ -822,13 +862,27 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -825,13 +865,27 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
                      final net.minecraft.server.network.ServerGamePacketListenerImpl playerConnection = (net.minecraft.server.network.ServerGamePacketListenerImpl) packetListener;
                      new com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent(playerConnection.player.getUUID(),
                          playerConnection.player.getScoreboardName(), ((java.net.InetSocketAddress)address).getAddress(), false).callEvent();
@@ -11513,7 +10449,7 @@ index d2f0a0755317f5fa9a1ccf7db346aa77fd287d80..b07df826a3028c14b48b09dbaeccc907
              // CraftBukkit start - SPIGOT-5477, MC-142590
          } else if (MinecraftServer.getServer().hasStopped() || (listener instanceof ServerGamePacketListenerImpl && ((ServerGamePacketListenerImpl) listener).processedDisconnect)) {
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d98f1267b9 100644
+index f2bda376d64296cf41e44b03e83bc6fe000edb88..056dc0df81c056672ee59664def01ed726b8f710 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -242,7 +242,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -11968,7 +10904,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
          int i = this.getMaxPlayers();
  
          if (this.hidesOnlinePlayers()) {
-@@ -1475,14 +1610,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1475,28 +1610,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          }
      }
  
@@ -11978,8 +10914,22 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
 -        this.server.getScheduler().mainThreadHeartbeat(this.tickCount); // CraftBukkit
 +       // Folia - region threading
          MinecraftTimings.bukkitSchedulerTimer.stopTiming(); // Spigot // Paper
+-        // Paper start - Folia scheduler API
+-        ((io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler) Bukkit.getGlobalRegionScheduler()).tick();
+-        getAllLevels().forEach(level -> {
+-            for (final Entity entity : level.getEntityLookup().getAllCopy()) {
+-                if (entity.isRemoved()) {
+-                    continue;
+-                }
+-                final org.bukkit.craftbukkit.entity.CraftEntity bukkit = entity.getBukkitEntityRaw();
+-                if (bukkit != null) {
+-                    bukkit.taskScheduler.executeTick();
+-                }
+-            }
+-        });
+-        // Paper end - Folia scheduler API
 -        io.papermc.paper.adventure.providers.ClickCallbackProviderImpl.CALLBACK_MANAGER.handleQueue(this.tickCount); // Paper
-+        // Folia - region threading - moved to global tick
++        // Folia - region threading - moved to global tick - and moved entity scheduler to tickRegion
          this.profiler.push("commandFunctions");
          MinecraftTimings.commandFunctionsTimer.startTiming(); // Spigot // Paper
 -        this.getFunctions().tick();
@@ -11987,7 +10937,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
          MinecraftTimings.commandFunctionsTimer.stopTiming(); // Spigot // Paper
          this.profiler.popPush("levels");
          //Iterator iterator = this.getAllLevels().iterator(); // Paper - moved down
-@@ -1490,7 +1625,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1504,7 +1625,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // CraftBukkit start
          // Run tasks that are waiting on processing
          MinecraftTimings.processQueueTimer.startTiming(); // Spigot
@@ -11996,7 +10946,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
              this.processQueue.remove().run();
          }
          MinecraftTimings.processQueueTimer.stopTiming(); // Spigot
-@@ -1498,13 +1633,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1512,13 +1633,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          MinecraftTimings.timeUpdateTimer.startTiming(); // Spigot // Paper
          // Send time updates to everyone, it will get the right time from the world the player is in.
          // Paper start - optimize time updates
@@ -12013,7 +10963,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
                      continue;
                  }
                  ServerPlayer entityplayer = (ServerPlayer) entityhuman;
-@@ -1517,13 +1652,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1531,13 +1652,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // Paper end
          MinecraftTimings.timeUpdateTimer.stopTiming(); // Spigot // Paper
  
@@ -12030,7 +10980,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
  
              this.profiler.push(() -> {
                  return worldserver + " " + worldserver.dimension().location();
-@@ -1540,7 +1673,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1554,7 +1673,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              try {
                  worldserver.timings.doTick.startTiming(); // Spigot
@@ -12039,7 +10989,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
                  // Paper start
                  for (final io.papermc.paper.chunk.SingleThreadChunkRegionManager regionManager : worldserver.getChunkSource().chunkMap.regionManagers) {
                      regionManager.recalculateRegions();
-@@ -1564,17 +1697,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1578,17 +1697,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              this.profiler.pop();
              this.profiler.pop();
@@ -12061,7 +11011,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
          MinecraftTimings.playerListTimer.stopTiming(); // Spigot // Paper
          if (SharedConstants.IS_RUNNING_IN_IDE) {
              GameTestTicker.SINGLETON.tick();
-@@ -1583,7 +1716,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1597,7 +1716,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.profiler.popPush("server gui refresh");
  
          MinecraftTimings.tickablesTimer.startTiming(); // Spigot // Paper
@@ -12070,7 +11020,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
              ((Runnable) this.tickables.get(i)).run();
          }
          MinecraftTimings.tickablesTimer.stopTiming(); // Spigot // Paper
-@@ -1921,7 +2054,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1935,7 +2054,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public int getTickCount() {
@@ -12079,7 +11029,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
      }
  
      public int getSpawnProtectionRadius() {
-@@ -1976,6 +2109,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1990,6 +2109,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void invalidateStatus() {
@@ -12095,7 +11045,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
          this.lastServerStatus = 0L;
      }
  
-@@ -1990,6 +2132,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2004,6 +2132,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      public void executeIfPossible(Runnable runnable) {
@@ -12103,7 +11053,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
          if (this.isStopped()) {
              throw new RejectedExecutionException("Server already shutting down");
          } else {
-@@ -2597,14 +2740,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2611,14 +2740,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public ProfileResults stopTimeProfiler() {
@@ -12119,7 +11069,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
      }
  
      public int getMaxChainedNeighborUpdates() {
-@@ -2731,33 +2867,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2745,33 +2867,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      static final long TASK_EXECUTION_FAILURE_BACKOFF = 5L * 1000L; // 5us
  
@@ -12159,7 +11109,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
              // it's shown to be bad to constantly hit the queue (chunk loads slow to a crawl), even if no tasks are executed.
              // so, backoff to prevent this
              return;
-@@ -2766,13 +2887,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2780,13 +2887,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          co.aikar.timings.MinecraftTimings.midTickChunkTasks.startTiming();
          try {
              for (;;) {
@@ -12175,7 +11125,7 @@ index c7a762abdfdc88fd26ec751c34e7b42bb3514515..c772f5f48b1f0be2c55846154684a5d9
                      }
  
                      // note: negative values reduce the time
-@@ -2785,7 +2906,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2799,7 +2906,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
                      double overuseCount = (double)overuse/(double)MAX_CHUNK_EXEC_TIME;
                      long extraSleep = (long)Math.round(overuseCount*CHUNK_TASK_QUEUE_BACKOFF_MIN_TIME);
  
@@ -16228,7 +15178,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..aa42c1a05f12a614c0a7553d52efa113
          this.removeAllEffects(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.DEATH);
          this.effectsDirty = true;
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-index 1635fee928d64f4d2c336dca6675ed4641918830..7e303f86b6d8d41f96e5b3b3b0327da2082a8211 100644
+index 34ecfb89372f459117db99d57a7edd6f681bbe8a..8b685377b8cc2d36f1fb7ec05c72f2240e3f2d80 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 @@ -124,11 +124,11 @@ public class ServerPlayerGameMode {
@@ -16431,7 +15381,7 @@ index 44d99e89226adb6234b9405f25ac9dab9bd84297..072634e26d32ca0b3438a5d3a03be367
                  Collections.shuffle( this.connections );
              }
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad90813f673 100644
+index b777547cb9f8edf4e7b3c2cfb894f8cd1b1a35a5..b0de5f603f01010a496c6760610dab9ea9b5581b 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -325,10 +325,10 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
@@ -16746,7 +15696,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
                  Vec3 vec3d2 = vec3d.subtract(vec3d1);
                  double d0 = 1.0000001D;
  
-@@ -2057,7 +2084,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2058,7 +2085,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
                  Entity entity = packet.getEntity(worldserver);
  
                  if (entity != null) {
@@ -16755,7 +15705,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
                      return;
                  }
              }
-@@ -2120,6 +2147,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2121,6 +2148,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          this.player.disconnect();
          // Paper start - Adventure
          quitMessage = quitMessage == null ? this.server.getPlayerList().remove(this.player) : this.server.getPlayerList().remove(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used
@@ -16764,7 +15714,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
          if ((quitMessage != null) && !quitMessage.equals(net.kyori.adventure.text.Component.empty())) {
              this.server.getPlayerList().broadcastSystemMessage(PaperAdventure.asVanilla(quitMessage), false);
              // Paper end
-@@ -2205,9 +2234,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2206,9 +2235,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          }
          // CraftBukkit end
          if (ServerGamePacketListenerImpl.isChatMessageIllegal(packet.message())) {
@@ -16776,7 +15726,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
          } else {
              Optional<LastSeenMessages> optional = this.tryHandleChat(packet.message(), packet.timeStamp(), packet.lastSeenMessages());
  
-@@ -2241,23 +2270,22 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2242,23 +2271,22 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
      @Override
      public void handleChatCommand(ServerboundChatCommandPacket packet) {
          if (ServerGamePacketListenerImpl.isChatMessageIllegal(packet.command())) {
@@ -16804,7 +15754,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
              }
  
          }
-@@ -2331,9 +2359,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2332,9 +2360,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
      private Optional<LastSeenMessages> tryHandleChat(String message, Instant timestamp, LastSeenMessages.Update acknowledgment) {
          if (!this.updateChatOrder(timestamp)) {
              ServerGamePacketListenerImpl.LOGGER.warn("{} sent out-of-order chat: '{}': {} > {}", this.player.getName().getString(), message, this.lastChatTimeStamp.get().getEpochSecond(), timestamp.getEpochSecond()); // Paper
@@ -16816,7 +15766,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
              return Optional.empty();
          } else {
              Optional<LastSeenMessages> optional = this.unpackAndApplyLastSeen(acknowledgment);
-@@ -2408,7 +2436,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2409,7 +2437,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
              String originalFormat = event.getFormat(), originalMessage = event.getMessage();
              this.cserver.getPluginManager().callEvent(event);
  
@@ -16825,7 +15775,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
                  // Evil plugins still listening to deprecated event
                  final PlayerChatEvent queueEvent = new PlayerChatEvent(player, event.getMessage(), event.getFormat(), event.getRecipients());
                  queueEvent.setCancelled(event.isCancelled());
-@@ -2486,6 +2514,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2487,6 +2515,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
      public void handleCommand(String s) { // Paper - private -> public
          // Paper Start
          if (!org.spigotmc.AsyncCatcher.shuttingDown && !org.bukkit.Bukkit.isPrimaryThread()) {
@@ -16833,7 +15783,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
              LOGGER.error("Command Dispatched Async: " + s);
              LOGGER.error("Please notify author of plugin causing this execution to fix this bug! see: http://bit.ly/1oSiM6C", new Throwable());
              Waitable<Void> wait = new Waitable<>() {
-@@ -2546,6 +2575,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2547,6 +2576,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          if (s.isEmpty()) {
              ServerGamePacketListenerImpl.LOGGER.warn(this.player.getScoreboardName() + " tried to send an empty message");
          } else if (this.getCraftPlayer().isConversing()) {
@@ -16841,7 +15791,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
              final String conversationInput = s;
              this.server.processQueue.add(new Runnable() {
                  @Override
-@@ -2787,7 +2817,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2788,7 +2818,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
  
          this.player.resetLastActionTime();
          this.player.setShiftKeyDown(packet.isUsingSecondaryAction());
@@ -16850,7 +15800,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
              if (!worldserver.getWorldBorder().isWithinBounds(entity.blockPosition())) {
                  return;
              }
-@@ -2927,6 +2957,12 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2928,6 +2958,12 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          switch (packetplayinclientcommand_enumclientcommand) {
              case PERFORM_RESPAWN:
                  if (this.player.wonGame) {
@@ -16863,7 +15813,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
                      this.player.wonGame = false;
                      this.player = this.server.getPlayerList().respawn(this.player, this.server.getLevel(this.player.getRespawnDimension()), true, null, true, RespawnReason.END_PORTAL, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag.END_PORTAL); // Paper - add isEndCreditsRespawn argument
                      CriteriaTriggers.CHANGED_DIMENSION.trigger(this.player, Level.END, Level.OVERWORLD);
-@@ -2935,6 +2971,18 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2936,6 +2972,18 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
                          return;
                      }
  
@@ -16882,7 +15832,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
                      this.player = this.server.getPlayerList().respawn(this.player, false, RespawnReason.DEATH);
                      if (this.server.isHardcore()) {
                          this.player.setGameMode(GameType.SPECTATOR, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.HARDCORE_DEATH, null); // Paper
-@@ -3288,7 +3336,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -3289,7 +3337,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          // Paper start
          if (!org.bukkit.Bukkit.isPrimaryThread()) {
              if (this.recipeSpamPackets.addAndGet(io.papermc.paper.configuration.GlobalConfiguration.get().spamLimiter.recipeSpamIncrement) > io.papermc.paper.configuration.GlobalConfiguration.get().spamLimiter.recipeSpamLimit) {
@@ -16891,7 +15841,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
                  return;
              }
          }
-@@ -3430,7 +3478,18 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -3431,7 +3479,18 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
  
          this.filterTextPacket(list).thenAcceptAsync((list1) -> {
              this.updateSignText(packet, list1);
@@ -16911,7 +15861,7 @@ index d9c2d06ae24dcf80a497e75f4c7f63d401b77f9b..f405b376c313ef297b47191e25c43ad9
      }
  
      private void updateSignText(ServerboundSignUpdatePacket packet, List<FilteredText> signText) {
-@@ -3463,9 +3522,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -3464,9 +3523,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
              this.keepAlivePending = false;
          } else if (!this.isSingleplayerOwner()) {
              // Paper start - This needs to be handled on the main thread for plugins
@@ -17132,7 +16082,7 @@ index 7edd4b88eb0476f0630630bc4681e859bd145b2b..f3586a5c5b5d4cae817aa7c15fc0c2fc
              date1 = fallback;
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08acacd1fa1 100644
+index fff7ad7a45f310783ac96b44575ad3db13d537fa..9aa12c2ae7d86604583e98ba9872ad613882c867 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -139,10 +139,10 @@ public abstract class PlayerList {
@@ -17319,15 +16269,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
              final Scoreboard scoreBoard = this.server.getLevel(Level.OVERWORLD).getScoreboard();
              final PlayerTeam team = scoreBoard.getPlayersTeam(this.collideRuleTeamName);
              if (entityplayer.getTeam() == team && team != null) {
-@@ -643,6 +711,7 @@ public abstract class PlayerList {
- 
-         entityplayer.unRide();
-         worldserver.removePlayerImmediately(entityplayer, Entity.RemovalReason.UNLOADED_WITH_PLAYER);
-+        entityplayer.retireScheduler(); // Folia - region threading
-         entityplayer.getAdvancements().stopListening();
-         this.players.remove(entityplayer);
-         this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
-@@ -661,8 +730,7 @@ public abstract class PlayerList {
+@@ -662,8 +730,7 @@ public abstract class PlayerList {
          // CraftBukkit start
          // this.broadcastAll(new ClientboundPlayerInfoRemovePacket(List.of(entityplayer.getUUID())));
          ClientboundPlayerInfoRemovePacket packet = new ClientboundPlayerInfoRemovePacket(List.of(entityplayer.getUUID()));
@@ -17337,7 +16279,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
  
              if (entityplayer2.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
                  entityplayer2.connection.send(packet);
-@@ -687,19 +755,13 @@ public abstract class PlayerList {
+@@ -688,19 +755,13 @@ public abstract class PlayerList {
  
          ServerPlayer entityplayer;
  
@@ -17359,7 +16301,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          }
  
          // Instead of kicking then returning, we need to store the kick reason
-@@ -718,7 +780,7 @@ public abstract class PlayerList {
+@@ -719,7 +780,7 @@ public abstract class PlayerList {
  
              ichatmutablecomponent = Component.translatable("multiplayer.disconnect.banned.reason", gameprofilebanentry.getReason());
              if (gameprofilebanentry.getExpires() != null) {
@@ -17368,7 +16310,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
              }
  
              // return chatmessage;
-@@ -731,14 +793,14 @@ public abstract class PlayerList {
+@@ -732,14 +793,14 @@ public abstract class PlayerList {
  
              ichatmutablecomponent = Component.translatable("multiplayer.disconnect.banned_ip.reason", ipbanentry.getReason());
              if (ipbanentry.getExpires() != null) {
@@ -17385,7 +16327,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
                  event.disallow(PlayerLoginEvent.Result.KICK_FULL, net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().deserialize(org.spigotmc.SpigotConfig.serverFullMessage)); // Spigot // Paper - Adventure
              }
          }
-@@ -796,6 +858,11 @@ public abstract class PlayerList {
+@@ -797,6 +858,11 @@ public abstract class PlayerList {
  
      public ServerPlayer respawn(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
          // Paper end
@@ -17397,7 +16339,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          entityplayer.stopRiding(); // CraftBukkit
          this.players.remove(entityplayer);
          this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
-@@ -990,10 +1057,10 @@ public abstract class PlayerList {
+@@ -991,10 +1057,10 @@ public abstract class PlayerList {
      public void tick() {
          if (++this.sendAllPlayerInfoIn > 600) {
              // CraftBukkit start
@@ -17411,7 +16353,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
                      @Override
                      public boolean test(ServerPlayer input) {
                          return target.getBukkitEntity().canSee(input.getBukkitEntity());
-@@ -1019,18 +1086,17 @@ public abstract class PlayerList {
+@@ -1020,18 +1086,17 @@ public abstract class PlayerList {
  
      // CraftBukkit start - add a world/entity limited version
      public void broadcastAll(Packet packet, net.minecraft.world.entity.player.Player entityhuman) {
@@ -17434,7 +16376,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          }
  
      }
-@@ -1074,8 +1140,7 @@ public abstract class PlayerList {
+@@ -1075,8 +1140,7 @@ public abstract class PlayerList {
          if (scoreboardteambase == null) {
              this.broadcastSystemMessage(message, false);
          } else {
@@ -17444,7 +16386,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
  
                  if (entityplayer.getTeam() != scoreboardteambase) {
                      entityplayer.sendSystemMessage(message);
-@@ -1086,10 +1151,12 @@ public abstract class PlayerList {
+@@ -1087,10 +1151,12 @@ public abstract class PlayerList {
      }
  
      public String[] getPlayerNamesArray() {
@@ -17460,7 +16402,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          }
  
          return astring;
-@@ -1108,7 +1175,9 @@ public abstract class PlayerList {
+@@ -1109,7 +1175,9 @@ public abstract class PlayerList {
          ServerPlayer entityplayer = this.getPlayer(profile.getId());
  
          if (entityplayer != null) {
@@ -17470,7 +16412,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          }
  
      }
-@@ -1118,7 +1187,10 @@ public abstract class PlayerList {
+@@ -1119,7 +1187,10 @@ public abstract class PlayerList {
          ServerPlayer entityplayer = this.getPlayer(profile.getId());
  
          if (entityplayer != null) {
@@ -17481,7 +16423,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          }
  
      }
-@@ -1179,8 +1251,7 @@ public abstract class PlayerList {
+@@ -1180,8 +1251,7 @@ public abstract class PlayerList {
      }
  
      public void broadcast(@Nullable net.minecraft.world.entity.player.Player player, double x, double y, double z, double distance, ResourceKey<Level> worldKey, Packet<?> packet) {
@@ -17491,7 +16433,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
  
              // CraftBukkit start - Test if player receiving packet can see the source of the packet
              if (player != null && !entityplayer.getBukkitEntity().canSee(player.getBukkitEntity())) {
-@@ -1210,12 +1281,21 @@ public abstract class PlayerList {
+@@ -1211,12 +1281,21 @@ public abstract class PlayerList {
          io.papermc.paper.util.MCUtil.ensureMain("Save Players" , () -> { // Paper - Ensure main
          MinecraftTimings.savePlayers.startTiming(); // Paper
          int numSaved = 0;
@@ -17518,7 +16460,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
              }
              // Paper end
          }
-@@ -1332,6 +1412,20 @@ public abstract class PlayerList {
+@@ -1333,6 +1412,20 @@ public abstract class PlayerList {
      }
  
      public void removeAll(boolean isRestarting) {
@@ -17539,7 +16481,7 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
          // Paper end
          // CraftBukkit start - disconnect safely
          for (ServerPlayer player : this.players) {
-@@ -1341,7 +1435,7 @@ public abstract class PlayerList {
+@@ -1342,7 +1435,7 @@ public abstract class PlayerList {
          // CraftBukkit end
  
          // Paper start - Remove collideRule team if it exists
@@ -17549,10 +16491,10 @@ index 8547e7ff2f1f5b7701fb0f3c3010c14601a5f83e..5b4e7e22b0e989b7d19b0b28cf74e08a
              final PlayerTeam team = scoreboard.getPlayersTeam(this.collideRuleTeamName);
              if (team != null) scoreboard.removePlayerTeam(team);
 diff --git a/src/main/java/net/minecraft/server/players/StoredUserList.java b/src/main/java/net/minecraft/server/players/StoredUserList.java
-index 4fd709a550bf8da1e996894a1ca6b91206c31e9e..e07eddbfbe3fa5e5915580a0f4d753ce54b33248 100644
+index 9e8112fbc40a1d89c0f73ea4452e0fa1bb459bf4..f8fab664088a4adfcea0b37e45b80fa85d18bfb0 100644
 --- a/src/main/java/net/minecraft/server/players/StoredUserList.java
 +++ b/src/main/java/net/minecraft/server/players/StoredUserList.java
-@@ -148,6 +148,7 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+@@ -143,6 +143,7 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
      }
  
      public void save() throws IOException {
@@ -17560,7 +16502,7 @@ index 4fd709a550bf8da1e996894a1ca6b91206c31e9e..e07eddbfbe3fa5e5915580a0f4d753ce
          this.removeExpired(); // Paper - remove expired values before saving
          JsonArray jsonarray = new JsonArray();
          Stream<JsonObject> stream = this.map.values().stream().map((jsonlistentry) -> { // CraftBukkit - decompile error
-@@ -178,10 +179,12 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+@@ -173,10 +174,12 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
          if (bufferedwriter != null) {
              bufferedwriter.close();
          }
@@ -17573,7 +16515,7 @@ index 4fd709a550bf8da1e996894a1ca6b91206c31e9e..e07eddbfbe3fa5e5915580a0f4d753ce
          if (this.file.exists()) {
              BufferedReader bufferedreader = Files.newReader(this.file, StandardCharsets.UTF_8);
  
-@@ -226,5 +229,6 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+@@ -221,5 +224,6 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
              }
  
          }
@@ -17703,7 +16645,7 @@ index ea27b46eec01bda427653335f922ccd068cffcb5..e551d3b875eab6851b75041f418c9a08
              return blockToFallLocation(blockState);
          } else {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53dc49cb336 100644
+index 305b43071aa1cf8feee75fae757bb7734ae33771..bce3c60667ca11a062f1e83cbf125b1d5182e392 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -166,7 +166,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
@@ -17715,7 +16657,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
          private boolean locked = false;
  
          @Override
-@@ -240,17 +240,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -240,7 +240,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public com.destroystokyo.paper.loottable.PaperLootableInventoryData lootableData; // Paper
      public boolean collisionLoadChunks = false; // Paper
@@ -17724,30 +16666,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
  
      public @org.jetbrains.annotations.Nullable net.minecraft.server.level.ChunkMap.TrackedEntity tracker; // Paper
      public @Nullable Throwable addedToWorldStack; // Paper - entity debug
-     public CraftEntity getBukkitEntity() {
-         if (this.bukkitEntity == null) {
--            this.bukkitEntity = CraftEntity.getEntity(this.level.getCraftServer(), this);
-+            // Folia start - region threading
-+            synchronized (this) {
-+                if (this.bukkitEntity == null) {
-+                    return this.bukkitEntity = CraftEntity.getEntity(this.level.getCraftServer(), this);
-+                }
-+            }
-+            // Folia end - region threading
-         }
-         return this.bukkitEntity;
-     }
- 
-+    // Folia start - region threading
-+    public CraftEntity getBukkitEntityRaw() {
-+        return this.bukkitEntity;
-+    }
-+    // Folia end - region threading
-+
-     @Override
-     public CommandSender getBukkitSender(CommandSourceStack wrapper) {
-         return this.getBukkitEntity();
-@@ -495,28 +507,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -507,28 +507,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.isLegacyTrackingEntity = isLegacyTrackingEntity;
      }
  
@@ -17777,7 +16696,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      // Paper end - optimise entity tracking
      // Paper start - make end portalling safe
      public BlockPos portalBlock;
-@@ -548,6 +539,25 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -560,6 +539,25 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.teleportTo(worldserver, null);
      }
      // Paper end - make end portalling safe
@@ -17803,19 +16722,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
  
      public Entity(EntityType<?> type, Level world) {
          this.id = Entity.ENTITY_COUNTER.incrementAndGet();
-@@ -665,6 +675,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-     }
- 
-     public final void discard() {
-+        // Folia start - region threading
-+        if (this.isRemoved()) {
-+            return;
-+        }
-+        // Folia end - region threading
-         this.remove(Entity.RemovalReason.DISCARDED);
-     }
- 
-@@ -789,6 +804,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -802,6 +800,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // CraftBukkit start
      public void postTick() {
@@ -17828,7 +16735,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
          // No clean way to break out of ticking once the entity has been copied to a new world, so instead we move the portalling later in the tick cycle
          if (!(this instanceof ServerPlayer) && this.isAlive()) { // Paper - don't attempt to teleport dead entities
              this.handleNetherPortal();
-@@ -811,7 +832,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -824,7 +828,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.walkDistO = this.walkDist;
          this.xRotO = this.getXRot();
          this.yRotO = this.getYRot();
@@ -17837,7 +16744,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
          if (this.canSpawnSprintParticle()) {
              this.spawnSprintParticle();
          }
-@@ -920,11 +941,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -933,11 +937,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                  // This will be called every single tick the entity is in lava, so don't throw an event
                  this.setSecondsOnFire(15, false);
              }
@@ -17851,7 +16758,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              // CraftBukkit end - we also don't throw an event unless the object in lava is living, to save on some event calls
  
          }
-@@ -1069,8 +1090,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -1082,8 +1086,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          } else {
              this.wasOnFire = this.isOnFire();
              if (movementType == MoverType.PISTON) {
@@ -17862,7 +16769,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
                  movement = this.limitPistonMovement(movement);
                  if (movement.equals(Vec3.ZERO)) {
                      return;
-@@ -3216,6 +3237,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3212,6 +3216,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Nullable
      public Team getTeam() {
@@ -17874,7 +16781,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
          if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof Player)) { return null; } // Paper
          return this.level().getScoreboard().getPlayersTeam(this.getScoreboardName());
      }
-@@ -3331,9 +3357,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3327,9 +3336,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          if (this.fireImmune()) {
              return;
          }
@@ -17886,7 +16793,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              return;
          }
          // CraftBukkit end
-@@ -3506,6 +3532,771 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3502,6 +3511,771 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -18658,7 +17565,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3514,6 +4305,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3510,6 +4284,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Nullable
      public Entity teleportTo(ServerLevel worldserver, PositionImpl location) {
@@ -18670,7 +17577,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
          // CraftBukkit end
          // Paper start - fix bad state entities causing dupes
          if (!this.isAlive() || !this.valid) {
-@@ -3597,6 +4393,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3593,6 +4372,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          }
      }
  
@@ -18683,7 +17590,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION);
      }
-@@ -4041,17 +4843,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4037,17 +4822,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      // Paper start
      public void startSeenByPlayer(ServerPlayer player) {
@@ -18703,7 +17610,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      }
      // Paper end
  
-@@ -4546,7 +5344,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4542,7 +5323,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
          // Paper end - fix MC-4
@@ -18713,7 +17620,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4567,7 +5366,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4563,7 +5345,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
          // Paper start - never allow AABB to become desynced from position
          // hanging has its own special logic
@@ -18722,7 +17629,7 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end
-@@ -4654,6 +5453,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4650,6 +5432,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return this.removalReason != null;
      }
  
@@ -18735,35 +17642,11 @@ index b38c4cbcf0405d82c7b6e018e80a3174e460c1a4..5a71b5a37a55baea204821aba734d53d
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4678,7 +5483,23 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
- 
-         if (reason != RemovalReason.UNLOADED_TO_CHUNK) this.getPassengers().forEach(Entity::stopRiding); // Paper - chunk system - don't adjust passenger state when unloading, it's just not safe (and messes with our logic in entity chunk unload)
-         this.levelCallback.onRemove(reason);
-+        // Folia start - region threading
-+        if (!(this instanceof ServerPlayer) && reason != RemovalReason.CHANGED_DIMENSION) {
-+            // Players need to be special cased, because they are regularly removed from the world
-+            this.retireScheduler();
-+        }
-+        // Folia end - region threading
-+    }
-+
-+    // Folia start - region threading
-+    /**
-+     * Invoked only when the entity is truly removed from the server, never to be added to any world.
-+     */
-+    public final void retireScheduler() {
-+        // we need to force create the bukkit entity so that the scheduler can be retired...
-+        this.getBukkitEntity().taskScheduler.retire();
-     }
-+    // Folia end - region threading
- 
-     public void unsetRemoved() {
-         this.removalReason = null;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d4358004df0 100644
+index e11d7283662834047b2ff81a2fd25a4263792deb..40dd667bacd296a3a329391dc87a5713c464f4a2 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -277,6 +277,13 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -276,6 +276,13 @@ public abstract class LivingEntity extends Entity implements Attackable {
          ++this.noActionTime; // Above all the floats
      }
      // Spigot end
@@ -18777,7 +17660,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
  
      protected LivingEntity(EntityType<? extends LivingEntity> type, Level world) {
          super(type, world);
-@@ -482,7 +489,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -481,7 +488,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
          if (this.isDeadOrDying() && this.level().shouldTickDeath(this)) {
              this.tickDeath();
@@ -18786,7 +17669,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
  
          if (this.lastHurtByPlayerTime > 0) {
              --this.lastHurtByPlayerTime;
-@@ -628,11 +635,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -627,11 +634,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
          return true;
      }
  
@@ -18803,7 +17686,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
          }
  
      }
-@@ -853,9 +863,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -852,9 +862,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
          }
  
          this.hurtTime = nbt.getShort("HurtTime");
@@ -18815,7 +17698,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level().getScoreboard().getPlayerTeam(s);
              if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper
-@@ -1135,7 +1145,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1134,7 +1144,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
      }
  
      public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause) {
@@ -18824,7 +17707,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
          if (this.isTickingEffects) {
              this.effectsToProcess.add(new ProcessableEffect(mobeffect, cause));
              return true;
-@@ -2310,7 +2320,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -2300,7 +2310,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      @Nullable
      public LivingEntity getKillCredit() {
@@ -18833,7 +17716,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
      }
  
      public final float getMaxHealth() {
-@@ -3446,7 +3456,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -3436,7 +3446,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          this.pushEntities();
          this.level().getProfiler().pop();
          // Paper start
@@ -18842,7 +17725,7 @@ index a189461330a4d427a7450d504ef13de3605497e3..2d5f18322ed9d82eecef69c0a04c5d43
              if (this.xo != this.getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
                  Location from = new Location(this.level().getWorld(), this.xo, this.yo, this.zo, this.yRotO, this.xRotO);
                  Location to = new Location (this.level().getWorld(), this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
-@@ -4106,7 +4116,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -4102,7 +4112,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          BlockPos blockposition = BlockPos.containing(d0, d1, d2);
          Level world = this.level();
  
@@ -18995,7 +17878,7 @@ index 8ec07578c1e41997a2e5ef158885ad3f4c2a31b6..6dcacfca6eb4a8a6425f1aaeb57733d2
                          context.<List<LivingEntity>>get(mobs).stream().filter((mob) -> {
                              return mob instanceof Villager && mob != entity;
 diff --git a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
-index 13f96d7c1f2d920172f49fcd82d719f0416ffcee..7da8e412df7ef4fade1cf56711057e6864ce64ea 100644
+index 8e1c60d3622bf069feec5e636d2a5b4257e11776..9d058297c9711a9ce71a99b1e9289ae14ae4580f 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
 @@ -70,7 +70,7 @@ public class FollowOwnerGoal extends Goal {
@@ -19028,10 +17911,10 @@ index 13f96d7c1f2d920172f49fcd82d719f0416ffcee..7da8e412df7ef4fade1cf56711057e68
  
          for (int i = 0; i < 10; ++i) {
              int j = this.randomIntInclusive(-3, 3);
-@@ -137,7 +142,21 @@ public class FollowOwnerGoal extends Goal {
+@@ -133,7 +138,21 @@ public class FollowOwnerGoal extends Goal {
+                 return false;
              }
-             to = event.getTo();
- 
+             Location to = event.getTo();
 -            this.tamable.moveTo(to.getX(), to.getY(), to.getZ(), to.getYaw(), to.getPitch());
 +            // Folia start - region threading - can't teleport here, we may be removed by teleport logic - delay until next tick
 +            // also, use teleportAsync so that crossing region boundaries will not blow up
@@ -19283,7 +18166,7 @@ index 90ce201bc7c47cef9bc59d7b535a7453854bac75..9c7c116a7d3570ccf5b30d55d68c420f
              this.setPersistenceRequired();
          }
 diff --git a/src/main/java/net/minecraft/world/entity/animal/Turtle.java b/src/main/java/net/minecraft/world/entity/animal/Turtle.java
-index 098ae9d8fa3e7cad8473a877decba771f6bd1b36..b95ea9c8f0f7f578dc0acb4afd8853baf69995c8 100644
+index d3c15d029d5f003cba3c89f7ea1f3ed4f943f2bd..5f0436a399178aa374a5178d5050ec6025180fac 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/Turtle.java
 +++ b/src/main/java/net/minecraft/world/entity/animal/Turtle.java
 @@ -337,9 +337,9 @@ public class Turtle extends Animal {
@@ -19314,10 +18197,10 @@ index 955316687e2e29ad75a0052317a7b0f89034c82a..aedd3174c710049e4689f1a13a4f3152
  
          });
 diff --git a/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java b/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java
-index eff81e846f696349b3bd3d26c02442f157b169f0..6e35afb9e5314de69e78d819913418ab144bec52 100644
+index 18eaccb39a4c81338a8cbebe3de03934913ac2a4..34b3541603b8cca16c7d62f3981d7ce3e8be0dbe 100644
 --- a/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/item/FallingBlockEntity.java
-@@ -293,9 +293,9 @@ public class FallingBlockEntity extends Entity {
+@@ -295,9 +295,9 @@ public class FallingBlockEntity extends Entity {
                  float f2 = (float) Math.min(Mth.floor((float) i * this.fallDamagePerDistance), this.fallDamageMax);
  
                  this.level().getEntities((Entity) this, this.getBoundingBox(), predicate).forEach((entity) -> {
@@ -19330,10 +18213,10 @@ index eff81e846f696349b3bd3d26c02442f157b169f0..6e35afb9e5314de69e78d819913418ab
                  boolean flag = this.blockState.is(BlockTags.ANVIL);
  
 diff --git a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
-index 3d41dbe0285f8fec8adae1e93010cf464df9b08c..6b1da5467b486b8c38fe95fd2313cac868fda343 100644
+index 52196431a6538872755344859a0454a0e50c3b6e..76e010769786132d8af3889051b3f52e9f683509 100644
 --- a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
-@@ -51,7 +51,7 @@ public class ItemEntity extends Entity implements TraceableEntity {
+@@ -52,7 +52,7 @@ public class ItemEntity extends Entity implements TraceableEntity {
      @Nullable
      public UUID target;
      public final float bobOffs;
@@ -19342,7 +18225,7 @@ index 3d41dbe0285f8fec8adae1e93010cf464df9b08c..6b1da5467b486b8c38fe95fd2313cac8
      public boolean canMobPickup = true; // Paper
      private int despawnRate = -1; // Paper
      public net.kyori.adventure.util.TriState frictionState = net.kyori.adventure.util.TriState.NOT_SET; // Paper
-@@ -125,13 +125,11 @@ public class ItemEntity extends Entity implements TraceableEntity {
+@@ -126,13 +126,11 @@ public class ItemEntity extends Entity implements TraceableEntity {
              this.discard();
          } else {
              super.tick();
@@ -19361,7 +18244,7 @@ index 3d41dbe0285f8fec8adae1e93010cf464df9b08c..6b1da5467b486b8c38fe95fd2313cac8
  
              this.xo = this.getX();
              this.yo = this.getY();
-@@ -185,11 +183,11 @@ public class ItemEntity extends Entity implements TraceableEntity {
+@@ -186,11 +184,11 @@ public class ItemEntity extends Entity implements TraceableEntity {
                  this.mergeWithNeighbours();
              }
  
@@ -19375,7 +18258,7 @@ index 3d41dbe0285f8fec8adae1e93010cf464df9b08c..6b1da5467b486b8c38fe95fd2313cac8
  
              this.hasImpulse |= this.updateInWaterStateAndDoFluidPushing();
              if (!this.level().isClientSide) {
-@@ -216,13 +214,14 @@ public class ItemEntity extends Entity implements TraceableEntity {
+@@ -217,13 +215,14 @@ public class ItemEntity extends Entity implements TraceableEntity {
      // Spigot start - copied from above
      @Override
      public void inactiveTick() {
@@ -19397,7 +18280,7 @@ index 3d41dbe0285f8fec8adae1e93010cf464df9b08c..6b1da5467b486b8c38fe95fd2313cac8
  
          if (!this.level().isClientSide && this.age >= this.despawnRate) { // Spigot // Paper
              // CraftBukkit start - fire ItemDespawnEvent
-@@ -524,14 +523,20 @@ public class ItemEntity extends Entity implements TraceableEntity {
+@@ -529,14 +528,20 @@ public class ItemEntity extends Entity implements TraceableEntity {
          return false;
      }
  
@@ -19422,10 +18305,10 @@ index 3d41dbe0285f8fec8adae1e93010cf464df9b08c..6b1da5467b486b8c38fe95fd2313cac8
          return entity;
      }
 diff --git a/src/main/java/net/minecraft/world/entity/item/PrimedTnt.java b/src/main/java/net/minecraft/world/entity/item/PrimedTnt.java
-index bf3301eb1341ba9d482e10873447c42bd670f5ed..666d603b098edee635559f78fcfa89bb5c697c39 100644
+index 4ce3e69970dd9eb251d0538a2d233ca30e9e5e47..acb7545a3346758c7a598b104ea7ae43ce4263d2 100644
 --- a/src/main/java/net/minecraft/world/entity/item/PrimedTnt.java
 +++ b/src/main/java/net/minecraft/world/entity/item/PrimedTnt.java
-@@ -60,7 +60,7 @@ public class PrimedTnt extends Entity implements TraceableEntity {
+@@ -63,7 +63,7 @@ public class PrimedTnt extends Entity implements TraceableEntity {
  
      @Override
      public void tick() {
@@ -19434,7 +18317,7 @@ index bf3301eb1341ba9d482e10873447c42bd670f5ed..666d603b098edee635559f78fcfa89bb
          if (!this.isNoGravity()) {
              this.setDeltaMovement(this.getDeltaMovement().add(0.0D, -0.04D, 0.0D));
          }
-@@ -102,7 +102,7 @@ public class PrimedTnt extends Entity implements TraceableEntity {
+@@ -105,7 +105,7 @@ public class PrimedTnt extends Entity implements TraceableEntity {
               */
              // Send position and velocity updates to nearby players on every tick while the TNT is in water.
              // This does pretty well at keeping their clients in sync with the server.
@@ -20221,21 +19104,13 @@ index d7a0cbde8f8c99276307502674c71463fbe7e89c..2a501b3fa8d69f627b279fd035fd2cb1
              }
  
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5538387ee 100644
+index ae9b821d71d2868ba4eb3c73558fdcd6caf264e3..c15e06514b907009a07e0e9645839c3691f8f5ff 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
-@@ -340,6 +340,7 @@ public final class ItemStack {
-     }
- 
-     public InteractionResult useOn(UseOnContext itemactioncontext, InteractionHand enumhand) { // CraftBukkit - add hand
-+
-         net.minecraft.world.entity.player.Player entityhuman = itemactioncontext.getPlayer();
-         BlockPos blockposition = itemactioncontext.getClickedPos();
-         BlockInWorld shapedetectorblock = new BlockInWorld(itemactioncontext.getLevel(), blockposition, false);
-@@ -351,12 +352,13 @@ public final class ItemStack {
+@@ -351,12 +351,13 @@ public final class ItemStack {
              CompoundTag oldData = this.getTagClone();
              int oldCount = this.getCount();
-             ServerLevel world = (ServerLevel) itemactioncontext.getLevel();
+             ServerLevel world = (ServerLevel) context.getLevel();
 +            io.papermc.paper.threadedregions.RegionizedWorldData worldData = world.getCurrentWorldData(); // Folia - region threading
  
              if (!(this.getItem() instanceof BucketItem/* || this.getItem() instanceof SolidBucketItem*/)) { // if not bucket // Paper - capture block states for snow buckets
@@ -20248,7 +19123,7 @@ index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5
                  }
              }
              Item item = this.getItem();
-@@ -365,14 +367,14 @@ public final class ItemStack {
+@@ -365,14 +366,14 @@ public final class ItemStack {
              int newCount = this.getCount();
              this.setCount(oldCount);
              this.setTagClone(oldData);
@@ -20270,7 +19145,7 @@ index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5
                  StructureGrowEvent structureEvent = null;
                  if (treeType != null) {
                      boolean isBonemeal = this.getItem() == Items.BONE_MEAL;
-@@ -400,12 +402,12 @@ public final class ItemStack {
+@@ -400,13 +401,13 @@ public final class ItemStack {
                  SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
                  return enuminteractionresult;
              }
@@ -20278,6 +19153,7 @@ index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5
 +            worldData.captureTreeGeneration = false; // Folia - region threading
  
              if (entityhuman != null && enuminteractionresult.shouldAwardStats()) {
+                 InteractionHand enumhand = context.getHand();
                  org.bukkit.event.block.BlockPlaceEvent placeEvent = null;
 -                List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
 -                world.capturedBlockStates.clear();
@@ -20286,7 +19162,7 @@ index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5
                  if (blocks.size() > 1) {
                      placeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockMultiPlaceEvent(world, entityhuman, enumhand, blocks, blockposition.getX(), blockposition.getY(), blockposition.getZ());
                  } else if (blocks.size() == 1 && item != Items.POWDER_SNOW_BUCKET) { // Paper - don't call event twice for snow buckets
-@@ -416,13 +418,13 @@ public final class ItemStack {
+@@ -417,13 +418,13 @@ public final class ItemStack {
                      enuminteractionresult = InteractionResult.FAIL; // cancel placement
                      // PAIL: Remove this when MC-99075 fixed
                      placeEvent.getPlayer().updateInventory();
@@ -20303,7 +19179,7 @@ index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5
  
                      // Brute force all possible updates
                      BlockPos placedPos = ((CraftBlock) placeEvent.getBlock()).getPosition();
-@@ -437,7 +439,7 @@ public final class ItemStack {
+@@ -438,7 +439,7 @@ public final class ItemStack {
                          this.setCount(newCount);
                      }
  
@@ -20312,7 +19188,7 @@ index adb7220be617d6d9f2cdd7fbe4fa2dd24cc7d142..ae02df4a0304f4a5a6113bb893662ce5
                          world.setBlockEntity(e.getValue());
                      }
  
-@@ -524,8 +526,8 @@ public final class ItemStack {
+@@ -525,8 +526,8 @@ public final class ItemStack {
                      entityhuman.awardStat(Stats.ITEM_USED.get(item));
                  }
              }
@@ -21033,10 +19909,10 @@ index 73d1adc5ddf0363966eac0c77c8dfbbb20a2b6a3..375a2b57bcb29458443c1a4e2be3c0e5
  
      default void scheduleTick(BlockPos pos, Block block, int delay, TickPriority priority) {
 diff --git a/src/main/java/net/minecraft/world/level/LevelReader.java b/src/main/java/net/minecraft/world/level/LevelReader.java
-index e3e2b88b8ade4fa2b482626c7e00ac6a0bf8eb5e..aa12eb231d597c296c80c5294468540a346eb2c1 100644
+index 12eaafdbd324fa36b3f46c3b644bc8117a4123ad..c8c358a2ce567567159039ed6a1ba804b5d3ee85 100644
 --- a/src/main/java/net/minecraft/world/level/LevelReader.java
 +++ b/src/main/java/net/minecraft/world/level/LevelReader.java
-@@ -209,6 +209,25 @@ public interface LevelReader extends BlockAndTintGetter, CollisionGetter, Signal
+@@ -210,6 +210,25 @@ public interface LevelReader extends BlockAndTintGetter, CollisionGetter, Signal
          return maxY >= this.getMinBuildHeight() && minY < this.getMaxBuildHeight() ? this.hasChunksAt(minX, minZ, maxX, maxZ) : false;
      }
  
@@ -21386,7 +20262,7 @@ index f6f8e155223cba10c4073ddca602d1aa3aa872d7..bc42faf2f5cf54197849b1ad133a8851
                  return true;
              } else {
 diff --git a/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java b/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java
-index e978132e51cde52f7ff1ba31ad521fc2cb4f0dce..d10afb2eee3aeb606c94ab348853aac489fada2e 100644
+index e6efeec733802a17b1ac47ded1af418595c2b94f..be2921f663c8f223cba32fd158168597ad9e60ea 100644
 --- a/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/PointedDripstoneBlock.java
 @@ -141,9 +141,9 @@ public class PointedDripstoneBlock extends Block implements Fallable, SimpleWate
@@ -21660,7 +20536,7 @@ index 1aa0e921890d600c9274deb923da04e72b12bcc6..daca759793b4a22406fb9c75b5ac9814
              BlockState iblockdata = blockEntity.getBlockState();
              boolean flag = iblockdata.is(Blocks.WITHER_SKELETON_SKULL) || iblockdata.is(Blocks.WITHER_SKELETON_WALL_SKULL);
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java
-index 59246e24558569f7f50b4d4d508616798091c888..dfd3432d648c9dafcb45b4f6a00d58cb308625b3 100644
+index 3b866e2c20ee7bfc981ff09b29065530de993778..7eafe5c059580bbbe0a6de8385ad0487b590b72e 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java
 @@ -202,7 +202,7 @@ public class BeaconBlockEntity extends BlockEntity implements MenuProvider, Name
@@ -22657,7 +21533,7 @@ index a908652f1ebb426d265ef614746f70cd1e538268..e615b79f68a0467aa8cfa1c61b06ae04
  
                  if (days >= world.paperConfig().entities.behavior.pillagerPatrols.start.day && world.isDay()) {
 diff --git a/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java b/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java
-index bc7648dbc132551dc6591ab49a1919a623c30f60..acdbf170d49f15bf0956ee52db3916cb51797656 100644
+index dfeb3e336e06ef01f5401a362755030db942bb07..a127b6cbaab211d324d42b3bddcd6ebd84c250e3 100644
 --- a/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java
 +++ b/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java
 @@ -22,7 +22,7 @@ import net.minecraft.world.level.material.FluidState;
@@ -23184,93 +22060,32 @@ index 1d7c663fa0e550bd0cfb9a4b83ccd7e2968666f0..f3df9c9b6cff85565514f990597f3fe5
          LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
          if (levelChunkTicks == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index edb26528b943f13aa45aba6bcaf63f5403f2f897..29b5427316b23ea36e035330b303a41a2ba46f47 100644
+index 50f75400e59a5d917416f284ecc5a1f77896113f..c9ee1662ab2bff205b509554f0883658682e87c8 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -309,6 +309,82 @@ public final class CraftServer implements Server {
-         CraftItemFactory.instance();
-     }
+@@ -306,7 +306,7 @@ public final class CraftServer implements Server {
+     private final CraftPotionBrewer potionBrewer = new CraftPotionBrewer(); // Paper
  
+     // Paper start - Folia region threading API
+-    private final io.papermc.paper.threadedregions.scheduler.FallbackRegionScheduler regionizedScheduler = new io.papermc.paper.threadedregions.scheduler.FallbackRegionScheduler();
++    private final io.papermc.paper.threadedregions.scheduler.FoliaRegionScheduler regionizedScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaRegionScheduler(); // Folia - region threading
+     private final io.papermc.paper.threadedregions.scheduler.FoliaAsyncScheduler asyncScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaAsyncScheduler();
+     private final io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler globalRegionScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler();
+ 
+@@ -374,6 +374,12 @@ public final class CraftServer implements Server {
+         return io.papermc.paper.util.TickThread.isTickThreadFor(((org.bukkit.craftbukkit.entity.CraftEntity) entity).getHandleRaw());
+     }
+     // Paper end - Folia reagion threading API
 +    // Folia start - region threading API
-+    private final io.papermc.paper.threadedregions.scheduler.FoliaRegionScheduler regionizedScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaRegionScheduler();
-+    private final io.papermc.paper.threadedregions.scheduler.FoliaAsyncScheduler asyncScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaAsyncScheduler();
-+    private final io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler globalRegionScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler();
-+
-+    @Override
-+    public final io.papermc.paper.threadedregions.scheduler.RegionScheduler getRegionScheduler() {
-+        return this.regionizedScheduler;
-+    }
-+
-+    @Override
-+    public final io.papermc.paper.threadedregions.scheduler.AsyncScheduler getAsyncScheduler() {
-+        return this.asyncScheduler;
-+    }
-+
-+    @Override
-+    public final io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler getGlobalRegionScheduler() {
-+        return this.globalRegionScheduler;
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(World world, io.papermc.paper.math.Position position) {
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld) world).getHandle(), position.blockX() >> 4, position.blockZ() >> 4
-+        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(World world, io.papermc.paper.math.Position position, int squareRadiusChunks) {
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld) world).getHandle(), position.blockX() >> 4, position.blockZ() >> 4, squareRadiusChunks
-+        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(Location location) {
-+        World world = location.getWorld();
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld) world).getHandle(), location.getBlockX() >> 4, location.getBlockZ() >> 4
-+        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(Location location, int squareRadiusChunks) {
-+        World world = location.getWorld();
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld) world).getHandle(), location.getBlockX() >> 4, location.getBlockZ() >> 4, squareRadiusChunks
-+        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(World world, int chunkX, int chunkZ) {
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld) world).getHandle(), chunkX, chunkZ
-+        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(World world, int chunkX, int chunkZ, int squareRadiusChunks) {
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(
-+            ((CraftWorld) world).getHandle(), chunkX, chunkZ, squareRadiusChunks
-+        );
-+    }
-+
-+    @Override
-+    public final boolean isOwnedByCurrentRegion(Entity entity) {
-+        return io.papermc.paper.util.TickThread.isTickThreadFor(((org.bukkit.craftbukkit.entity.CraftEntity)entity).getHandle());
-+    }
-+
 +    @Override
 +    public boolean isGlobalTickThread() {
 +        return io.papermc.paper.threadedregions.RegionizedServer.isGlobalTickThread();
 +    }
-+
 +    // Folia end - region threading API
-+
-     public CraftServer(DedicatedServer console, PlayerList playerList) {
-         this.console = console;
-         this.playerList = (DedicatedPlayerList) playerList;
-@@ -883,6 +959,9 @@ public final class CraftServer implements Server {
+ 
+     static {
+         ConfigurationSerialization.registerClass(CraftOfflinePlayer.class);
+@@ -956,6 +962,9 @@ public final class CraftServer implements Server {
  
      // NOTE: Should only be called from DedicatedServer.ah()
      public boolean dispatchServerCommand(CommandSender sender, ConsoleInput serverCommand) {
@@ -23280,7 +22095,7 @@ index edb26528b943f13aa45aba6bcaf63f5403f2f897..29b5427316b23ea36e035330b303a41a
          if (sender instanceof Conversable) {
              Conversable conversable = (Conversable) sender;
  
-@@ -902,12 +981,44 @@ public final class CraftServer implements Server {
+@@ -975,12 +984,44 @@ public final class CraftServer implements Server {
          }
      }
  
@@ -23325,7 +22140,7 @@ index edb26528b943f13aa45aba6bcaf63f5403f2f897..29b5427316b23ea36e035330b303a41a
          // Paper Start
          if (!org.spigotmc.AsyncCatcher.shuttingDown && !Bukkit.isPrimaryThread()) {
              final CommandSender fSender = sender;
-@@ -2968,7 +3079,7 @@ public final class CraftServer implements Server {
+@@ -3052,7 +3093,7 @@ public final class CraftServer implements Server {
  
      @Override
      public int getCurrentTick() {
@@ -23335,7 +22150,7 @@ index edb26528b943f13aa45aba6bcaf63f5403f2f897..29b5427316b23ea36e035330b303a41a
  
      @Override
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 1a481fb4f4228f0fea8a7dc6132248c98b727c90..23b8dde3cd185b372d4adc97201a422cebbbe804 100644
+index 550dcb7d595221b221e4710890d8a3cad789fc07..723ae4b75c84fe952377c02d42cf7a710f7047ea 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -183,7 +183,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
@@ -24043,27 +22858,10 @@ index cd4ad8261e56365850068db1d83d6a8454026737..78f7e72f2912dae503c2dab7d1992b65
              List<String> offers = waitable.get();
              if (offers == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 733158b6f2c2bd03fbe798562ff7bc33280548dc..2fe15f615522b60bba8e7551eef182458d163cd5 100644
+index fc0dc8e607cc24020106ea1af92b4421a5f9393d..dafac02b73326aa04093f16ac2f142004abe26be 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -203,6 +203,16 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
-     private EntityDamageEvent lastDamageEvent;
-     private final CraftPersistentDataContainer persistentDataContainer = new CraftPersistentDataContainer(CraftEntity.DATA_TYPE_REGISTRY);
-     protected net.kyori.adventure.pointer.Pointers adventure$pointers; // Paper - implement pointers
-+    public final io.papermc.paper.threadedregions.EntityScheduler taskScheduler = new io.papermc.paper.threadedregions.EntityScheduler(this); // Folia - region threading
-+
-+    // Folia start - region threading API
-+    private final io.papermc.paper.threadedregions.scheduler.FoliaEntityScheduler apiScheduler = new io.papermc.paper.threadedregions.scheduler.FoliaEntityScheduler(this);
-+
-+    @Override
-+    public final io.papermc.paper.threadedregions.scheduler.EntityScheduler getScheduler() {
-+        return this.apiScheduler;
-+    };
-+    // Folia end - region threading API
- 
-     public CraftEntity(final CraftServer server, final Entity entity) {
-         this.server = server;
-@@ -567,6 +577,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -576,6 +576,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public boolean teleport(Location location, TeleportCause cause, io.papermc.paper.entity.TeleportFlag... flags) {
@@ -24075,7 +22873,7 @@ index 733158b6f2c2bd03fbe798562ff7bc33280548dc..2fe15f615522b60bba8e7551eef18245
          // Paper end
          Preconditions.checkArgument(location != null, "location cannot be null");
          location.checkFinite();
-@@ -1237,7 +1252,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1252,7 +1257,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          }
  
          ServerLevel world = ((CraftWorld) this.getWorld()).getHandle();
@@ -24084,7 +22882,7 @@ index 733158b6f2c2bd03fbe798562ff7bc33280548dc..2fe15f615522b60bba8e7551eef18245
  
          if (entityTracker == null) {
              return;
-@@ -1301,30 +1316,43 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1316,30 +1321,43 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          Preconditions.checkArgument(location != null, "location");
          location.checkFinite();
          Location locationClone = location.clone(); // clone so we don't need to worry about mutations after this call.
@@ -24149,10 +22947,10 @@ index 733158b6f2c2bd03fbe798562ff7bc33280548dc..2fe15f615522b60bba8e7551eef18245
  
      @Override
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 59c00045ec903a635966f16cf33e5b4110262953..5e362b1b7b95c908b0ea13a355c85386582b3f98 100644
+index 5b201d2c21f04e0223970035e0631f8f92ea0d3a..b291941717b6f9e1bed2c8e89bdd15200f8b8699 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -574,7 +574,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -580,7 +580,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
  
      @Override
      public void kickPlayer(String message) {
@@ -24161,7 +22959,7 @@ index 59c00045ec903a635966f16cf33e5b4110262953..5e362b1b7b95c908b0ea13a355c85386
          if (this.getHandle().connection == null) return;
  
          this.getHandle().connection.disconnect(message == null ? "" : message, org.bukkit.event.player.PlayerKickEvent.Cause.PLUGIN); // Paper - kick event cause
-@@ -1291,6 +1291,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1297,6 +1297,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
  
      @Override
      public boolean teleport(Location location, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause, io.papermc.paper.entity.TeleportFlag... flags) {
@@ -24173,7 +22971,7 @@ index 59c00045ec903a635966f16cf33e5b4110262953..5e362b1b7b95c908b0ea13a355c85386
          java.util.Set<net.minecraft.world.entity.RelativeMovement> relativeArguments;
          java.util.Set<io.papermc.paper.entity.TeleportFlag> allFlags;
          if (flags.length == 0) {
-@@ -1819,7 +1824,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1849,7 +1854,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
      private void unregisterEntity(Entity other) {
          // Paper end
          ChunkMap tracker = ((ServerLevel) this.getHandle().level()).getChunkSource().chunkMap;
@@ -24182,7 +22980,7 @@ index 59c00045ec903a635966f16cf33e5b4110262953..5e362b1b7b95c908b0ea13a355c85386
          if (entry != null) {
              entry.removePlayer(this.getHandle());
          }
-@@ -1903,7 +1908,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1933,7 +1938,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
              this.getHandle().connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(otherPlayer)));
          }
  
@@ -24192,11 +22990,11 @@ index 59c00045ec903a635966f16cf33e5b4110262953..5e362b1b7b95c908b0ea13a355c85386
              entry.updatePlayer(this.getHandle());
          }
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3da7c2d551 100644
+index a6edbb5cde568d8138af568122d5d11243f3fb07..450d3ae56cc29c3f0223baa553db6382264c1c6a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-@@ -230,8 +230,8 @@ import org.bukkit.inventory.meta.BookMeta;
- import org.bukkit.potion.PotionEffect;
+@@ -236,8 +236,8 @@ import org.bukkit.potion.PotionEffect;
+ import org.bukkit.util.Vector;
  
  public class CraftEventFactory {
 -    public static org.bukkit.block.Block blockDamage; // For use in EntityDamageByBlockEvent
@@ -24206,7 +23004,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
  
      // helper methods
      private static boolean canBuild(ServerLevel world, Player player, int x, int z) {
-@@ -860,7 +860,7 @@ public class CraftEventFactory {
+@@ -862,7 +862,7 @@ public class CraftEventFactory {
          return CraftEventFactory.handleBlockSpreadEvent(world, source, target, block, 2);
      }
  
@@ -24215,7 +23013,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
      public static boolean handleBlockSpreadEvent(LevelAccessor world, BlockPos source, BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag) {
          // Suppress during worldgen
          if (!(world instanceof Level)) {
-@@ -871,7 +871,7 @@ public class CraftEventFactory {
+@@ -873,7 +873,7 @@ public class CraftEventFactory {
          CraftBlockState state = CraftBlockStates.getBlockState(world, target, flag);
          state.setData(block);
  
@@ -24224,7 +23022,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
          Bukkit.getPluginManager().callEvent(event);
  
          if (!event.isCancelled()) {
-@@ -986,8 +986,8 @@ public class CraftEventFactory {
+@@ -988,8 +988,8 @@ public class CraftEventFactory {
      private static EntityDamageEvent handleEntityDamageEvent(Entity entity, DamageSource source, Map<DamageModifier, Double> modifiers, Map<DamageModifier, Function<? super Double, Double>> modifierFunctions, boolean cancelled) {
          if (source.is(DamageTypeTags.IS_EXPLOSION)) {
              DamageCause damageCause;
@@ -24235,7 +23033,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
              EntityDamageEvent event;
              if (damager == null) {
                  event = new EntityDamageByBlockEvent(null, entity.getBukkitEntity(), DamageCause.BLOCK_EXPLOSION, modifiers, modifierFunctions);
-@@ -1048,13 +1048,13 @@ public class CraftEventFactory {
+@@ -1050,13 +1050,13 @@ public class CraftEventFactory {
              }
              return event;
          } else if (source.is(DamageTypes.LAVA)) {
@@ -24253,7 +23051,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
  
              if (!event.isCancelled()) {
                  event.getEntity().setLastDamageCause(event);
-@@ -1062,9 +1062,9 @@ public class CraftEventFactory {
+@@ -1064,9 +1064,9 @@ public class CraftEventFactory {
                  entity.lastDamageCancelled = true; // SPIGOT-5339, SPIGOT-6252, SPIGOT-6777: Keep track if the event was canceled
              }
              return event;
@@ -24265,7 +23063,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
              if (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH) || source.is(DamageTypes.STALAGMITE) || source.is(DamageTypes.FALLING_STALACTITE) || source.is(DamageTypes.FALLING_ANVIL)) {
                  cause = DamageCause.CONTACT;
              } else if (source.is(DamageTypes.HOT_FLOOR)) {
-@@ -1079,9 +1079,9 @@ public class CraftEventFactory {
+@@ -1081,9 +1081,9 @@ public class CraftEventFactory {
              EntityDamageEvent event = new EntityDamageByBlockEvent(damager, entity.getBukkitEntity(), cause, modifiers, modifierFunctions);
              event.setCancelled(cancelled);
  
@@ -24277,7 +23075,7 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
  
              if (!event.isCancelled()) {
                  event.getEntity().setLastDamageCause(event);
-@@ -1089,10 +1089,10 @@ public class CraftEventFactory {
+@@ -1091,10 +1091,10 @@ public class CraftEventFactory {
                  entity.lastDamageCancelled = true; // SPIGOT-5339, SPIGOT-6252, SPIGOT-6777: Keep track if the event was canceled
              }
              return event;
@@ -24291,6 +23089,15 @@ index 32fe1e498ee988566213bfcf56bf98c92a3c9871..48d45688cb03edce420c3f30fa041e3d
              if (source.is(DamageTypes.FALLING_STALACTITE) || source.is(DamageTypes.FALLING_BLOCK) || source.is(DamageTypes.FALLING_ANVIL)) {
                  cause = DamageCause.FALLING_BLOCK;
              } else if (damager instanceof LightningStrike) {
+@@ -2027,7 +2027,7 @@ public class CraftEventFactory {
+         CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemStack.copyWithCount(1));
+ 
+         org.bukkit.event.block.BlockDispenseEvent event = new org.bukkit.event.block.BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(to.getX(), to.getY(), to.getZ()));
+-        if (!net.minecraft.world.level.block.DispenserBlock.eventFired) {
++        if (!net.minecraft.world.level.block.DispenserBlock.eventFired.get()) { // Folia - region threading
+             if (!event.callEvent()) {
+                 return itemStack;
+             }
 diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
 index d7ce4971d9271dbeff4adb9d852e4e7bdf60bf03..eb84a8dd97f92de4a7dd3826d9e124a442cba565 100644
 --- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
@@ -24502,10 +23309,10 @@ index 612c3169c3463d702b85975e1db79ae6e47d60d0..6f77134ba451e7bd6bcba1000134ce8a
  
      public static int playerSample;
 diff --git a/src/main/java/org/spigotmc/SpigotWorldConfig.java b/src/main/java/org/spigotmc/SpigotWorldConfig.java
-index 5638290c72e0daeddfa79fd55e87334fa7d86f72..9461ebdd919da51d422338dbfbfcf9ea9dd7bfea 100644
+index 5b5109e942b18418b3a3a0e2109fe4ef15045fe5..80ed6d548aeeeadf341d0373945aac2360eb5805 100644
 --- a/src/main/java/org/spigotmc/SpigotWorldConfig.java
 +++ b/src/main/java/org/spigotmc/SpigotWorldConfig.java
-@@ -431,7 +431,7 @@ public class SpigotWorldConfig
+@@ -433,7 +433,7 @@ public class SpigotWorldConfig
          this.otherMultiplier = (float) this.getDouble( "hunger.other-multiplier", 0.0 );
      }
  
