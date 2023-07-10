@@ -20830,7 +20830,7 @@ index 8b2a02f85085c91c51b61760de967a859bf5e4de..eb8099e463eaae6268c4cb349ba88c11
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
-index d9baa85962236c42219cf09d4f3129be93ff069c..cc01030a2aa6aade37ed7d9e45004e33ae9a0f81 100644
+index d9baa85962236c42219cf09d4f3129be93ff069c..f23174be9d198c9aaf654ff39483ecec5104a9e1 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
 @@ -51,9 +51,12 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
@@ -20856,7 +20856,7 @@ index d9baa85962236c42219cf09d4f3129be93ff069c..cc01030a2aa6aade37ed7d9e45004e33
      }
  
      public boolean isSpawning() {
-@@ -176,8 +179,112 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+@@ -176,8 +179,136 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
          }
      }
  
@@ -20921,12 +20921,36 @@ index d9baa85962236c42219cf09d4f3129be93ff069c..cc01030a2aa6aade37ed7d9e45004e33
 +            return;
 +        }
 +
++        Entity chosenEntity;
++        if (entity instanceof ThrownEnderpearl pearl) {
++            Entity owner = pearl.getOwner();
++
++            if (owner instanceof ServerPlayer player) {
++                CriteriaTriggers.ENTER_BLOCK.trigger(player, state);
++            }
++
++            if (owner != null) {
++                // vanilla behavior is to just break if the owner is riding anything
++                // it's not likely intentional that throwing a pearl while riding something is intended
++                // to teleport the vehicle, rather just the owner given the lack of getRootVehicle
++                owner.unRide();
++                chosenEntity = owner;
++                pearl.discard();
++            } else {
++                // see above for unRide()
++                pearl.unRide();
++                chosenEntity = pearl;
++            }
++        } else {
++            chosenEntity = entity.getRootVehicle();
++        }
++
 +        // This needs to be first, as we are only guaranteed to be on the corresponding region tick thread here
 +        TheEndGatewayBlockEntity.triggerCooldown(world, pos, state, blockEntity);
 +
 +        if (isExactTeleport) {
 +            // blind teleport
-+            entity.teleportAsync(
++            chosenEntity.teleportAsync(
 +                serverWorld, Vec3.atCenterOf(teleportPos), null, null, null,
 +                PlayerTeleportEvent.TeleportCause.END_GATEWAY, Entity.TELEPORT_FLAG_LOAD_CHUNK | Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS,
 +                (Entity teleportedEntity) -> {
@@ -20940,7 +20964,7 @@ index d9baa85962236c42219cf09d4f3129be93ff069c..cc01030a2aa6aade37ed7d9e45004e33
 +            // should be teleported, something something else...
 +            // however, we know the target location cannot differ by one region section: so we can
 +            // just teleport and adjust the position after
-+            entity.teleportAsync(
++            chosenEntity.teleportAsync(
 +                serverWorld, Vec3.atCenterOf(teleportPos), null, null, null,
 +                PlayerTeleportEvent.TeleportCause.END_GATEWAY, Entity.TELEPORT_FLAG_LOAD_CHUNK | Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS,
 +                (Entity teleportedEntity) -> {
@@ -20962,14 +20986,14 @@ index d9baa85962236c42219cf09d4f3129be93ff069c..cc01030a2aa6aade37ed7d9e45004e33
          if (world instanceof ServerLevel && !blockEntity.isCoolingDown()) {
 +            // Folia start - region threading
 +            if (true) {
-+                teleportRegionThreading(world, pos, state, entity.getRootVehicle(), blockEntity);
++                teleportRegionThreading(world, pos, state, entity, blockEntity);
 +                return;
 +            }
 +            // Folia end - region threading
              ServerLevel worldserver = (ServerLevel) world;
  
              blockEntity.teleportCooldown = 100;
-@@ -281,6 +388,129 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+@@ -281,6 +412,129 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
          return TheEndGatewayBlockEntity.findTallestBlock(world, blockposition1, 16, true);
      }
  
