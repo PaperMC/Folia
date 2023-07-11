@@ -10,6 +10,115 @@ Many things to express. This change implements the EntityTeleportEvent in a cont
 - Modifying the teleport location of passenger entities is forbidden to prevent conflicts
 - Cancelling an entity riding will dismount it and NOT trigger any events for its passengers
 
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..1b6e426292c42d745f6ce67f0807fdc5ac2c1a1e 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+@@ -4,6 +4,7 @@ import co.aikar.timings.TimedEventExecutor;
+ import com.destroystokyo.paper.event.server.ServerExceptionEvent;
+ import com.destroystokyo.paper.exception.ServerEventException;
+ import com.google.common.collect.Sets;
++import io.papermc.paper.threadedregions.TickRegionScheduler;
+ import org.bukkit.Server;
+ import org.bukkit.Warning;
+ import org.bukkit.event.Event;
+@@ -19,11 +20,8 @@ import org.bukkit.plugin.RegisteredListener;
+ import org.jetbrains.annotations.NotNull;
+ 
+ import java.lang.reflect.Method;
+-import java.util.Arrays;
+-import java.util.HashMap;
+-import java.util.HashSet;
+-import java.util.Map;
+-import java.util.Set;
++import java.util.*;
++import java.util.concurrent.CompletableFuture;
+ import java.util.logging.Level;
+ 
+ class PaperEventManager {
+@@ -34,8 +32,12 @@ class PaperEventManager {
+         this.server = server;
+     }
+ 
+-    // SimplePluginManager
+     public void callEvent(@NotNull Event event) {
++        callEventAsync(event);
++    }
++
++    // SimplePluginManager
++    public CompletableFuture<Event> callEventAsync(@NotNull Event event) {
+         if (event.isAsynchronous() && this.server.isPrimaryThread()) {
+             throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
+         } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
+@@ -45,11 +47,25 @@ class PaperEventManager {
+         HandlerList handlers = event.getHandlers();
+         RegisteredListener[] listeners = handlers.getRegisteredListeners();
+ 
+-        for (RegisteredListener registration : listeners) {
+-            if (!registration.getPlugin().isEnabled()) {
+-                continue;
+-            }
++        final Stack<RegisteredListener> listenerStack = new Stack<>();
++        for (int i = listeners.length - 1; i >= 0; i--) {
++            listenerStack.push(listeners[i]);
++        }
+ 
++        return dequeueEvent(listenerStack, event);
++    }
++
++    private CompletableFuture<Event> dequeueEvent(final Stack<RegisteredListener> stack, final Event event) {
++        if (stack.isEmpty())
++            return CompletableFuture.completedFuture(event);
++
++        final RegisteredListener registration = stack.pop();
++
++        if (!registration.getPlugin().isEnabled()) {
++            return dequeueEvent(stack, event);
++        }
++
++        return TickRegionScheduler.createEventTask(event, () -> {
+             try {
+                 registration.callEvent(event);
+             } catch (AuthorNagException ex) {
+@@ -72,7 +88,7 @@ class PaperEventManager {
+                     this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
+                 }
+             }
+-        }
++        }).thenCompose(e -> dequeueEvent(stack, e));
+     }
+ 
+     public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
+index dab211c458311869c61779305580a1c7da830f71..9004e2e423084eeb04286944df06d729682a098b 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
+@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
+ import java.io.File;
+ import java.util.List;
+ import java.util.Set;
++import java.util.concurrent.CompletableFuture;
+ 
+ public class PaperPluginManagerImpl implements PluginManager, DependencyContext {
+ 
+@@ -121,11 +122,17 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext
+ 
+     // Event manipulation
+ 
++    @Deprecated
+     @Override
+     public void callEvent(@NotNull Event event) throws IllegalStateException {
+         this.paperEventManager.callEvent(event);
+     }
+ 
++    @Override
++    public CompletableFuture<Event> callEventAsync(@NotNull Event event) throws IllegalStateException {
++        return this.paperEventManager.callEventAsync(event);
++    }
++
+     @Override
+     public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
+         this.paperEventManager.registerEvents(listener, plugin);
 diff --git a/src/main/java/io/papermc/paper/threadedregions/EventTaskHandler.java b/src/main/java/io/papermc/paper/threadedregions/EventTaskHandler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..a4259021b39b52f15d6bfc200e3c568e513960f8
@@ -115,7 +224,7 @@ index 0000000000000000000000000000000000000000..a4259021b39b52f15d6bfc200e3c568e
 +
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..a311a1c0339b2e4789ae79de396dd2724ba26d79 100644
+index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..13631ecc7d3ce160f2a04c1c7372782e75f26fdc 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -7,14 +7,17 @@ import io.papermc.paper.util.TickThread;
@@ -136,7 +245,7 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..a311a1c0339b2e4789ae79de396dd272
  
  public final class TickRegionScheduler {
  
-@@ -85,6 +88,66 @@ public final class TickRegionScheduler {
+@@ -85,6 +88,62 @@ public final class TickRegionScheduler {
          tickThreadRunner.currentTickingTask = task;
      }
  
@@ -151,23 +260,28 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..a311a1c0339b2e4789ae79de396dd272
 +     * <p>
 +     * This effectively allows for us to asynchronously wait for all the chunk tasks
 +     * in different threads without endangering basic mechanics.
++     *
++     * @param event The event being called
++     * @param runnable The runnable to be executed before the next listener may proceed
++     * @return The completable future to be completed
 +     */
-+    public static CompletableFuture<Event> createEventTaskHandler(final Event event) {
++    public static CompletableFuture<Event> createEventTask(final Event event, final Runnable runnable) {
 +        final Thread currThread = Thread.currentThread();
 +        if (!(currThread instanceof TickThreadRunner tickThreadRunner)) {
 +            throw new IllegalStateException("Must be tick thread runner");
 +        }
 +
 +        final CompletableFuture<Event> nextTask = new CompletableFuture<>();
-+
 +        tickThreadRunner.eventHandler.peekAndAdd(
-+            new EventTaskHandler.EventObserverList(() -> {
-+                nextTask.complete(event);
-+            })
++            new EventTaskHandler.EventObserverList(() -> nextTask.complete(event))
 +        );
++        // Run and fetch all the async data
++        runnable.run();
 +
-+        event.callEvent();
-+        closeEventTasks();
++        // Close the runner and let it complete, then be garbage disposed
++        tickThreadRunner.eventHandler.pop().close();
++
++        // Return the completable future
 +        return nextTask;
 +    }
 +
@@ -191,19 +305,10 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..a311a1c0339b2e4789ae79de396dd272
 +        });
 +    };
 +
-+    public static void closeEventTasks() {
-+        final Thread currThread = Thread.currentThread();
-+        if (!(currThread instanceof TickThreadRunner tickThreadRunner)) {
-+            throw new IllegalStateException("Must be tick thread runner");
-+        }
-+
-+        tickThreadRunner.eventHandler.pop().close();
-+    }
-+
      /**
       * Returns the current ticking region, or {@code null} if there is no ticking region.
       * If this thread is not a TickThread, then returns {@code null}.
-@@ -199,9 +262,12 @@ public final class TickRegionScheduler {
+@@ -199,9 +258,12 @@ public final class TickRegionScheduler {
          private ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currentTickingRegion;
          private RegionizedWorldData currentTickingWorldRegionizedData;
          private SchedulerThreadPool.SchedulableTick currentTickingTask;
@@ -318,7 +423,7 @@ index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..1849bdbd5001f5e9ea1fa888ca717f22
                  this.server.getPlayerList().loadSpawnForNewPlayer(this.connection, s, data, lastKnownName, toComplete);
                  // Folia end - region threading - rewrite login process
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb4e95916d 100644
+index ee15661227754149164893d6acf678d13b2e1b27..4ad042379286c36de11b7fe5e40f90f8104b1fa1 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -443,7 +548,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
          if ((teleportFlags & TELEPORT_FLAG_UNMOUNT) == 0L) {
              for (Entity entity : this.getIndirectPassengers()) {
                  if (!entity.canTeleportAsync()) {
-@@ -3858,60 +3870,258 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3858,60 +3870,256 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
  
@@ -492,12 +597,12 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
 +
 +        // Special event exclusively for players.
 +        final Consumer<Entity> finalTeleportComplete = teleportComplete;
-+        TickRegionScheduler.createEventTaskHandler(this.createBukkitTeleport(
++        this.createBukkitTeleport(
 +            ogFrom,
 +            ogTo,
 +            cause,
 +            teleportComplete
-+        )).thenAccept(teleportEvent -> {
++        ).callEventAsync().thenAccept(teleportEvent -> {
 +            final Location to;
 +            if (this instanceof Player) {
 +                to = ((PlayerTeleportEvent) teleportEvent).getTo();
@@ -508,6 +613,14 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
 +            if (to == null) {
 +                return; // TODO: Make teleportAsync return an async result
 +            }
++
++            // Prevent recursive action. Teleports should
++            if (this.isTeleporting()) {
++                throw new IllegalStateException(
++                    "Entity is already teleporting. Please do not teleport an entity inside a EntityTeleportEvent listener."
++                );
++            }
++            this.setTeleporting(true);
 +
 +            // Update the events accordingly.
 +            Vec3 pos = new Vec3(
@@ -665,13 +778,12 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
 +        // Must perform clone as location is mutable. Make sure to prevent the location from modified
 +        final Location previous = to.clone();
 +
-+        return TickRegionScheduler.createEventTaskHandler(
-+            entity.createBukkitTeleport(
-+                bukkitPassengerEntity.getLocation(),
-+                to,
-+                cause,
-+                teleportComplete
-+        )).thenAccept(teleportEvent -> {
++        return entity.createBukkitTeleport(
++            bukkitPassengerEntity.getLocation(),
++            to,
++            cause,
++            teleportComplete
++        ).callEventAsync().thenAccept(teleportEvent -> {
 +            Location entityTo;
 +            if (((Cancellable) teleportEvent).isCancelled()) {
 +                entity.stopRiding(true); // Suppress cancel, we must force this action
@@ -687,18 +799,21 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
  
 -        for (EntityTreeNode node : fullPassengerTree) {
 -            node.root = node.root.transformForAsyncTeleport(destination, pos, yaw, pitch, speedDirectionUpdate);
+-        }
 +            // Failsafe
 +            if (entityTo == null) {
 +                throw new IllegalStateException(
 +                    "EntityTeleportEvent#getTo() returned null - This is illegal behaviour. Please instead cancel the event."
 +                );
 +            }
-+
+ 
+-        passengerTree.root.placeInAsync(originWorld, destination, teleportFlags, passengerTree, teleportComplete);
 +            // Prevent riding entities from changing the destination location
 +            if (!previous.equals(to)) {
 +                throw new UnsupportedOperationException("Teleporting entities whilst they are riding another entity is not supported");
 +            }
-+
+ 
+-        return true;
 +            // Add all passengers
 +            if (entityNode.passengers != null) {
 +                entityStack.addAll(Arrays.asList(entityNode.passengers));
@@ -710,18 +825,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
 +                                                   Consumer<Entity> teleportComplete) {
 +        org.bukkit.entity.Entity bukkitEntity = this.getBukkitEntity(); // force bukkit entity to be created before TPing
 +
-+        // Prevent recursive action. Teleports should
-+        if (this.isTeleporting()) {
-+            throw new IllegalStateException(
-+                "Entity is already teleporting. Please do not teleport an entity inside a EntityTeleportEvent listener."
-+            );
-         }
- 
--        passengerTree.root.placeInAsync(originWorld, destination, teleportFlags, passengerTree, teleportComplete);
 +        // --- Event handling
-+        this.setTeleporting(true);
- 
--        return true;
 +        if (this instanceof Player) {
 +            return new PlayerTeleportEvent(
 +                (org.bukkit.entity.Player) bukkitEntity,
@@ -740,7 +844,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
      }
  
      public void preChangeDimension() {
-@@ -3951,6 +4161,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3951,6 +4159,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              return false;
          }
  
@@ -750,7 +854,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
          return this.endPortalLogicAsync();
      }
  
-@@ -3962,6 +4175,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3962,6 +4173,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          if (this.isInsidePortal) {
              // if we are in a nether portal still, this flag will be set next tick.
              this.isInsidePortal = false;
@@ -758,7 +862,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
              if (this.portalTime++ >= portalWaitTime) {
                  this.portalTime = portalWaitTime;
                  if (this.netherPortalLogicAsync()) {
-@@ -3991,9 +4205,16 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3991,9 +4203,16 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public boolean netherPortalLogicAsync() {
          io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
@@ -777,7 +881,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..21d032332b625399c4595e50628f80eb
              // wat
              return false;
          }
-@@ -4265,9 +4486,39 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4265,9 +4484,39 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                  io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
                  teleportHoldId
              );

@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shanyu Juneja <shanyujuneja@gmail.com>
+Date: Tue, 11 Jul 2023 05:59:35 +0200
+Subject: [PATCH] Deprecate callEvent and implement asynchronous events
+
+
+diff --git a/src/main/java/org/bukkit/event/Event.java b/src/main/java/org/bukkit/event/Event.java
+index 8ec56cd6b8e0f5c5dd8c7c88b4671e18dcf109d0..72869a7e6290a1f7072189f62a2864e5c3f60d97 100644
+--- a/src/main/java/org/bukkit/event/Event.java
++++ b/src/main/java/org/bukkit/event/Event.java
+@@ -4,6 +4,8 @@ import org.bukkit.plugin.Plugin;
+ import org.bukkit.plugin.PluginManager;
+ import org.jetbrains.annotations.NotNull;
+ 
++import java.util.concurrent.CompletableFuture;
++
+ /**
+  * Represents an event.
+  *
+@@ -41,6 +43,7 @@ public abstract class Event {
+      *
+      * @return false if event was cancelled, if cancellable. otherwise true.
+      */
++    @Deprecated // Folia - event handler
+     public boolean callEvent() {
+         org.bukkit.Bukkit.getPluginManager().callEvent(this);
+         if (this instanceof Cancellable) {
+@@ -51,6 +54,21 @@ public abstract class Event {
+     }
+     // Paper end
+ 
++    // Folia start
++    /**
++     * Calls the event and tests if cancelled.
++     *
++     * @return false if event was cancelled, if cancellable. otherwise true.
++     */
++    public CompletableFuture<Event> callEventAsync() {
++        return org.bukkit.Bukkit.getPluginManager().callEventAsync(this);
++    }
++
++    public boolean isCancelled() {
++        return false;
++    }
++    // Folia end
++
+     /**
+      * Convenience method for providing a user-friendly identifier. By
+      * default, it is the event's class's {@linkplain Class#getSimpleName()
+diff --git a/src/main/java/org/bukkit/plugin/PluginManager.java b/src/main/java/org/bukkit/plugin/PluginManager.java
+index 03213fde8315384ec56c16031cfc606ade2e8091..eaba9f63aa507563b023322a9483c7ba00d5563f 100644
+--- a/src/main/java/org/bukkit/plugin/PluginManager.java
++++ b/src/main/java/org/bukkit/plugin/PluginManager.java
+@@ -2,6 +2,8 @@ package org.bukkit.plugin;
+ 
+ import java.io.File;
+ import java.util.Set;
++import java.util.concurrent.CompletableFuture;
++
+ import org.bukkit.event.Event;
+ import org.bukkit.event.EventPriority;
+ import org.bukkit.event.Listener;
+@@ -109,9 +111,28 @@ public interface PluginManager extends io.papermc.paper.plugin.PermissionManager
+      *     <p>
+      *     <i>Note: This is best-effort basis, and should not be used to test
+      *     synchronized state. This is an indicator for flawed flow logic.</i>
++     *
++     * @deprecated This method should not be used when possible
+      */
++    @Deprecated
+     public void callEvent(@NotNull Event event) throws IllegalStateException;
+ 
++
++    /**
++     * Calls an event with the given details, iterating in a thread safe
++     * manner for every registered listener, ensuring no issue with concurrency
++     *
++     * @param event Event details
++     * @throws IllegalStateException Thrown when an asynchronous event is
++     *     fired from synchronous code.
++     *     <p>
++     *     <i>Note: This is best-effort basis, and should not be used to test
++     *     synchronized state. This is an indicator for flawed flow logic.</i>
++     *
++     * @return Future to be completed with the event result
++     */
++    public CompletableFuture<Event> callEventAsync(@NotNull Event event) throws IllegalStateException;
++
+     /**
+      * Registers all the events in the given listener class
+      *
+diff --git a/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
+index 06149045a44148bf0af5f52952ff0092fe2c70cb..f919965fa12e13b83c3ede51db3757381c4ee700 100644
+--- a/src/main/java/org/bukkit/plugin/SimplePluginManager.java
++++ b/src/main/java/org/bukkit/plugin/SimplePluginManager.java
+@@ -21,6 +21,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.WeakHashMap;
++import java.util.concurrent.CompletableFuture;
+ import java.util.logging.Level;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+@@ -629,6 +630,13 @@ public final class SimplePluginManager implements PluginManager {
+         fireEvent(event);
+     }
+ 
++    // Folia start - event handling
++    @Override
++    public CompletableFuture<Event> callEventAsync(@NotNull Event event) throws IllegalStateException {
++        return this.paperPluginManager.callEventAsync(event);
++    }
++    // Folia end
++
+     private void fireEvent(@NotNull Event event) {
+         HandlerList handlers = event.getHandlers();
+         RegisteredListener[] listeners = handlers.getRegisteredListeners();
