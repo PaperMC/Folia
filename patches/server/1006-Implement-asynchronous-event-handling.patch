@@ -11,19 +11,37 @@ Many things to express. This change implements the EntityTeleportEvent in a cont
 - Cancelling an entity riding will dismount it and NOT trigger any events for its passengers
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..1b6e426292c42d745f6ce67f0807fdc5ac2c1a1e 100644
+index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..e00b5ce824bee99ab62eb2fda97176701867a6e4 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-@@ -4,6 +4,7 @@ import co.aikar.timings.TimedEventExecutor;
+@@ -4,26 +4,35 @@ import co.aikar.timings.TimedEventExecutor;
  import com.destroystokyo.paper.event.server.ServerExceptionEvent;
  import com.destroystokyo.paper.exception.ServerEventException;
  import com.google.common.collect.Sets;
++import io.papermc.paper.threadedregions.RegionizedServer;
++import io.papermc.paper.threadedregions.ThreadedRegionizer;
 +import io.papermc.paper.threadedregions.TickRegionScheduler;
++import io.papermc.paper.threadedregions.TickRegions;
++import io.papermc.paper.util.CoordinateUtils;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import org.bukkit.Location;
  import org.bukkit.Server;
  import org.bukkit.Warning;
++import org.bukkit.craftbukkit.CraftWorld;
  import org.bukkit.event.Event;
-@@ -19,11 +20,8 @@ import org.bukkit.plugin.RegisteredListener;
+ import org.bukkit.event.EventHandler;
+ import org.bukkit.event.EventPriority;
+ import org.bukkit.event.HandlerList;
+ import org.bukkit.event.Listener;
++import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.plugin.AuthorNagException;
+ import org.bukkit.plugin.EventExecutor;
+ import org.bukkit.plugin.IllegalPluginAccessException;
+ import org.bukkit.plugin.Plugin;
+ import org.bukkit.plugin.RegisteredListener;
  import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
  
  import java.lang.reflect.Method;
 -import java.util.Arrays;
@@ -33,24 +51,25 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..1b6e426292c42d745f6ce67f0807fdc5
 -import java.util.Set;
 +import java.util.*;
 +import java.util.concurrent.CompletableFuture;
++import java.util.function.Function;
  import java.util.logging.Level;
  
  class PaperEventManager {
-@@ -34,8 +32,12 @@ class PaperEventManager {
+@@ -34,8 +43,12 @@ class PaperEventManager {
          this.server = server;
      }
  
 -    // SimplePluginManager
      public void callEvent(@NotNull Event event) {
-+        callEventAsync(event);
++        callEventAsync(event, null);
 +    }
 +
 +    // SimplePluginManager
-+    public CompletableFuture<Event> callEventAsync(@NotNull Event event) {
++    public CompletableFuture<Event> callEventAsync(@NotNull Event event, @Nullable Location origin) {
          if (event.isAsynchronous() && this.server.isPrimaryThread()) {
              throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
          } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
-@@ -45,11 +47,25 @@ class PaperEventManager {
+@@ -45,11 +58,50 @@ class PaperEventManager {
          HandlerList handlers = event.getHandlers();
          RegisteredListener[] listeners = handlers.getRegisteredListeners();
  
@@ -62,8 +81,33 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..1b6e426292c42d745f6ce67f0807fdc5
 +        for (int i = listeners.length - 1; i >= 0; i--) {
 +            listenerStack.push(listeners[i]);
 +        }
++
++        ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currentRegion = null;
++        if (origin == null && (currentRegion = TickRegionScheduler.getCurrentRegion()) == null) {
++            return dequeueEvent(listenerStack, event);
++        }
  
-+        return dequeueEvent(listenerStack, event);
++        final ChunkPos chunkPos = origin == null
++            ? CoordinateUtils.getChunkPos(currentRegion.getOwnedSectionsUnsynchronised().nextLong())
++            : new ChunkPos(origin.getBlockX() >> 4, origin.getBlockZ() >> 4);
++
++        final ServerLevel level = origin == null
++            ? TickRegionScheduler.getCurrentRegionizedWorldData().world
++            : ((CraftWorld) origin.getWorld()).getHandle();
++
++        return dequeueEvent(listenerStack, event).thenCompose(e -> {
++            final CompletableFuture<Event> future = new CompletableFuture<>();
++            RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
++                level,
++                chunkPos.x,
++                chunkPos.z,
++                () -> future.complete(e)
++            );
++
++            return future.thenApply(event1 -> {
++                return event1;
++            });
++        });
 +    }
 +
 +    private CompletableFuture<Event> dequeueEvent(final Stack<RegisteredListener> stack, final Event event) {
@@ -80,7 +124,7 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..1b6e426292c42d745f6ce67f0807fdc5
              try {
                  registration.callEvent(event);
              } catch (AuthorNagException ex) {
-@@ -72,7 +88,7 @@ class PaperEventManager {
+@@ -72,7 +124,7 @@ class PaperEventManager {
                      this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
                  }
              }
@@ -90,10 +134,18 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..1b6e426292c42d745f6ce67f0807fdc5
  
      public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
-index dab211c458311869c61779305580a1c7da830f71..9004e2e423084eeb04286944df06d729682a098b 100644
+index dab211c458311869c61779305580a1c7da830f71..cdf4c4d0f0816831af48c632752af7336b2d1e5c 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
-@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
+@@ -5,6 +5,7 @@ import io.papermc.paper.plugin.PermissionManager;
+ import io.papermc.paper.plugin.configuration.PluginMeta;
+ import io.papermc.paper.plugin.provider.entrypoint.DependencyContext;
+ import org.bukkit.Bukkit;
++import org.bukkit.Location;
+ import org.bukkit.Server;
+ import org.bukkit.command.CommandMap;
+ import org.bukkit.craftbukkit.CraftServer;
+@@ -27,6 +28,7 @@ import org.jetbrains.annotations.Nullable;
  import java.io.File;
  import java.util.List;
  import java.util.Set;
@@ -101,7 +153,7 @@ index dab211c458311869c61779305580a1c7da830f71..9004e2e423084eeb04286944df06d729
  
  public class PaperPluginManagerImpl implements PluginManager, DependencyContext {
  
-@@ -121,11 +122,17 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext
+@@ -121,11 +123,17 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext
  
      // Event manipulation
  
@@ -112,8 +164,8 @@ index dab211c458311869c61779305580a1c7da830f71..9004e2e423084eeb04286944df06d729
      }
  
 +    @Override
-+    public CompletableFuture<Event> callEventAsync(@NotNull Event event) throws IllegalStateException {
-+        return this.paperEventManager.callEventAsync(event);
++    public CompletableFuture<Event> callEventAsync(@NotNull Event event, @Nullable Location origin) throws IllegalStateException {
++        return this.paperEventManager.callEventAsync(event, origin);
 +    }
 +
      @Override
@@ -223,8 +275,23 @@ index 0000000000000000000000000000000000000000..a4259021b39b52f15d6bfc200e3c568e
 +    }
 +
 +}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+index 72a2b81a0a4dc6aab02d0dbad713ea882887d85f..a556035631f1bc573985168892cb33fd4ad09118 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
++++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+@@ -73,6 +73,10 @@ public final class ThreadedRegionizer<R extends ThreadedRegionizer.ThreadedRegio
+         //this.loadTestData();
+     }
+ 
++    public ServerLevel getWorld() {
++        return world;
++    }
++
+     /*
+     private static String substr(String val, String prefix, int from) {
+         int idx = val.indexOf(prefix, from) + prefix.length();
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..13631ecc7d3ce160f2a04c1c7372782e75f26fdc 100644
+index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..cdfac076e966f5a871fc71fbea7de9ef9a00b127 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -7,14 +7,17 @@ import io.papermc.paper.util.TickThread;
@@ -303,7 +370,7 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..13631ecc7d3ce160f2a04c1c7372782e
 +            }
 +            observer.remove(task);
 +        });
-+    };
++    }
 +
      /**
       * Returns the current ticking region, or {@code null} if there is no ticking region.
@@ -321,6 +388,54 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..13631ecc7d3ce160f2a04c1c7372782e
          }
      }
  
+diff --git a/src/main/java/io/papermc/paper/util/CoordinateUtils.java b/src/main/java/io/papermc/paper/util/CoordinateUtils.java
+index 3a7dbcb9964723b8ed5e6b0a1ee4267923c746e4..4d87abee1f3680fe6c6baa40b1089b681f261aa1 100644
+--- a/src/main/java/io/papermc/paper/util/CoordinateUtils.java
++++ b/src/main/java/io/papermc/paper/util/CoordinateUtils.java
+@@ -45,6 +45,13 @@ public final class CoordinateUtils {
+         return (int)(chunkKey >>> 32);
+     }
+ 
++    public static ChunkPos getChunkPos(final long chunkKey) {
++        return new ChunkPos(
++            getChunkX(chunkKey),
++            getChunkZ(chunkKey)
++        );
++    }
++
+     public static int getChunkCoordinate(final double blockCoordinate) {
+         return Mth.floor(blockCoordinate) >> 4;
+     }
+diff --git a/src/main/java/net/minecraft/server/commands/TeleportCommand.java b/src/main/java/net/minecraft/server/commands/TeleportCommand.java
+index 15c4fa89e1f1dbc80055f6f92904d1cc05a24dba..bb4bdd1feaf0ca8351e51312c8ddeb521e3bed0a 100644
+--- a/src/main/java/net/minecraft/server/commands/TeleportCommand.java
++++ b/src/main/java/net/minecraft/server/commands/TeleportCommand.java
+@@ -35,6 +35,7 @@ import net.minecraft.world.phys.Vec3;
+ // CraftBukkit start
+ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.util.CraftVector;
+ import org.bukkit.event.entity.EntityTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ // CraftBukkit end
+@@ -167,13 +168,12 @@ public class TeleportCommand {
+                 Vec3 posFinal = new Vec3(x, y, z);
+                 Float yawFinal = Float.valueOf(f2);
+                 Float pitchFinal = Float.valueOf(f3);
++
+                 target.getBukkitEntity().taskScheduler.schedule((nmsEntity) -> {
+                     nmsEntity.unRide();
+-                    nmsEntity.teleportAsync(
+-                        worldFinal, posFinal, yawFinal, pitchFinal, Vec3.ZERO,
+-                        org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.COMMAND,
+-                        Entity.TELEPORT_FLAG_LOAD_CHUNK,
+-                        null
++                    target.getBukkitEntity().teleportAsync(
++                        new Location(worldFinal.getWorld(), posFinal.x, posFinal.y, posFinal.z, yawFinal, pitchFinal),
++                        org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.COMMAND
+                     );
+                 }, null, 1L);
+                 return;
 diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..1849bdbd5001f5e9ea1fa888ca717f22087ba427 100644
 --- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
@@ -423,7 +538,7 @@ index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..1849bdbd5001f5e9ea1fa888ca717f22
                  this.server.getPlayerList().loadSpawnForNewPlayer(this.connection, s, data, lastKnownName, toComplete);
                  // Folia end - region threading - rewrite login process
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..4ad042379286c36de11b7fe5e40f90f8104b1fa1 100644
+index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d7853ff81bf 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -572,7 +687,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..4ad042379286c36de11b7fe5e40f90f8
 +        //
 +        //          ResultType (SUCCESS, CANCELLED, CANCELLED_VEHICLE, ERROR)
 +        //
-+        final java.util.function.Consumer<Entity> previousConsumer = teleportComplete;
++        final java.util.function.Consumer<Entity> previousConsumer = teleportComplete == null ? entity -> {} : teleportComplete;
 +        teleportComplete = entity -> {
 +            if (entity != null) {
 +                final EntityTreeNode tree = entity.detachPassengers();
@@ -923,7 +1038,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..4ad042379286c36de11b7fe5e40f90f8
  
              // place
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 723ae4b75c84fe952377c02d42cf7a710f7047ea..e8a5e005abf7a8240207f788621648518f3ddf84 100644
+index 723ae4b75c84fe952377c02d42cf7a710f7047ea..53036885edbd37f6eeac633b3f9f11728e54066a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -5,7 +5,7 @@ import com.google.common.base.Predicates;
@@ -967,6 +1082,15 @@ index 723ae4b75c84fe952377c02d42cf7a710f7047ea..e8a5e005abf7a8240207f78862164851
  import org.bukkit.event.world.TimeSkipEvent;
  import org.bukkit.generator.BiomeProvider;
  import org.bukkit.generator.BlockPopulator;
+@@ -2443,7 +2439,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         if (io.papermc.paper.util.TickThread.isTickThreadFor(this.getHandle(), x, z)) { // Folia - region threading
+             net.minecraft.world.level.chunk.LevelChunk immediate = this.world.getChunkSource().getChunkAtIfLoadedImmediately(x, z);
+             if (immediate != null) {
+-                return java.util.concurrent.CompletableFuture.completedFuture(new CraftChunk(immediate));
++                return TickRegionScheduler.addEventListen(java.util.concurrent.CompletableFuture.completedFuture(new CraftChunk(immediate)));
+             }
+         }
+ 
 @@ -2464,7 +2460,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
              });
          });
@@ -976,3 +1100,25 @@ index 723ae4b75c84fe952377c02d42cf7a710f7047ea..e8a5e005abf7a8240207f78862164851
      }
  
      // Paper start - implement pointers
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+index 19b47478d318edce1242c2a5ddd73da963a24595..381aca35372b7e38af58220172036c9d5a64e348 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+@@ -7,6 +7,8 @@ import com.google.common.collect.Lists;
+ import java.util.List;
+ import java.util.Set;
+ import java.util.UUID;
++
++import io.papermc.paper.threadedregions.TickRegionScheduler;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.Tag;
+ import net.minecraft.network.chat.Component;
+@@ -1357,7 +1359,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+             ret.complete(Boolean.FALSE);
+         }
+ 
+-        return ret;
++        return TickRegionScheduler.addEventListen(ret);
+         // Folia end - region threading
+     }
+ 
