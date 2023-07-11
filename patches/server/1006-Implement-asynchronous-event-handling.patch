@@ -436,11 +436,53 @@ index 15c4fa89e1f1dbc80055f6f92904d1cc05a24dba..bb4bdd1feaf0ca8351e51312c8ddeb52
                      );
                  }, null, 1L);
                  return;
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 817f79bfca1aec161cb4635b9c7a8e21b14db7eb..2ecb65eef92fc74528d8bcd8785e6497628c1bb4 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -17,6 +17,7 @@ import java.util.Objects;
+ import java.util.Optional;
+ import java.util.OptionalInt;
+ import java.util.Set;
++import java.util.concurrent.CompletableFuture;
+ import javax.annotation.Nullable;
+ import net.minecraft.BlockUtil;
+ import net.minecraft.ChatFormatting;
+@@ -1676,6 +1677,22 @@ public class ServerPlayer extends Player {
+     }
+     // CraftBukkit end
+ 
++    // Folia start
++    @Override
++    protected CompletableFuture<CraftPortalEvent> callPortalEventAsync(Entity entity, ServerLevel exitWorldServer, PositionImpl exitPosition, TeleportCause cause, int searchRadius, int creationRadius) {
++        Location enter = this.getBukkitEntity().getLocation();
++        Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld(), getYRot(), getXRot());
++        PlayerPortalEvent event = new PlayerPortalEvent(this.getBukkitEntity(), enter, exit, cause, searchRadius, true, creationRadius);
++        return event.callEventAsync(enter)
++            .thenApply((ignored) -> {
++                if (event.isCancelled() || event.getTo() == null || event.getTo().getWorld() == null) {
++                    return null;
++                }
++                return new CraftPortalEvent(event);
++            });
++    }
++    // Folia end
++
+     private void createEndPlatform(ServerLevel world, BlockPos centerPos) {
+         BlockPos.MutableBlockPos blockposition_mutableblockposition = centerPos.mutable();
+         org.bukkit.craftbukkit.util.BlockStateListPopulator blockList = new org.bukkit.craftbukkit.util.BlockStateListPopulator(world); // CraftBukkit
 diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..1849bdbd5001f5e9ea1fa888ca717f22087ba427 100644
+index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..d318230f7f322ca3fd681e44307b9a27a2424192 100644
 --- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-@@ -36,6 +36,7 @@ import net.minecraft.util.Crypt;
+@@ -1,5 +1,6 @@
+ package net.minecraft.server.network;
+ 
++import com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent;
+ import com.google.common.primitives.Ints;
+ import com.mojang.authlib.GameProfile;
+ import com.mojang.authlib.exceptions.AuthenticationUnavailableException;
+@@ -36,6 +37,7 @@ import net.minecraft.util.Crypt;
  import net.minecraft.util.CryptException;
  import net.minecraft.util.RandomSource;
  import org.apache.commons.lang3.Validate;
@@ -448,7 +490,7 @@ index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..1849bdbd5001f5e9ea1fa888ca717f22
  import org.slf4j.Logger;
  
  // CraftBukkit start
-@@ -176,41 +177,53 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+@@ -176,41 +178,56 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
                  // the loadSpawnForNewPlayer function always completes the completable once the chunks were loaded,
                  // on the load callback for those chunks (so on the same region)
                  // this guarantees the chunk cannot unload under our feet
@@ -483,62 +525,64 @@ index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..1849bdbd5001f5e9ea1fa888ca717f22
 -                                data.getValue(),
 -                                lastKnownName.getValue(),
 -                                loc
--                            );
--                        },
--                        ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGHER
--                    );
 +                toComplete.addWaiter((org.bukkit.Location initialLocation, Throwable t) -> {
 +
 +                    // Pretty easy patch to support the PlayerSpawnLocationEvent
 +                    // The logic behind this is to handle the location before the chunk
 +                    // or the waiter handles any of the chunk loacation logic.
 +                    // This admittedly is a bit hacky, but it works.
-+                        org.spigotmc.event.player.PlayerSpawnLocationEvent ev = new com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent(
++                        final PlayerInitialSpawnEvent ev = new com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent(
 +                            s.getBukkitEntity(),
 +                            initialLocation
-+                        ); // Paper use our duplicate event
-+                        ev.callEvent();
-+                        final Location loc = ev.getSpawnLocation();
-+
-+                        int chunkX = net.minecraft.util.Mth.floor(loc.getX()) >> 4;
-+                        int chunkZ = net.minecraft.util.Mth.floor(loc.getZ()) >> 4;
-+
-+                        net.minecraft.server.level.ServerLevel world = ((org.bukkit.craftbukkit.CraftWorld)loc.getWorld()).getHandle();
-+                        // we just need to hold the chunks at loaded until the next tick
-+                        // so we do not need to care about unique IDs for the ticket
-+                        world.getChunkSource().addTicketAtLevel(
-+                            net.minecraft.server.level.TicketType.LOGIN,
-+                            new net.minecraft.world.level.ChunkPos(chunkX, chunkZ),
-+                            io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.FULL_LOADED_TICKET_LEVEL,
-+                            net.minecraft.util.Unit.INSTANCE
 +                        );
 +
-+                        io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
-+                            world, chunkX, chunkZ,
-+                            () -> {
-+                                // now at this point the connection is held by the region, so we have to check isConnected()
-+                                // this would have been handled in connection ticking, but we are in a state between
-+                                // being owned by the global tick thread and the region so we have to do it
-+                                if (t != null || !ServerLoginPacketListenerImpl.this.connection.isConnected()) {
-+                                    ServerLoginPacketListenerImpl.this.connection.handleDisconnection();
-+                                    return;
-+                                }
-+                                ServerLoginPacketListenerImpl.this.state = State.ACCEPTED;
-+                                ServerLoginPacketListenerImpl.this.server.getPlayerList().placeNewPlayer(
-+                                    ServerLoginPacketListenerImpl.this.connection,
-+                                    s,
-+                                    data.getValue(),
-+                                    lastKnownName.getValue(),
-+                                    loc
-+                                );
-+                            },
-+                            ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGHER
-+                        );
++                        ev.callEventAsync(initialLocation).thenAccept(event -> {
++                            final Location loc = ev.getSpawnLocation();
++
++                            int chunkX = net.minecraft.util.Mth.floor(loc.getX()) >> 4;
++                            int chunkZ = net.minecraft.util.Mth.floor(loc.getZ()) >> 4;
++
++                            net.minecraft.server.level.ServerLevel world = ((org.bukkit.craftbukkit.CraftWorld)loc.getWorld()).getHandle();
++                            // we just need to hold the chunks at loaded until the next tick
++                            // so we do not need to care about unique IDs for the ticket
++                            world.getChunkSource().addTicketAtLevel(
++                                net.minecraft.server.level.TicketType.LOGIN,
++                                new net.minecraft.world.level.ChunkPos(chunkX, chunkZ),
++                                io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.FULL_LOADED_TICKET_LEVEL,
++                                net.minecraft.util.Unit.INSTANCE
+                             );
+-                        },
+-                        ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGHER
+-                    );
++
++                            io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
++                                world, chunkX, chunkZ,
++                                () -> {
++                                    // now at this point the connection is held by the region, so we have to check isConnected()
++                                    // this would have been handled in connection ticking, but we are in a state between
++                                    // being owned by the global tick thread and the region so we have to do it
++                                    if (t != null || !ServerLoginPacketListenerImpl.this.connection.isConnected()) {
++                                        ServerLoginPacketListenerImpl.this.connection.handleDisconnection();
++                                        return;
++                                    }
++                                    ServerLoginPacketListenerImpl.this.state = State.ACCEPTED;
++                                    ServerLoginPacketListenerImpl.this.server.getPlayerList().placeNewPlayer(
++                                        ServerLoginPacketListenerImpl.this.connection,
++                                        s,
++                                        data.getValue(),
++                                        lastKnownName.getValue(),
++                                        loc
++                                    );
++                                },
++                                ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGHER
++                            );
++                        });
++
                  });
                  this.server.getPlayerList().loadSpawnForNewPlayer(this.connection, s, data, lastKnownName, toComplete);
                  // Folia end - region threading - rewrite login process
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d7853ff81bf 100644
+index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e57ea501e 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -548,10 +592,11 @@ index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d78
  import com.google.common.collect.ImmutableList;
  import com.google.common.collect.ImmutableList.Builder;
  import com.google.common.collect.Iterables;
-@@ -7,20 +8,15 @@ import com.google.common.collect.Lists;
+@@ -7,20 +8,17 @@ import com.google.common.collect.Lists;
  import com.google.common.collect.Sets;
  import com.google.common.collect.UnmodifiableIterator;
  import com.mojang.logging.LogUtils;
++import io.papermc.paper.event.entity.EntityPortalReadyEvent;
 +import io.papermc.paper.threadedregions.TickRegionScheduler;
  import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
  import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
@@ -569,23 +614,28 @@ index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d78
 +import java.util.*;
 +import java.util.concurrent.CompletableFuture;
  import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicReference;
  import java.util.function.BiConsumer;
 +import java.util.function.Consumer;
  import java.util.function.Predicate;
  import java.util.stream.Stream;
  import javax.annotation.Nullable;
-@@ -125,6 +121,10 @@ import net.minecraft.world.phys.shapes.Shapes;
+@@ -125,17 +123,18 @@ import net.minecraft.world.phys.shapes.Shapes;
  import net.minecraft.world.phys.shapes.VoxelShape;
  import net.minecraft.world.scores.PlayerTeam;
  import net.minecraft.world.scores.Team;
-+import org.bukkit.World;
++import org.bukkit.*;
++import org.bukkit.craftbukkit.CraftServer;
 +import org.bukkit.event.Cancellable;
 +import org.bukkit.event.Event;
 +import org.bukkit.event.entity.*;
  import org.slf4j.Logger;
- import org.bukkit.Bukkit;
- import org.bukkit.Location;
-@@ -135,7 +135,6 @@ import org.bukkit.craftbukkit.event.CraftPortalEvent;
+-import org.bukkit.Bukkit;
+-import org.bukkit.Location;
+-import org.bukkit.Server;
+ import org.bukkit.block.BlockFace;
+ import org.bukkit.command.CommandSender;
+ import org.bukkit.craftbukkit.event.CraftPortalEvent;
  import org.bukkit.entity.Hanging;
  import org.bukkit.entity.LivingEntity;
  import org.bukkit.entity.Vehicle;
@@ -959,17 +1009,19 @@ index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d78
      }
  
      public void preChangeDimension() {
-@@ -3951,6 +4159,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3951,6 +4159,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              return false;
          }
  
-+        org.bukkit.event.entity.EntityPortalEnterEvent event = new org.bukkit.event.entity.EntityPortalEnterEvent(this.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
-+        event.callEvent();
++        org.bukkit.event.entity.EntityPortalEnterEvent event = new org.bukkit.event.entity.EntityPortalEnterEvent(
++            this.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ())
++        );
++        event.callEventAsync();
 +
          return this.endPortalLogicAsync();
      }
  
-@@ -3962,6 +4173,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3962,6 +4175,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          if (this.isInsidePortal) {
              // if we are in a nether portal still, this flag will be set next tick.
              this.isInsidePortal = false;
@@ -977,56 +1029,426 @@ index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d78
              if (this.portalTime++ >= portalWaitTime) {
                  this.portalTime = portalWaitTime;
                  if (this.netherPortalLogicAsync()) {
-@@ -3991,9 +4203,16 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3991,9 +4205,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public boolean netherPortalLogicAsync() {
          io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
 -
          ServerLevel destination = this.getServer().getLevel(this.level().getTypeKey() == LevelStem.NETHER ? Level.OVERWORLD : Level.NETHER);
--        if (destination == null) {
 +
-+        io.papermc.paper.event.entity.EntityPortalReadyEvent event = new io.papermc.paper.event.entity.EntityPortalReadyEvent(
-+            this.getBukkitEntity(),
-+            destination == null ? null : destination.getWorld(),
-+            org.bukkit.PortalType.NETHER
-+        );
-+
-+        if (destination == null || event.callEvent()) {
+         if (destination == null) {
 +            this.portalTime = 0;
              // wat
              return false;
          }
-@@ -4265,9 +4484,39 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-                 io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
-                 teleportHoldId
-             );
+@@ -4023,7 +4238,38 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                         targetPos, 16, // load 16 blocks to be safe from block physics
+                         ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
+                         (chunks) -> {
+-                            ServerLevel.makeObsidianPlatform(destination, null, targetPos);
++                            this.callPortalEventAsync(
++                                this,
++                                destination.getLevel(),
++                                new PositionImpl(
++                                    targetPos.getX(), targetPos.getY(), targetPos.getZ()
++                                ),
++                                PlayerTeleportEvent.TeleportCause.END_PORTAL,
++                                0,
++                                0
++                            ).thenApply(e -> e).thenAccept((event) -> {
++                                if (event.isCancelled()) {
++                                    portalInfoCompletable.complete(null);
++                                    return;
++                                }
 +
-             // adjust passenger tree to final pos
-             for (EntityTreeNode node : fullPassengerTree) {
--                node.root.transform(info.pos, Float.valueOf(info.yRot), Float.valueOf(info.xRot), info.speed);
-+                final org.bukkit.entity.Entity bukkitEntity = node.root.getBukkitEntity();
++                                // the portal obsidian is placed at targetPos.y - 2, so if we want to place the entity
++                                // on the obsidian, we need to spawn at targetPos.y - 1
++                                if (event.getCanCreatePortal()) {
++                                    ServerLevel.makeObsidianPlatform(destination, null, targetPos);
++                                }
 +
-+                final EntityPortalExitEvent event = new EntityPortalExitEvent(
-+                    bukkitEntity,
-+                    bukkitEntity.getLocation(),
-+                    new Location(
-+                        info.world.getWorld(),
-+                        info.pos.x,
-+                        info.pos.y,
-+                        info.pos.z,
-+                        info.yRot, // yaw
-+                        info.xRot // pitch
++                                portalInfoCompletable.complete(
++                                    new PortalInfo(
++                                        Vec3.atBottomCenterOf(targetPos.below()),
++                                        Vec3.ZERO,
++                                        90.0f,
++                                        0.0f,
++                                        destination,
++                                        event
++                                    )
++                                );
++                            });
+ 
+                             // the portal obsidian is placed at targetPos.y - 2, so if we want to place the entity
+                             // on the obsidian, we need to spawn at targetPos.y - 1
+@@ -4077,7 +4323,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                     destination.paperConfig().environment.portalSearchRadius;
+                 int portalCreateRadius = destination.paperConfig().environment.portalCreateRadius;
+ 
+-                WorldBorder destinationBorder = destination.getWorldBorder();
++                final AtomicReference<ServerLevel> finalDestination = new AtomicReference<>(destination);
+                 double dimensionScale = DimensionType.getTeleportationScale(origin.dimensionType(), destination.dimensionType());
+                 BlockPos targetPos = destination.getWorldBorder().clampToBounds(this.getX() * dimensionScale, this.getY(), this.getZ() * dimensionScale);
+ 
+@@ -4090,7 +4336,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                         // no portal could be created
+                         if (portal == null) {
+                             portalInfoCompletable.complete(
+-                                new PortalInfo(Vec3.atCenterOf(targetPos), Vec3.ZERO, 90.0f, 0.0f, destination, null)
++                                new PortalInfo(Vec3.atCenterOf(targetPos), Vec3.ZERO, 90.0f, 0.0f, finalDestination.get(), null)
+                             );
+                             return;
+                         }
+@@ -4101,73 +4347,110 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+ 
+                         portalInfoCompletable.complete(
+                             PortalShape.createPortalInfo(
+-                                destination, portal, originalPortalDirection, relativePos,
++                                finalDestination.get(), portal, originalPortalDirection, relativePos,
+                                 Entity.this, Entity.this.getDeltaMovement(), Entity.this.getYRot(), Entity.this.getXRot(), null
+                             )
+                         );
+                     }
+                 );
+ 
+-                // kick off search for existing portal or creation
+-                destination.loadChunksAsync(
+-                    // add 32 so that the final search for a portal frame doesn't load any chunks
+-                    targetPos, portalSearchRadius + 32,
+-                    net.minecraft.world.level.chunk.ChunkStatus.EMPTY,
+-                    ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
+-                    (chunks) -> {
+-                        BlockUtil.FoundRectangle portal =
+-                            destination.getPortalForcer().findPortalAround(targetPos, destinationBorder, portalSearchRadius).orElse(null);
+-                        if (portal != null) {
+-                            portalFound.complete(portal);
+-                            return;
+-                        }
++                this.callPortalEventAsync(
++                    this,
++                    destination.getLevel(),
++                    new PositionImpl(
++                        targetPos.getX(), targetPos.getY(), targetPos.getZ()
 +                    ),
-+                    bukkitEntity.getVelocity(),
-+                    org.bukkit.craftbukkit.util.CraftVector.toBukkit(info.speed)
++                    PlayerTeleportEvent.TeleportCause.NETHER_PORTAL,
++                    portalSearchRadius,
++                    portalCreateRadius
++                )
++                .thenAccept(e -> {
++                    if (e.isCancelled()) {
++                        portalFound.complete(null);
++                        return;
++                    }
+ 
+-                        // add tickets so that we can re-search for a portal once the chunks are loaded
+-                        Long ticketId = Long.valueOf(CREATE_PORTAL_DOUBLE_CHECK.getAndIncrement());
+-                        for (net.minecraft.world.level.chunk.ChunkAccess chunk : chunks) {
+-                            destination.chunkSource.addTicketAtLevel(
+-                                TicketType.NETHER_PORTAL_DOUBLE_CHECK, chunk.getPos(),
+-                                io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
+-                                ticketId
+-                            );
+-                        }
++                    finalDestination.set(((CraftWorld) e.getTo().getWorld()).getHandle());
++                    final ServerLevel destinationFinal = finalDestination.get();
++                    final WorldBorder destinationBorderFinal = destinationFinal.getWorldBorder();
++                    final BlockPos targetPosFinal = new BlockPos(e.getTo().getBlockX(), e.getTo().getBlockY(), e.getTo().getBlockZ());
++                    final int portalSearchRadiusFinal = e.getSearchRadius();
++                    final int portalCreateRadiusFinal = e.getCreationRadius();
++
++                    // kick off search for existing portal or creation
++                    destinationFinal.loadChunksAsync(
++                        // add 32 so that the final search for a portal frame doesn't load any chunks
++                        targetPosFinal, portalSearchRadiusFinal + 32,
++                        net.minecraft.world.level.chunk.ChunkStatus.EMPTY,
++                        ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
++                        (chunks) -> {
++                            BlockUtil.FoundRectangle portal =
++                                destinationFinal.getPortalForcer().findPortalAround(targetPosFinal, destinationBorderFinal, portalSearchRadiusFinal).orElse(null);
++                            if (portal != null) {
++                                portalFound.complete(portal);
++                                return;
++                            }
+ 
+-                        // no portal found - create one
+-                        destination.loadChunksAsync(
+-                            targetPos, portalCreateRadius + 32,
+-                            ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
+-                            (chunks2) -> {
+-                                // don't need the tickets anymore
+-                                // note: we expect removeTicketsAtLevel to add an unknown ticket for us automatically
+-                                // if the ticket level were to decrease
+-                                for (net.minecraft.world.level.chunk.ChunkAccess chunk : chunks) {
+-                                    destination.chunkSource.removeTicketAtLevel(
+-                                        TicketType.NETHER_PORTAL_DOUBLE_CHECK, chunk.getPos(),
+-                                        io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
+-                                        ticketId
+-                                    );
+-                                }
++                            // add tickets so that we can re-search for a portal once the chunks are loaded
++                            Long ticketId = Long.valueOf(CREATE_PORTAL_DOUBLE_CHECK.getAndIncrement());
++                            for (net.minecraft.world.level.chunk.ChunkAccess chunk : chunks) {
++                                destinationFinal.chunkSource.addTicketAtLevel(
++                                    TicketType.NETHER_PORTAL_DOUBLE_CHECK, chunk.getPos(),
++                                    io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
++                                    ticketId
++                                );
++                            }
+ 
+-                                // when two entities portal at the same time, it is possible that both entities reach this
+-                                // part of the code - and create a double portal
+-                                // to fix this, we just issue another search to try and see if another entity created
+-                                // a portal nearby
+-                                BlockUtil.FoundRectangle existingTryAgain =
+-                                    destination.getPortalForcer().findPortalAround(targetPos, destinationBorder, portalSearchRadius).orElse(null);
+-                                if (existingTryAgain != null) {
+-                                    portalFound.complete(existingTryAgain);
+-                                    return;
+-                                }
++                            // no portal found - create one
++                            destinationFinal.loadChunksAsync(
++                                targetPosFinal, portalCreateRadiusFinal + 32,
++                                ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
++                                (chunks2) -> {
++                                    // don't need the tickets anymore
++                                    // note: we expect removeTicketsAtLevel to add an unknown ticket for us automatically
++                                    // if the ticket level were to decrease
++                                    for (net.minecraft.world.level.chunk.ChunkAccess chunk : chunks) {
++                                        destinationFinal.chunkSource.removeTicketAtLevel(
++                                            TicketType.NETHER_PORTAL_DOUBLE_CHECK, chunk.getPos(),
++                                            io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
++                                            ticketId
++                                        );
++                                    }
+ 
+-                                // we do not have the correct entity reference here
+-                                BlockUtil.FoundRectangle createdPortal =
+-                                    destination.getPortalForcer().createPortal(targetPos, originalPortalDirection, null, portalCreateRadius).orElse(null);
+-                                // if it wasn't created, passing null is expected here
+-                                portalFound.complete(createdPortal);
+-                            }
+-                        );
+-                    }
+-                );
++                                    // when two entities portal at the same time, it is possible that both entities reach this
++                                    // part of the code - and create a double portal
++                                    // to fix this, we just issue another search to try and see if another entity created
++                                    // a portal nearby
++                                    BlockUtil.FoundRectangle existingTryAgain = destinationFinal.getPortalForcer().findPortalAround(
++                                            targetPosFinal,
++                                            destinationBorderFinal,
++                                            portalSearchRadiusFinal
++                                        ).orElse(null);
++                                    if (existingTryAgain != null) {
++                                        portalFound.complete(existingTryAgain);
++                                        return;
++                                    }
++
++                                    // if we can't create a portal, we just return null
++                                    if (!e.getCanCreatePortal()) {
++                                        portalFound.complete(null);
++                                        return;
++                                    }
++
++                                    // we do not have the correct entity reference here
++                                    BlockUtil.FoundRectangle createdPortal = destinationFinal.getPortalForcer().createPortal(
++                                            targetPosFinal,
++                                            originalPortalDirection,
++                                            null,
++                                            portalCreateRadiusFinal
++                                        ).orElse(null);
++                                    // if it wasn't created, passing null is expected here
++                                    portalFound.complete(createdPortal);
++                                }
++                            );
++                        }
++                    );
++                });
+                 break;
+             }
+             default: {
+@@ -4223,65 +4506,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         );
+ 
+         // first, remove entity/passengers from world
+-        EntityTreeNode passengerTree = this.detachPassengers();
+-        List<EntityTreeNode> fullPassengerTree = passengerTree.getFullTree();
+         ServerLevel originWorld = (ServerLevel)this.level;
+ 
+-        for (EntityTreeNode node : fullPassengerTree) {
+-            node.root.preChangeDimension();
+-            node.root.prePortalLogic(originWorld, destination, type);
+-        }
+-
+-        for (EntityTreeNode node : fullPassengerTree) {
+-            // we will update pos/rot/speed later
+-            node.root = node.root.transformForAsyncTeleport(destination, null, null, null, null);
+-            // set portal cooldown
+-            node.root.setPortalCooldown();
+-        }
++        final Stack<EntityTreeNode> passengerStack = new Stack<>();
++        passengerStack.add(this.detachPassengers());
+ 
+-        // ensure the region is always ticking in case of a shutdown
+-        // otherwise, the shutdown will not be able to complete the shutdown as it requires a ticking region
+-        Long teleportHoldId = Long.valueOf(TELEPORT_HOLD_TICKET_GEN.getAndIncrement());
+-        originWorld.chunkSource.addTicketAtLevel(
+-            TicketType.TELEPORT_HOLD_TICKET, initialPositionChunk,
+-            io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
+-            teleportHoldId
++        final Location from = new Location(
++            originWorld.getWorld(),
++            initialPosition.x,
++            initialPosition.y,
++            initialPosition.z
+         );
+ 
+-        ServerLevel.PendingTeleport beforeFindDestination = new ServerLevel.PendingTeleport(passengerTree, initialPosition);
+-        originWorld.pushPendingTeleport(beforeFindDestination);
++        // TODO: Figure out how to allow for world changes besides cancellation
++        queuePrePortalEntities(passengerStack, from, destination.getWorld())
++            .thenRun(() -> {
++                final EntityTreeNode passengerTree = this.detachPassengers();
++                final List<EntityTreeNode> fullPassengerTree = passengerTree.getFullTree();
+ 
+-        ca.spottedleaf.concurrentutil.completable.Completable<PortalInfo> portalInfoCompletable
+-            = new ca.spottedleaf.concurrentutil.completable.Completable<>();
++                for (EntityTreeNode node : fullPassengerTree) {
++                    node.root.preChangeDimension();
++                    node.root.prePortalLogic(originWorld, destination, type);
++                }
+ 
+-        portalInfoCompletable.addWaiter((PortalInfo info, Throwable throwable) -> {
+-            if (!originWorld.removePendingTeleport(beforeFindDestination)) {
+-                // the shutdown thread has placed us back into the origin world at the original position
+-                // we just have to abandon this teleport to prevent duplication
+-                return;
+-            }
+-            originWorld.chunkSource.removeTicketAtLevel(
+-                TicketType.TELEPORT_HOLD_TICKET, initialPositionChunk,
+-                io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
+-                teleportHoldId
+-            );
+-            // adjust passenger tree to final pos
+-            for (EntityTreeNode node : fullPassengerTree) {
+-                node.root.transform(info.pos, Float.valueOf(info.yRot), Float.valueOf(info.xRot), info.speed);
++                for (EntityTreeNode node : fullPassengerTree) {
++                    // we will update pos/rot/speed later
++                    node.root = node.root.transformForAsyncTeleport(destination, null, null, null, null);
++                    // set portal cooldown
++                    node.root.setPortalCooldown();
++                }
++
++                // ensure the region is always ticking in case of a shutdown
++                // otherwise, the shutdown will not be able to complete the shutdown as it requires a ticking region
++                Long teleportHoldId = Long.valueOf(TELEPORT_HOLD_TICKET_GEN.getAndIncrement());
++                originWorld.chunkSource.addTicketAtLevel(
++                    TicketType.TELEPORT_HOLD_TICKET, initialPositionChunk,
++                    io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
++                    teleportHoldId
 +                );
 +
++                ServerLevel.PendingTeleport beforeFindDestination = new ServerLevel.PendingTeleport(passengerTree, initialPosition);
++                originWorld.pushPendingTeleport(beforeFindDestination);
++
++                ca.spottedleaf.concurrentutil.completable.Completable<PortalInfo> portalInfoCompletable
++                    = new ca.spottedleaf.concurrentutil.completable.Completable<>();
++
++                portalInfoCompletable.addWaiter((PortalInfo info, Throwable throwable) -> {
++                    if (!originWorld.removePendingTeleport(beforeFindDestination)) {
++                        // the shutdown thread has placed us back into the origin world at the original position
++                        // we just have to abandon this teleport to prevent duplication
++                        return;
++                    }
++                    originWorld.chunkSource.removeTicketAtLevel(
++                        TicketType.TELEPORT_HOLD_TICKET, initialPositionChunk,
++                        io.papermc.paper.chunk.system.scheduling.ChunkHolderManager.MAX_TICKET_LEVEL,
++                        teleportHoldId
++                    );
++
++                    // adjust passenger tree to final pos
++                    final Stack<EntityTreeNode> stack = new Stack<>();
++                    stack.addAll(fullPassengerTree);
++                    queuePortalEntities(stack, info).thenRun(() -> {
++                        // place
++                        passengerTree.root.placeInAsync(
++                            originWorld, destination, Entity.TELEPORT_FLAG_LOAD_CHUNK | (takePassengers ? Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS : 0L),
++                            passengerTree, teleportComplete
++                        );
++                    });
++                });
++
++                passengerTree.root.findOrCreatePortalAsync(originWorld, destination, type, portalInfoCompletable);
++            });
++
++        return true;
++    }
++
++    private CompletableFuture<Void> queuePrePortalEntities(
++        final Stack<EntityTreeNode> stack,
++        final Location from,
++        final @Nullable World targetWorld) {
++        if (stack.isEmpty()) {
++            return CompletableFuture.completedFuture(null);
++        }
++
++        final EntityTreeNode node = stack.pop();
++        final org.bukkit.entity.Entity bukkitEntity = node.root.getBukkitEntity();
++        // Only nether portals are supported??
++        return new EntityPortalReadyEvent(
++            bukkitEntity,
++            targetWorld,
++            org.bukkit.PortalType.NETHER
++        ).callEventAsync(from).thenApply(e -> (EntityPortalReadyEvent) e).thenCompose((event) -> {
++            if (!event.isCancelled() && event.getTargetWorld() != null) {
++                if (node.passengers != null)
++                    stack.addAll(Arrays.asList(node.passengers));
++            } else {
++                node.root.stopRiding();
+             }
+ 
+-            // place
+-            passengerTree.root.placeInAsync(
+-                originWorld, destination, Entity.TELEPORT_FLAG_LOAD_CHUNK | (takePassengers ? Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS : 0L),
+-                passengerTree, teleportComplete
+-            );
++            return queuePrePortalEntities(stack, from, targetWorld);
+         });
++    }
+ 
++    private CompletableFuture<Void> queuePortalEntities(final Stack<EntityTreeNode> stack, final PortalInfo info) {
++        if (stack.isEmpty()) {
++            return CompletableFuture.completedFuture(null);
++        }
++
++        final EntityTreeNode node = stack.pop();
++        final org.bukkit.entity.Entity bukkitEntity = node.root.getBukkitEntity();
++
++        final EntityPortalExitEvent event = new EntityPortalExitEvent(
++            bukkitEntity,
++            bukkitEntity.getLocation(),
++            new Location(
++                info.world.getWorld(),
++                info.pos.x,
++                info.pos.y,
++                info.pos.z,
++                info.yRot, // yaw
++                info.xRot // pitch
++            ),
++            bukkitEntity.getVelocity(),
++            org.bukkit.craftbukkit.util.CraftVector.toBukkit(info.speed)
++        );
+ 
+-        passengerTree.root.findOrCreatePortalAsync(originWorld, destination, type, portalInfoCompletable);
++        return event.callEventAsync(bukkitEntity.getLocation())
++            .thenRun(() -> {
 +                Vec3 position = info.pos;
 +                float yaw = info.yRot;
 +                float pitch = info.xRot;
 +                Vec3 velocity = info.speed;
-+
-+                if (event.callEvent() && event.getTo() != null && this.isAlive()) {
+ 
+-        return true;
++                if (event.getTo() != null && this.isAlive()) {
 +                    position = new Vec3(event.getTo().getX(), event.getTo().getY(), event.getTo().getZ());
 +                    yaw = event.getTo().getYaw();
 +                    pitch = event.getTo().getPitch();
@@ -1034,9 +1456,55 @@ index ee15661227754149164893d6acf678d13b2e1b27..4850554ece8483612a3225f6a5888d78
 +                }
 +
 +                node.root.transform(position, yaw, pitch, velocity);
-             }
++            });
+     }
++
+     // Folia end - region threading
  
-             // place
+     @Nullable
+@@ -4492,6 +4859,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         return new CraftPortalEvent(event);
+     }
+ 
++    protected CompletableFuture<CraftPortalEvent> callPortalEventAsync(Entity entity, ServerLevel exitWorldServer, PositionImpl exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) {
++        org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
++        Location enter = bukkitEntity.getLocation();
++        Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld());
++
++        // Paper start
++        final org.bukkit.PortalType portalType = switch (cause) {
++            case END_PORTAL -> org.bukkit.PortalType.ENDER;
++            case NETHER_PORTAL -> org.bukkit.PortalType.NETHER;
++            default -> org.bukkit.PortalType.CUSTOM;
++        };
++
++        EntityPortalEvent event = new EntityPortalEvent(bukkitEntity, enter, exit, searchRadius, portalType);
++        // Paper end
++        return event.getEntity().getServer().getPluginManager().callEventAsync(event)
++            .thenApply((ignore) -> {
++                if (event.isCancelled() || event.getTo() == null || event.getTo().getWorld() == null || !entity.isAlive()) {
++                    return null;
++                }
++                return new CraftPortalEvent(event);
++            });
++    }
++
+     protected Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) {
+         return worldserver.getPortalForcer().findPortalAround(blockposition, worldborder, searchRadius);
+         // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java b/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java
+index a6ab0d0defc05e56a91084c49897059670a1324b..ab5be4d4116849768ffcdc682e81a5d784e04028 100644
+--- a/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java
+@@ -86,7 +86,7 @@ public class NetherPortalBlock extends Block {
+         if (entity.canChangeDimensions()) {
+             // CraftBukkit start - Entity in portal
+             EntityPortalEnterEvent event = new EntityPortalEnterEvent(entity.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
+-            world.getCraftServer().getPluginManager().callEvent(event);
++            world.getCraftServer().getPluginManager().callEventAsync(event);
+             // CraftBukkit end
+             entity.handleInsidePortal(pos);
+         }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 index 723ae4b75c84fe952377c02d42cf7a710f7047ea..53036885edbd37f6eeac633b3f9f11728e54066a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
