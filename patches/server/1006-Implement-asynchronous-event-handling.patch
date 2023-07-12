@@ -11,7 +11,7 @@ Many things to express. This change implements the EntityTeleportEvent in a cont
 - Cancelling an entity riding will dismount it and NOT trigger any events for its passengers
 
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..e00b5ce824bee99ab62eb2fda97176701867a6e4 100644
+index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..95deeb2cf94a3faade04ed36d93be37baa935469 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 @@ -4,26 +4,35 @@ import co.aikar.timings.TimedEventExecutor;
@@ -69,45 +69,71 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..e00b5ce824bee99ab62eb2fda9717670
          if (event.isAsynchronous() && this.server.isPrimaryThread()) {
              throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
          } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
-@@ -45,11 +58,50 @@ class PaperEventManager {
+@@ -45,32 +58,84 @@ class PaperEventManager {
          HandlerList handlers = event.getHandlers();
          RegisteredListener[] listeners = handlers.getRegisteredListeners();
  
 -        for (RegisteredListener registration : listeners) {
 -            if (!registration.getPlugin().isEnabled()) {
 -                continue;
--            }
-+        final Stack<RegisteredListener> listenerStack = new Stack<>();
-+        for (int i = listeners.length - 1; i >= 0; i--) {
-+            listenerStack.push(listeners[i]);
-+        }
++        final Thread currThread = Thread.currentThread();
 +
-+        ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currentRegion = null;
-+        if (origin == null && (currentRegion = TickRegionScheduler.getCurrentRegion()) == null) {
-+            return dequeueEvent(listenerStack, event);
-+        }
++        if (currThread instanceof TickRegionScheduler.TickThreadRunner) {
++            final Stack<RegisteredListener> listenerStack = new Stack<>();
++            for (int i = listeners.length - 1; i >= 0; i--) {
++                listenerStack.push(listeners[i]);
++            }
++
++            ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currentRegion = null;
++            if (origin == null && (currentRegion = TickRegionScheduler.getCurrentRegion()) == null) {
++                return dequeueEvent(listenerStack, event);
+             }
  
-+        final ChunkPos chunkPos = origin == null
-+            ? CoordinateUtils.getChunkPos(currentRegion.getOwnedSectionsUnsynchronised().nextLong())
-+            : new ChunkPos(origin.getBlockX() >> 4, origin.getBlockZ() >> 4);
+-            try {
+-                registration.callEvent(event);
+-            } catch (AuthorNagException ex) {
+-                Plugin plugin = registration.getPlugin();
++            final ChunkPos chunkPos = origin == null
++                ? CoordinateUtils.getChunkPos(currentRegion.getOwnedSectionsUnsynchronised().nextLong())
++                : new ChunkPos(origin.getBlockX() >> 4, origin.getBlockZ() >> 4);
+ 
+-                if (plugin.isNaggable()) {
+-                    plugin.setNaggable(false);
++            final ServerLevel level = origin == null
++                ? TickRegionScheduler.getCurrentRegionizedWorldData().world
++                : ((CraftWorld) origin.getWorld()).getHandle();
+ 
+-                    this.server.getLogger().log(Level.SEVERE, String.format(
+-                        "Nag author(s): '%s' of '%s' about the following: %s",
+-                        plugin.getPluginMeta().getAuthors(),
+-                        plugin.getPluginMeta().getDisplayName(),
+-                        ex.getMessage()
+-                    ));
+-                }
+-            } catch (Throwable ex) {
+-                String msg = "Could not pass event " + event.getEventName() + " to " + registration.getPlugin().getPluginMeta().getDisplayName();
+-                this.server.getLogger().log(Level.SEVERE, msg, ex);
+-                if (!(event instanceof ServerExceptionEvent)) { // We don't want to cause an endless event loop
+-                    this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
+-                }
++            return dequeueEvent(listenerStack, event).thenCompose(e -> {
++                final CompletableFuture<Event> future = new CompletableFuture<>();
++                RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
++                    level,
++                    chunkPos.x,
++                    chunkPos.z,
++                    () -> future.complete(e)
++                );
 +
-+        final ServerLevel level = origin == null
-+            ? TickRegionScheduler.getCurrentRegionizedWorldData().world
-+            : ((CraftWorld) origin.getWorld()).getHandle();
-+
-+        return dequeueEvent(listenerStack, event).thenCompose(e -> {
-+            final CompletableFuture<Event> future = new CompletableFuture<>();
-+            RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
-+                level,
-+                chunkPos.x,
-+                chunkPos.z,
-+                () -> future.complete(e)
-+            );
-+
-+            return future.thenApply(event1 -> {
-+                return event1;
++                return future;
 +            });
-+        });
++        } else {
++            for (RegisteredListener listener : listeners) {
++                callEvent(listener, event);
++            }
++
++            return CompletableFuture.completedFuture(event);
++        }
 +    }
 +
 +    private CompletableFuture<Event> dequeueEvent(final Stack<RegisteredListener> stack, final Event event) {
@@ -120,19 +146,36 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..e00b5ce824bee99ab62eb2fda9717670
 +            return dequeueEvent(stack, event);
 +        }
 +
-+        return TickRegionScheduler.createEventTask(event, () -> {
-             try {
-                 registration.callEvent(event);
-             } catch (AuthorNagException ex) {
-@@ -72,7 +124,7 @@ class PaperEventManager {
-                     this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
-                 }
++        return TickRegionScheduler.createEventTask(event, () -> callEvent(registration, event)).thenCompose(e -> dequeueEvent(stack, e));
++    }
++
++    private void callEvent(final RegisteredListener registration, final Event event) {
++        if (!registration.getPlugin().isEnabled())
++            return;
++
++        try {
++            registration.callEvent(event);
++        } catch (AuthorNagException ex) {
++            Plugin plugin = registration.getPlugin();
++
++            if (plugin.isNaggable()) {
++                plugin.setNaggable(false);
++
++                this.server.getLogger().log(Level.SEVERE, String.format(
++                    "Nag author(s): '%s' of '%s' about the following: %s",
++                    plugin.getPluginMeta().getAuthors(),
++                    plugin.getPluginMeta().getDisplayName(),
++                    ex.getMessage()
++                ));
++            }
++        } catch (Throwable ex) {
++            String msg = "Could not pass event " + event.getEventName() + " to " + registration.getPlugin().getPluginMeta().getDisplayName();
++            this.server.getLogger().log(Level.SEVERE, msg, ex);
++            if (!(event instanceof ServerExceptionEvent)) { // We don't want to cause an endless event loop
++                this.callEvent(new ServerExceptionEvent(new ServerEventException(msg, ex, registration.getPlugin(), registration.getListener(), event)));
              }
--        }
-+        }).thenCompose(e -> dequeueEvent(stack, e));
+         }
      }
- 
-     public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java b/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
 index dab211c458311869c61779305580a1c7da830f71..cdf4c4d0f0816831af48c632752af7336b2d1e5c 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperPluginManagerImpl.java
@@ -291,7 +334,7 @@ index 72a2b81a0a4dc6aab02d0dbad713ea882887d85f..a556035631f1bc573985168892cb33fd
      private static String substr(String val, String prefix, int from) {
          int idx = val.indexOf(prefix, from) + prefix.length();
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..cdfac076e966f5a871fc71fbea7de9ef9a00b127 100644
+index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..0171c6a8f8d840f78ae9dceffe8214790e9226b3 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -7,14 +7,17 @@ import io.papermc.paper.util.TickThread;
@@ -375,7 +418,13 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..cdfac076e966f5a871fc71fbea7de9ef
      /**
       * Returns the current ticking region, or {@code null} if there is no ticking region.
       * If this thread is not a TickThread, then returns {@code null}.
-@@ -199,9 +258,12 @@ public final class TickRegionScheduler {
+@@ -194,14 +253,17 @@ public final class TickRegionScheduler {
+ 
+     // By using our own thread object, we can use a field for the current region rather than a ThreadLocal.
+     // This is much faster than a thread local, since the thread local has to use a map lookup.
+-    private static final class TickThreadRunner extends TickThread {
++    public static final class TickThreadRunner extends TickThread {
+ 
          private ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> currentTickingRegion;
          private RegionizedWorldData currentTickingWorldRegionizedData;
          private SchedulerThreadPool.SchedulableTick currentTickingTask;
@@ -581,8 +630,25 @@ index 75b1877f8c3e4da3183437f327ef3376fd0a3c21..d318230f7f322ca3fd681e44307b9a27
                  });
                  this.server.getPlayerList().loadSpawnForNewPlayer(this.connection, s, data, lastKnownName, toComplete);
                  // Folia end - region threading - rewrite login process
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index ffb5332310e9b2d10292fe01c37fd48552fedffc..fb8820d0b3542314822f92e3c6c6e63bf6e61cc4 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -339,10 +339,10 @@ public abstract class PlayerList {
+ 
+         // Spigot start - spawn location event
+         Player spawnPlayer = player.getBukkitEntity();
+-        org.spigotmc.event.player.PlayerSpawnLocationEvent ev = new com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent(spawnPlayer, spawnPlayer.getLocation()); // Paper use our duplicate event
++        //org.spigotmc.event.player.PlayerSpawnLocationEvent ev = new com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent(spawnPlayer, spawnPlayer.getLocation()); // Paper use our duplicate event
+         //this.cserver.getPluginManager().callEvent(ev); // Folia - region threading - TODO WTF TO DO WITH THIS EVENT?
+ 
+-        Location loc = ev.getSpawnLocation();
++        Location loc = selectedSpawn;
+         worldserver1 = ((CraftWorld) loc.getWorld()).getHandle();
+ 
+         player.spawnIn(worldserver1);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e57ea501e 100644
+index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9af69e10a 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -687,7 +753,20 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
      public void updateTicks(long fromTickOffset, long fromRedstoneTimeOffset) {
          if (this.activatedTick != Integer.MIN_VALUE) {
              this.activatedTick += fromTickOffset;
-@@ -3824,19 +3833,22 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3022,6 +3031,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                 this.portalEntrancePos = pos.immutable();
+             }
+ 
++            // Folia start - event handling
++            if (portalTime <= 0 && !isInsidePortal) {
++                final Location location = new org.bukkit.Location(this.level.getWorld(), pos.getX(), pos.getY(), pos.getZ());
++                new EntityPortalEnterEvent(this.getBukkitEntity(), location).callEventAsync(location);
++            }
++
+             this.isInsidePortal = true;
+         }
+     }
+@@ -3824,19 +3839,22 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return copy;
      }
  
@@ -713,7 +792,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
          if ((teleportFlags & TELEPORT_FLAG_UNMOUNT) == 0L) {
              for (Entity entity : this.getIndirectPassengers()) {
                  if (!entity.canTeleportAsync()) {
-@@ -3858,60 +3870,256 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3858,60 +3876,256 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
  
@@ -1009,7 +1088,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
      }
  
      public void preChangeDimension() {
-@@ -3951,6 +4159,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3951,6 +4165,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              return false;
          }
  
@@ -1021,7 +1100,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
          return this.endPortalLogicAsync();
      }
  
-@@ -3962,6 +4175,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3962,6 +4181,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          if (this.isInsidePortal) {
              // if we are in a nether portal still, this flag will be set next tick.
              this.isInsidePortal = false;
@@ -1029,7 +1108,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
              if (this.portalTime++ >= portalWaitTime) {
                  this.portalTime = portalWaitTime;
                  if (this.netherPortalLogicAsync()) {
-@@ -3991,9 +4205,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3991,9 +4211,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public boolean netherPortalLogicAsync() {
          io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
@@ -1041,7 +1120,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
              // wat
              return false;
          }
-@@ -4023,7 +4238,38 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4023,7 +4244,38 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                          targetPos, 16, // load 16 blocks to be safe from block physics
                          ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
                          (chunks) -> {
@@ -1081,7 +1160,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
  
                              // the portal obsidian is placed at targetPos.y - 2, so if we want to place the entity
                              // on the obsidian, we need to spawn at targetPos.y - 1
-@@ -4077,7 +4323,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4077,7 +4329,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                      destination.paperConfig().environment.portalSearchRadius;
                  int portalCreateRadius = destination.paperConfig().environment.portalCreateRadius;
  
@@ -1090,7 +1169,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
                  double dimensionScale = DimensionType.getTeleportationScale(origin.dimensionType(), destination.dimensionType());
                  BlockPos targetPos = destination.getWorldBorder().clampToBounds(this.getX() * dimensionScale, this.getY(), this.getZ() * dimensionScale);
  
-@@ -4090,7 +4336,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4090,7 +4342,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                          // no portal could be created
                          if (portal == null) {
                              portalInfoCompletable.complete(
@@ -1099,7 +1178,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
                              );
                              return;
                          }
-@@ -4101,73 +4347,110 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4101,73 +4353,110 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
                          portalInfoCompletable.complete(
                              PortalShape.createPortalInfo(
@@ -1267,7 +1346,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
                  break;
              }
              default: {
-@@ -4223,65 +4506,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4223,65 +4512,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          );
  
          // first, remove entity/passengers from world
@@ -1462,7 +1541,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
      // Folia end - region threading
  
      @Nullable
-@@ -4492,6 +4859,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4492,6 +4865,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return new CraftPortalEvent(event);
      }
  
@@ -1480,7 +1559,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
 +
 +        EntityPortalEvent event = new EntityPortalEvent(bukkitEntity, enter, exit, searchRadius, portalType);
 +        // Paper end
-+        return event.getEntity().getServer().getPluginManager().callEventAsync(event)
++        return event.callEventAsync(enter)
 +            .thenApply((ignore) -> {
 +                if (event.isCancelled() || event.getTo() == null || event.getTo().getWorld() == null || !entity.isAlive()) {
 +                    return null;
@@ -1493,18 +1572,24 @@ index ee15661227754149164893d6acf678d13b2e1b27..71263c0f5f9ce261878270b959b6471e
          return worldserver.getPortalForcer().findPortalAround(blockposition, worldborder, searchRadius);
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java b/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java
-index a6ab0d0defc05e56a91084c49897059670a1324b..ab5be4d4116849768ffcdc682e81a5d784e04028 100644
+index a6ab0d0defc05e56a91084c49897059670a1324b..642729cd700cccffbaa47cc7c71fc44920e4eb15 100644
 --- a/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/NetherPortalBlock.java
-@@ -86,7 +86,7 @@ public class NetherPortalBlock extends Block {
+@@ -84,10 +84,12 @@ public class NetherPortalBlock extends Block {
+     public void entityInside(BlockState state, Level world, BlockPos pos, Entity entity) {
+         if (!new io.papermc.paper.event.entity.EntityInsideBlockEvent(entity.getBukkitEntity(), org.bukkit.craftbukkit.block.CraftBlock.at(world, pos)).callEvent()) { return; } // Paper
          if (entity.canChangeDimensions()) {
++            // Folia start - event handling
              // CraftBukkit start - Entity in portal
-             EntityPortalEnterEvent event = new EntityPortalEnterEvent(entity.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
+-            EntityPortalEnterEvent event = new EntityPortalEnterEvent(entity.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
 -            world.getCraftServer().getPluginManager().callEvent(event);
-+            world.getCraftServer().getPluginManager().callEventAsync(event);
++            //EntityPortalEnterEvent event = new EntityPortalEnterEvent(entity.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
++            //world.getCraftServer().getPluginManager().callEventAsync(event);
              // CraftBukkit end
++            // Folia end - event handling
              entity.handleInsidePortal(pos);
          }
+ 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 index 723ae4b75c84fe952377c02d42cf7a710f7047ea..53036885edbd37f6eeac633b3f9f11728e54066a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
