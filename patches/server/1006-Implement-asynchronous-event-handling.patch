@@ -648,7 +648,7 @@ index ffb5332310e9b2d10292fe01c37fd48552fedffc..fb8820d0b3542314822f92e3c6c6e63b
  
          player.spawnIn(worldserver1);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9af69e10a 100644
+index ee15661227754149164893d6acf678d13b2e1b27..33c22f7633b45d44b41e47aca9eefcdb8f04f59c 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -792,7 +792,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
          if ((teleportFlags & TELEPORT_FLAG_UNMOUNT) == 0L) {
              for (Entity entity : this.getIndirectPassengers()) {
                  if (!entity.canTeleportAsync()) {
-@@ -3858,60 +3876,256 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3858,60 +3876,258 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              }
          }
  
@@ -846,7 +846,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
 +            ogTo,
 +            cause,
 +            teleportComplete
-+        ).callEventAsync().thenAccept(teleportEvent -> {
++        ).callEventAsync(ogFrom).thenAccept(teleportEvent -> {
 +            final Location to;
 +            if (this instanceof Player) {
 +                to = ((PlayerTeleportEvent) teleportEvent).getTo();
@@ -982,6 +982,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
 +                executor = () -> {
 +                    this.handlePassengerTeleport(
 +                        entityStack,
++                        ogFrom,
 +                        to,
 +                        cause,
 +                        entity -> {}
@@ -1002,6 +1003,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
 -            node.root.preChangeDimension();
 -        }
 +    private CompletableFuture<Void> handlePassengerTeleport(final Stack<EntityTreeNode> entityStack,
++                                                            final Location from,
 +                                                            final Location to,
 +                                                            final PlayerTeleportEvent.TeleportCause cause,
 +                                                            final Consumer<Entity> teleportComplete) {
@@ -1027,7 +1029,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
 +            to,
 +            cause,
 +            teleportComplete
-+        ).callEventAsync().thenAccept(teleportEvent -> {
++        ).callEventAsync(from).thenAccept(teleportEvent -> {
 +            Location entityTo;
 +            if (((Cancellable) teleportEvent).isCancelled()) {
 +                entity.stopRiding(true); // Suppress cancel, we must force this action
@@ -1088,7 +1090,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
      }
  
      public void preChangeDimension() {
-@@ -3951,6 +4165,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3951,6 +4167,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              return false;
          }
  
@@ -1100,7 +1102,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
          return this.endPortalLogicAsync();
      }
  
-@@ -3962,6 +4181,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3962,6 +4183,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          if (this.isInsidePortal) {
              // if we are in a nether portal still, this flag will be set next tick.
              this.isInsidePortal = false;
@@ -1108,7 +1110,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
              if (this.portalTime++ >= portalWaitTime) {
                  this.portalTime = portalWaitTime;
                  if (this.netherPortalLogicAsync()) {
-@@ -3991,9 +4211,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3991,9 +4213,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public boolean netherPortalLogicAsync() {
          io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
@@ -1120,7 +1122,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
              // wat
              return false;
          }
-@@ -4023,7 +4244,38 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4023,7 +4246,38 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                          targetPos, 16, // load 16 blocks to be safe from block physics
                          ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
                          (chunks) -> {
@@ -1160,7 +1162,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
  
                              // the portal obsidian is placed at targetPos.y - 2, so if we want to place the entity
                              // on the obsidian, we need to spawn at targetPos.y - 1
-@@ -4077,7 +4329,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4077,7 +4331,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                      destination.paperConfig().environment.portalSearchRadius;
                  int portalCreateRadius = destination.paperConfig().environment.portalCreateRadius;
  
@@ -1169,7 +1171,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
                  double dimensionScale = DimensionType.getTeleportationScale(origin.dimensionType(), destination.dimensionType());
                  BlockPos targetPos = destination.getWorldBorder().clampToBounds(this.getX() * dimensionScale, this.getY(), this.getZ() * dimensionScale);
  
-@@ -4090,7 +4342,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4090,7 +4344,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                          // no portal could be created
                          if (portal == null) {
                              portalInfoCompletable.complete(
@@ -1178,7 +1180,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
                              );
                              return;
                          }
-@@ -4101,73 +4353,110 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4101,73 +4355,110 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
                          portalInfoCompletable.complete(
                              PortalShape.createPortalInfo(
@@ -1346,7 +1348,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
                  break;
              }
              default: {
-@@ -4223,65 +4512,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4223,65 +4514,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          );
  
          // first, remove entity/passengers from world
@@ -1541,7 +1543,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..2eb018b842935c056099ffd1db7227f9
      // Folia end - region threading
  
      @Nullable
-@@ -4492,6 +4865,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4492,6 +4867,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return new CraftPortalEvent(event);
      }
  
