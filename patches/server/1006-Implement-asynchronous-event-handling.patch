@@ -334,7 +334,7 @@ index 72a2b81a0a4dc6aab02d0dbad713ea882887d85f..a556035631f1bc573985168892cb33fd
      private static String substr(String val, String prefix, int from) {
          int idx = val.indexOf(prefix, from) + prefix.length();
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..0171c6a8f8d840f78ae9dceffe8214790e9226b3 100644
+index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..7471acb1f49c0be9d1043885c34ecbf818df33df 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -7,14 +7,17 @@ import io.papermc.paper.util.TickThread;
@@ -398,7 +398,7 @@ index ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670..0171c6a8f8d840f78ae9dceffe821479
 +    public static <T> CompletableFuture<T> addEventListen(final CompletableFuture<T> task) {
 +        final Thread currThread = Thread.currentThread();
 +        if (!(currThread instanceof TickThreadRunner tickThreadRunner)) {
-+            throw new IllegalStateException("Must be tick thread runner");
++            return task;
 +        }
 +
 +        if (tickThreadRunner.eventHandler.isEmpty())
@@ -486,7 +486,7 @@ index 15c4fa89e1f1dbc80055f6f92904d1cc05a24dba..bb4bdd1feaf0ca8351e51312c8ddeb52
                  }, null, 1L);
                  return;
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 817f79bfca1aec161cb4635b9c7a8e21b14db7eb..2ecb65eef92fc74528d8bcd8785e6497628c1bb4 100644
+index 817f79bfca1aec161cb4635b9c7a8e21b14db7eb..47f5767f5720c63862475aba25fd4f5690b93f5d 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -17,6 +17,7 @@ import java.util.Objects;
@@ -497,14 +497,17 @@ index 817f79bfca1aec161cb4635b9c7a8e21b14db7eb..2ecb65eef92fc74528d8bcd8785e6497
  import javax.annotation.Nullable;
  import net.minecraft.BlockUtil;
  import net.minecraft.ChatFormatting;
-@@ -1676,6 +1677,22 @@ public class ServerPlayer extends Player {
+@@ -1676,6 +1677,25 @@ public class ServerPlayer extends Player {
      }
      // CraftBukkit end
  
 +    // Folia start
 +    @Override
-+    protected CompletableFuture<CraftPortalEvent> callPortalEventAsync(Entity entity, ServerLevel exitWorldServer, PositionImpl exitPosition, TeleportCause cause, int searchRadius, int creationRadius) {
-+        Location enter = this.getBukkitEntity().getLocation();
++    protected CompletableFuture<CraftPortalEvent> callPortalEventAsync(Entity entity,
++                                                                       ServerLevel enterWorldServer, PositionImpl originPosition,
++                                                                       ServerLevel exitWorldServer, PositionImpl exitPosition,
++                                                                       TeleportCause cause, int searchRadius, int creationRadius) {
++        Location enter = CraftLocation.toBukkit(originPosition, enterWorldServer.getWorld());
 +        Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld(), getYRot(), getXRot());
 +        PlayerPortalEvent event = new PlayerPortalEvent(this.getBukkitEntity(), enter, exit, cause, searchRadius, true, creationRadius);
 +        return event.callEventAsync(enter)
@@ -648,7 +651,7 @@ index ffb5332310e9b2d10292fe01c37fd48552fedffc..fb8820d0b3542314822f92e3c6c6e63b
  
          player.spawnIn(worldserver1);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d9753801f01 100644
+index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b739dc4c6e 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -1122,13 +1125,17 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
              // wat
              return false;
          }
-@@ -4023,7 +4246,38 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4023,7 +4246,42 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                          targetPos, 16, // load 16 blocks to be safe from block physics
                          ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGH,
                          (chunks) -> {
 -                            ServerLevel.makeObsidianPlatform(destination, null, targetPos);
 +                            this.callPortalEventAsync(
 +                                this,
++                                origin,
++                                new PositionImpl(
++                                    this.getX(), this.getY(), this.getZ()
++                                ),
 +                                destination.getLevel(),
 +                                new PositionImpl(
 +                                    targetPos.getX(), targetPos.getY(), targetPos.getZ()
@@ -1162,7 +1169,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
  
                              // the portal obsidian is placed at targetPos.y - 2, so if we want to place the entity
                              // on the obsidian, we need to spawn at targetPos.y - 1
-@@ -4077,7 +4331,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4077,7 +4335,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                      destination.paperConfig().environment.portalSearchRadius;
                  int portalCreateRadius = destination.paperConfig().environment.portalCreateRadius;
  
@@ -1171,7 +1178,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
                  double dimensionScale = DimensionType.getTeleportationScale(origin.dimensionType(), destination.dimensionType());
                  BlockPos targetPos = destination.getWorldBorder().clampToBounds(this.getX() * dimensionScale, this.getY(), this.getZ() * dimensionScale);
  
-@@ -4090,7 +4344,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4090,7 +4348,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                          // no portal could be created
                          if (portal == null) {
                              portalInfoCompletable.complete(
@@ -1180,7 +1187,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
                              );
                              return;
                          }
-@@ -4101,73 +4355,110 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4101,73 +4359,114 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
                          portalInfoCompletable.complete(
                              PortalShape.createPortalInfo(
@@ -1207,6 +1214,10 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
 -                        }
 +                this.callPortalEventAsync(
 +                    this,
++                    origin,
++                    new PositionImpl(
++                        this.getX(), this.getY(), this.getZ()
++                    ),
 +                    destination.getLevel(),
 +                    new PositionImpl(
 +                        targetPos.getX(), targetPos.getY(), targetPos.getZ()
@@ -1348,7 +1359,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
                  break;
              }
              default: {
-@@ -4223,65 +4514,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4223,65 +4522,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          );
  
          // first, remove entity/passengers from world
@@ -1360,16 +1371,16 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
 -            node.root.preChangeDimension();
 -            node.root.prePortalLogic(originWorld, destination, type);
 -        }
--
++        final Stack<EntityTreeNode> passengerStack = new Stack<>();
++        passengerStack.add(this.detachPassengers());
+ 
 -        for (EntityTreeNode node : fullPassengerTree) {
 -            // we will update pos/rot/speed later
 -            node.root = node.root.transformForAsyncTeleport(destination, null, null, null, null);
 -            // set portal cooldown
 -            node.root.setPortalCooldown();
 -        }
-+        final Stack<EntityTreeNode> passengerStack = new Stack<>();
-+        passengerStack.add(this.detachPassengers());
- 
+-
 -        // ensure the region is always ticking in case of a shutdown
 -        // otherwise, the shutdown will not be able to complete the shutdown as it requires a ticking region
 -        Long teleportHoldId = Long.valueOf(TELEPORT_HOLD_TICKET_GEN.getAndIncrement());
@@ -1543,13 +1554,17 @@ index ee15661227754149164893d6acf678d13b2e1b27..3b631026f521b9d0b16d3274a5985d97
      // Folia end - region threading
  
      @Nullable
-@@ -4492,6 +4867,29 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4492,6 +4875,33 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return new CraftPortalEvent(event);
      }
  
-+    protected CompletableFuture<CraftPortalEvent> callPortalEventAsync(Entity entity, ServerLevel exitWorldServer, PositionImpl exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) {
++    protected CompletableFuture<CraftPortalEvent> callPortalEventAsync(Entity entity,
++                                                                       ServerLevel enterWorldServer, PositionImpl originPosition,
++                                                                       ServerLevel exitWorldServer, PositionImpl exitPosition,
++                                                                       PlayerTeleportEvent.TeleportCause cause,
++                                                                       int searchRadius, int creationRadius) {
 +        org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
-+        Location enter = bukkitEntity.getLocation();
++        Location enter = CraftLocation.toBukkit(originPosition, enterWorldServer.getWorld());
 +        Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld());
 +
 +        // Paper start
