@@ -651,7 +651,7 @@ index ffb5332310e9b2d10292fe01c37fd48552fedffc..fb8820d0b3542314822f92e3c6c6e63b
  
          player.spawnIn(worldserver1);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b739dc4c6e 100644
+index ee15661227754149164893d6acf678d13b2e1b27..d952fc150d1cf4358f3f1b2867514dfb1540ce42 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -1,5 +1,6 @@
@@ -1359,7 +1359,16 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
                  break;
              }
              default: {
-@@ -4223,65 +4522,149 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4209,7 +4508,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+ 
+     }
+ 
+-    protected boolean portalToAsync(ServerLevel destination, boolean takePassengers,
++    protected boolean portalToAsync(ServerLevel originalDestination, boolean takePassengers,
+                                     PortalType type, java.util.function.Consumer<Entity> teleportComplete) {
+         io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
+         if (!this.canPortalAsync(takePassengers)) {
+@@ -4223,65 +4522,152 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          );
  
          // first, remove entity/passengers from world
@@ -1371,16 +1380,16 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
 -            node.root.preChangeDimension();
 -            node.root.prePortalLogic(originWorld, destination, type);
 -        }
-+        final Stack<EntityTreeNode> passengerStack = new Stack<>();
-+        passengerStack.add(this.detachPassengers());
- 
+-
 -        for (EntityTreeNode node : fullPassengerTree) {
 -            // we will update pos/rot/speed later
 -            node.root = node.root.transformForAsyncTeleport(destination, null, null, null, null);
 -            // set portal cooldown
 -            node.root.setPortalCooldown();
 -        }
--
++        final Stack<EntityTreeNode> passengerStack = new Stack<>();
++        passengerStack.add(this.detachPassengers());
+ 
 -        // ensure the region is always ticking in case of a shutdown
 -        // otherwise, the shutdown will not be able to complete the shutdown as it requires a ticking region
 -        Long teleportHoldId = Long.valueOf(TELEPORT_HOLD_TICKET_GEN.getAndIncrement());
@@ -1398,17 +1407,14 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
 -        ServerLevel.PendingTeleport beforeFindDestination = new ServerLevel.PendingTeleport(passengerTree, initialPosition);
 -        originWorld.pushPendingTeleport(beforeFindDestination);
 +        // TODO: Figure out how to allow for world changes besides cancellation
-+        queuePrePortalEntities(passengerStack, from, destination.getWorld())
-+            .thenRun(() -> {
++        queuePrePortalEntities(passengerStack, null, from, originalDestination.getWorld())
++            .thenAccept(event -> {
++                final ServerLevel destination = (ServerLevel) ((CraftWorld) event.getTargetWorld()).getHandle();
 +                final EntityTreeNode passengerTree = this.detachPassengers();
 +                final List<EntityTreeNode> fullPassengerTree = passengerTree.getFullTree();
  
 -        ca.spottedleaf.concurrentutil.completable.Completable<PortalInfo> portalInfoCompletable
 -            = new ca.spottedleaf.concurrentutil.completable.Completable<>();
-+                for (EntityTreeNode node : fullPassengerTree) {
-+                    node.root.preChangeDimension();
-+                    node.root.prePortalLogic(originWorld, destination, type);
-+                }
  
 -        portalInfoCompletable.addWaiter((PortalInfo info, Throwable throwable) -> {
 -            if (!originWorld.removePendingTeleport(beforeFindDestination)) {
@@ -1424,6 +1430,11 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
 -            // adjust passenger tree to final pos
 -            for (EntityTreeNode node : fullPassengerTree) {
 -                node.root.transform(info.pos, Float.valueOf(info.yRot), Float.valueOf(info.xRot), info.speed);
++                for (EntityTreeNode node : fullPassengerTree) {
++                    node.root.preChangeDimension();
++                    node.root.prePortalLogic(originWorld, destination, type);
++                }
++
 +                for (EntityTreeNode node : fullPassengerTree) {
 +                    // we will update pos/rot/speed later
 +                    node.root = node.root.transformForAsyncTeleport(destination, null, null, null, null);
@@ -1476,12 +1487,13 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
 +        return true;
 +    }
 +
-+    private CompletableFuture<Void> queuePrePortalEntities(
++    private CompletableFuture<EntityPortalReadyEvent> queuePrePortalEntities(
 +        final Stack<EntityTreeNode> stack,
++        final EntityPortalReadyEvent lastEvent,
 +        final Location from,
 +        final @Nullable World targetWorld) {
 +        if (stack.isEmpty()) {
-+            return CompletableFuture.completedFuture(null);
++            return CompletableFuture.completedFuture(lastEvent);
 +        }
 +
 +        final EntityTreeNode node = stack.pop();
@@ -1504,7 +1516,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
 -                originWorld, destination, Entity.TELEPORT_FLAG_LOAD_CHUNK | (takePassengers ? Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS : 0L),
 -                passengerTree, teleportComplete
 -            );
-+            return queuePrePortalEntities(stack, from, targetWorld);
++            return queuePrePortalEntities(stack, event, from, targetWorld);
          });
 +    }
  
@@ -1554,7 +1566,7 @@ index ee15661227754149164893d6acf678d13b2e1b27..e82caea14f2848fb97855c7cd92c07b7
      // Folia end - region threading
  
      @Nullable
-@@ -4492,6 +4875,33 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4492,6 +4878,33 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return new CraftPortalEvent(event);
      }
  
