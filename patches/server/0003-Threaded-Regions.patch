@@ -14675,7 +14675,7 @@ index 18aac3da3c88f33b1a71a5920a8daa27e9723913..bb07ad1bb895297356b88dfc4cd17e5e
                  for (ServerPlayer player : ServerLevel.this.players) {
                      player.getBukkitEntity().onEntityRemove(entity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af8a9e8791 100644
+index 9d46536f80b5b3e6641fd377c02166a431edfd77..7c4ec191dc64968d349b244818f65c64ba7ab308 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -190,7 +190,7 @@ import org.bukkit.inventory.MainHand;
@@ -14892,7 +14892,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
          return horizontalSpawnArea <= 16 ? horizontalSpawnArea - 1 : 17;
      }
  
-@@ -1161,6 +1258,345 @@ public class ServerPlayer extends Player {
+@@ -1161,6 +1258,344 @@ public class ServerPlayer extends Player {
          }
      }
  
@@ -14957,9 +14957,13 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
 +        EntityTreeNode passengerTree = this.makePassengerTree();
 +
 +        this.isChangingDimension = true;
-+        // must be manually removed from connections
-+        this.serverLevel().getCurrentWorldData().connections.remove(this.connection.connection);
 +        origin.removePlayerImmediately(this, RemovalReason.CHANGED_DIMENSION);
++        // reset player if needed, only after removal from world
++        if (!alive) {
++            ServerPlayer.this.reset();
++        }
++        // must be manually removed from connections, delay until after reset() so that we do not trip any thread checks
++        this.serverLevel().getCurrentWorldData().connections.remove(this.connection.connection);
 +
 +        BlockPos respawnPos = this.getRespawnPosition();
 +        float respawnAngle = this.getRespawnAngle();
@@ -14987,11 +14991,6 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
 +                TELEPORT_FLAG_LOAD_CHUNK | TELEPORT_FLAGS_PLAYER_RESPAWN | TELEPORT_FLAGS_AVOID_SUFFOCATION,
 +                passengerTree, // note: we expect this to just be the player, no passengers
 +                (entity) -> {
-+                    // reset player if needed
-+                    // only after placing, so that we don't trip thread checks
-+                    if (!alive) {
-+                        ServerPlayer.this.reset();
-+                    }
 +                    // now the player is in the world, and can receive sound
 +                    if (usedRespawnAnchor[0]) {
 +                        ServerPlayer.this.connection.send(
@@ -15238,7 +15237,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
      @Nullable
      @Override
      public Entity changeDimension(ServerLevel destination) {
-@@ -1170,6 +1606,11 @@ public class ServerPlayer extends Player {
+@@ -1170,6 +1605,11 @@ public class ServerPlayer extends Player {
  
      @Nullable
      public Entity changeDimension(ServerLevel worldserver, PlayerTeleportEvent.TeleportCause cause) {
@@ -15250,7 +15249,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
          // CraftBukkit end
          if (this.isSleeping()) return this; // CraftBukkit - SPIGOT-3154
          // this.isChangingDimension = true; // CraftBukkit - Moved down and into PlayerList#changeDimension
-@@ -2114,6 +2555,12 @@ public class ServerPlayer extends Player {
+@@ -2114,6 +2554,12 @@ public class ServerPlayer extends Player {
      public void setCamera(@Nullable Entity entity) {
          Entity entity1 = this.getCamera();
  
@@ -15263,7 +15262,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
          this.camera = (Entity) (entity == null ? this : entity);
          if (entity1 != this.camera) {
              // Paper start - Add PlayerStartSpectatingEntityEvent and PlayerStopSpectatingEntity Event
-@@ -2307,7 +2754,7 @@ public class ServerPlayer extends Player {
+@@ -2307,7 +2753,7 @@ public class ServerPlayer extends Player {
      }
  
      public void untrackChunk(ChunkPos chunkPos) {
@@ -15272,7 +15271,7 @@ index 9d46536f80b5b3e6641fd377c02166a431edfd77..abbc8992523e55a665318df07dd732af
              this.connection.send(new ClientboundForgetLevelChunkPacket(chunkPos.x, chunkPos.z));
              // Paper start
              if(io.papermc.paper.event.packet.PlayerChunkUnloadEvent.getHandlerList().getRegisteredListeners().length > 0){
-@@ -2626,7 +3073,7 @@ public class ServerPlayer extends Player {
+@@ -2626,7 +3072,7 @@ public class ServerPlayer extends Player {
          this.experienceLevel = this.newLevel;
          this.totalExperience = this.newTotalExp;
          this.experienceProgress = 0;
