@@ -18070,6 +18070,22 @@ index 8e1c60d3622bf069feec5e636d2a5b4257e11776..9d058297c9711a9ce71a99b1e9289ae1
              // CraftBukkit end
              this.navigation.stop();
              return true;
+diff --git a/src/main/java/net/minecraft/world/entity/ai/navigation/GroundPathNavigation.java b/src/main/java/net/minecraft/world/entity/ai/navigation/GroundPathNavigation.java
+index 71934af2dc4d209a9fbccfd36b5f2815ec196892..ef5f231ca2ac2837609670e84d9571eb8f80126e 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/navigation/GroundPathNavigation.java
++++ b/src/main/java/net/minecraft/world/entity/ai/navigation/GroundPathNavigation.java
+@@ -40,6 +40,11 @@ public class GroundPathNavigation extends PathNavigation {
+ 
+     @Override
+     public Path createPath(BlockPos target, @javax.annotation.Nullable Entity entity, int distance) { // Paper
++        // Folia start - region threading
++        if (!io.papermc.paper.util.TickThread.isTickThreadFor((net.minecraft.server.level.ServerLevel)this.level, target) || this.level.getChunkIfLoaded(target) == null) {
++            return null;
++        }
++        // Folia end - region threading
+         if (this.level.getBlockState(target).isAir()) {
+             BlockPos blockPos;
+             for(blockPos = target.below(); blockPos.getY() > this.level.getMinBuildHeight() && this.level.getBlockState(blockPos).isAir(); blockPos = blockPos.below()) {
 diff --git a/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java b/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
 index b376670d11088e524ce246f667e580e90cd119a3..2549b81eb5fa1a021edac960170f5e0d513dae97 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
