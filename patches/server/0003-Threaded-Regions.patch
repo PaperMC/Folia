@@ -5472,10 +5472,10 @@ index 0000000000000000000000000000000000000000..112d24a93bddf3d81c9176c05340c94e
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TeleportUtils.java b/src/main/java/io/papermc/paper/threadedregions/TeleportUtils.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1bb3d07dff
+index 0000000000000000000000000000000000000000..7b31c4ea6d01f936271bdadc3626201dcf32a683
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TeleportUtils.java
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,70 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.completable.Completable;
@@ -5496,7 +5496,9 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +        positionCompletable.addWaiter(
 +            (final Location loc, final Throwable thr) -> {
 +                if (loc == null) {
-+                    onComplete.accept(null);
++                    if (onComplete != null) {
++                        onComplete.accept(null);
++                    }
 +                    return;
 +                }
 +                final boolean scheduled = from.getBukkitEntity().taskScheduler.schedule(
@@ -5510,12 +5512,16 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +                        );
 +                    },
 +                    (final Entity retired) -> {
-+                        onComplete.accept(null);
++                        if (onComplete != null) {
++                            onComplete.accept(null);
++                        }
 +                    },
 +                    1L
 +                );
 +                if (!scheduled) {
-+                    onComplete.accept(null);
++                    if (onComplete != null) {
++                        onComplete.accept(null);
++                    }
 +                }
 +            }
 +        );
@@ -5525,12 +5531,16 @@ index 0000000000000000000000000000000000000000..84b4ff07735fb84e28ee8966ffdedb1b
 +                positionCompletable.complete(target.getBukkitEntity().getLocation());
 +            },
 +            (final Entity retired) -> {
-+                onComplete.accept(null);
++                if (onComplete != null) {
++                    onComplete.accept(null);
++                }
 +            },
 +            1L
 +        );
 +        if (!scheduled) {
-+            onComplete.accept(null);
++            if (onComplete != null) {
++                onComplete.accept(null);
++            }
 +        }
 +    }
 +
