@@ -1,0 +1,201 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Sun, 27 Aug 2023 01:07:34 -0700
+Subject: [PATCH] fixup! Optimize Hoppers
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+index 1eebd3969735bff3e5559ed01ab4a2ec1c3c2de6..81d8de7c80bac16d874faf990cb08f1556a46adc 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -151,6 +151,43 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+ 
+     }
+ 
++    // Paper start - optimize hoppers
++    private static final int HOPPER_EMPTY = 0;
++    private static final int HOPPER_HAS_ITEMS = 1;
++    private static final int HOPPER_IS_FULL = 2;
++
++    private static int getFullState(final HopperBlockEntity tileEntity) {
++        tileEntity.unpackLootTable(null);
++
++        final List<ItemStack> hopperItems = tileEntity.getItems();
++
++        boolean empty = true;
++        boolean full = true;
++
++        for (int i = 0, len = hopperItems.size(); i < len; ++i) {
++            final ItemStack stack = hopperItems.get(i);
++            if (stack.isEmpty()) {
++                full = false;
++                continue;
++            }
++
++            if (!full) {
++                // can't be full
++                return HOPPER_HAS_ITEMS;
++            }
++
++            empty = false;
++
++            if (stack.getCount() != stack.getMaxStackSize()) {
++                // can't be full or empty
++                return HOPPER_HAS_ITEMS;
++            }
++        }
++
++        return empty ? HOPPER_EMPTY : (full ? HOPPER_IS_FULL : HOPPER_HAS_ITEMS);
++    }
++    // Paper end - optimize hoppers
++
+     private static boolean tryMoveItems(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, BooleanSupplier booleansupplier) {
+         if (world.isClientSide) {
+             return false;
+@@ -158,11 +195,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             if (!blockEntity.isOnCooldown() && (Boolean) state.getValue(HopperBlock.ENABLED)) {
+                 boolean flag = false;
+ 
+-                if (!blockEntity.isEmpty()) {
++                int fullState = getFullState(blockEntity); // Paper - optimize hoppers
++
++                if (fullState != HOPPER_EMPTY) { // Paper - optimize hoppers
+                     flag = HopperBlockEntity.ejectItems(world, pos, state, (Container) blockEntity, blockEntity); // CraftBukkit
+                 }
+ 
+-                if (!blockEntity.inventoryFull()) {
++                if (fullState != HOPPER_IS_FULL || flag) { // Paper - optimize hoppers
+                     flag |= booleansupplier.getAsBoolean();
+                 }
+ 
+@@ -454,7 +493,25 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     }
+ 
+     private static boolean isFullContainer(Container inventory, Direction direction) {
+-        return allMatch(inventory, direction, STACK_SIZE_TEST); // Paper - no streams
++        // Paper start - optimize hoppers
++        if (inventory instanceof WorldlyContainer worldlyContainer) {
++            for (final int slot : worldlyContainer.getSlotsForFace(direction)) {
++                final ItemStack stack = inventory.getItem(slot);
++                if (stack.getCount() < stack.getMaxStackSize()) {
++                    return false;
++                }
++            }
++            return true;
++        } else {
++            for (int slot = 0, max = inventory.getContainerSize(); slot < max; ++slot) {
++                final ItemStack stack = inventory.getItem(slot);
++                if (stack.getCount() < stack.getMaxStackSize()) {
++                    return false;
++                }
++            }
++            return true;
++        }
++        // Paper end - optimize hoppers
+     }
+ 
+     private static boolean isEmptyContainer(Container inv, Direction facing) {
+@@ -470,29 +527,43 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+ 
+             // Paper start - optimize hoppers and remove streams
+             worldData.skipPullModeEventFire = worldData.skipHopperEvents; // Folia - region threading
+-            return !HopperBlockEntity.isEmptyContainer(iinventory, enumdirection) && anyMatch(iinventory, enumdirection, (item, i) -> {
+-                // Logic copied from below to avoid extra getItem calls
+-                if (!item.isEmpty() && canTakeItemFromContainer(hopper, iinventory, item, i, enumdirection)) {
+-                    return hopperPull(world, hopper, iinventory, item, i);
+-                } else {
+-                    return false;
++            // merge container isEmpty check and move logic into one loop
++            if (iinventory instanceof WorldlyContainer worldlyContainer) {
++                for (final int slot : worldlyContainer.getSlotsForFace(enumdirection)) {
++                    ItemStack item = worldlyContainer.getItem(slot);
++                    if (item.isEmpty() || !canTakeItemFromContainer(hopper, iinventory, item, slot, enumdirection)) {
++                        continue;
++                    }
++                    if (hopperPull(world, hopper, iinventory, item, slot)) {
++                        return true;
++                    }
+                 }
+-                // Paper end
+-            });
++                return false;
++            } else {
++                for (int slot = 0, max = iinventory.getContainerSize(); slot < max; ++slot) {
++                    ItemStack item = iinventory.getItem(slot);
++                    if (item.isEmpty() || !canTakeItemFromContainer(hopper, iinventory, item, slot, enumdirection)) {
++                        continue;
++                    }
++                    if (hopperPull(world, hopper, iinventory, item, slot)) {
++                        return true;
++                    }
++                }
++                return false;
++            }
++            // Paper end
+         } else {
+-            Iterator iterator = HopperBlockEntity.getItemsAtAndAbove(world, hopper).iterator();
++            final List<ItemEntity> items = HopperBlockEntity.getItemsAtAndAbove(world, hopper); // Paper - optimize hoppers
+ 
+-            ItemEntity entityitem;
+-
+-            do {
+-                if (!iterator.hasNext()) {
+-                    return false;
++            // Paper start - optimize hoppers
++            for (int i = 0, len = items.size(); i < len; ++i) {
++                if (HopperBlockEntity.addItem(hopper, items.get(i))) {
++                    return true;
+                 }
++            }
+ 
+-                entityitem = (ItemEntity) iterator.next();
+-            } while (!HopperBlockEntity.addItem(hopper, entityitem));
+-
+-            return true;
++            return false;
++            // Paper end - optimize hoppers
+         }
+     }
+ 
+@@ -550,23 +621,25 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     public static boolean addItem(Container inventory, ItemEntity itemEntity) {
+         boolean flag = false;
+         // CraftBukkit start
++        if (InventoryPickupItemEvent.getHandlerList().getRegisteredListeners().length > 0) { // Paper - optimize hoppers
+         InventoryPickupItemEvent event = new InventoryPickupItemEvent(getInventory(inventory), (org.bukkit.entity.Item) itemEntity.getBukkitEntity()); // Paper - use getInventory() to avoid snapshot creation
+         itemEntity.level().getCraftServer().getPluginManager().callEvent(event);
+         if (event.isCancelled()) {
+             return false;
+         }
+         // CraftBukkit end
++        } // Paper - optimize hoppers
+         ItemStack itemstack = itemEntity.getItem().copy();
+         ItemStack itemstack1 = HopperBlockEntity.addItem((Container) null, inventory, itemstack, (Direction) null);
+ 
++        // Paper start - optimize hoppers
++        itemEntity.setItem(itemstack1);
+         if (itemstack1.isEmpty()) {
+-            flag = true;
+             itemEntity.discard();
+-        } else {
+-            itemEntity.setItem(itemstack1);
++            return true;
+         }
+-
+-        return flag;
++        return false;
++        // Paper end - optimize hoppers
+     }
+ 
+     public static ItemStack addItem(@Nullable Container from, Container to, ItemStack stack, @Nullable Direction side) {
+@@ -786,8 +859,8 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             }
+         }
+ 
+-        if (object == null && (!optimizeEntities || !world.paperConfig().hopper.ignoreOccludingBlocks || !org.bukkit.craftbukkit.util.CraftMagicNumbers.getMaterial(block).isOccluding())) { // Paper
+-            List<Entity> list = world.getEntities((Entity) null, new AABB(x - 0.5D, y - 0.5D, z - 0.5D, x + 0.5D, y + 0.5D, z + 0.5D), EntitySelector.CONTAINER_ENTITY_SELECTOR);
++        if (object == null && (!optimizeEntities || !world.paperConfig().hopper.ignoreOccludingBlocks || !iblockdata.getBukkitMaterial().isOccluding())) { // Paper
++            List<Entity> list = world.getEntitiesOfClass((Class)Container.class, new AABB(x - 0.5D, y - 0.5D, z - 0.5D, x + 0.5D, y + 0.5D, z + 0.5D), EntitySelector.CONTAINER_ENTITY_SELECTOR); // Paper - optimize hoppers, use getEntitiesOfClass
+ 
+             if (!list.isEmpty()) {
+                 object = (Container) list.get(world.random.nextInt(list.size()));
