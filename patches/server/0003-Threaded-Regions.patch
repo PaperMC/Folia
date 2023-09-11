@@ -15360,7 +15360,7 @@ index 618ab9a2903f6d4139acd4aaa2e6db0a26e88ba9..82e9307e4c95edc30c9dd78cd3fefa87
                      org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockDropItemEvent(bblock, state, this.player, itemsToDrop); // Paper - use stored ref
                  }
 diff --git a/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java b/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java
-index b4be02ec4bb77059f79d3e4d6a6f1ee4843a01f9..b3d9133a569c0257c3ad2728f023a883fa730fad 100644
+index 76bd323f25d7c2f4e12dd13baa53995fa4f8b27a..6a4265fb1fd4bb2c032c0da6c71532d56409428f 100644
 --- a/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java
 +++ b/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java
 @@ -97,10 +97,15 @@ public class ThreadedLevelLightEngine extends LevelLightEngine implements AutoCl
@@ -15388,9 +15388,9 @@ index b4be02ec4bb77059f79d3e4d6a6f1ee4843a01f9..b3d9133a569c0257c3ad2728f023a883
 -    private final Long2IntOpenHashMap chunksBeingWorkedOn = new Long2IntOpenHashMap();
 +    //private final Long2IntOpenHashMap chunksBeingWorkedOn = new Long2IntOpenHashMap(); // Folia - region threading
  
-     private void queueTaskForSection(final int chunkX, final int chunkY, final int chunkZ, final Supplier<CompletableFuture<Void>> runnable) {
-         final ServerLevel world = (ServerLevel)this.theLightEngine.getWorld();
-@@ -127,11 +132,16 @@ public class ThreadedLevelLightEngine extends LevelLightEngine implements AutoCl
+     private void queueTaskForSection(final int chunkX, final int chunkY, final int chunkZ,
+                                      final Supplier<io.papermc.paper.chunk.system.light.LightQueue.ChunkTasks> runnable) { // Paper - rewrite chunk system
+@@ -128,11 +133,16 @@ public class ThreadedLevelLightEngine extends LevelLightEngine implements AutoCl
              return;
          }
  
@@ -15410,9 +15410,9 @@ index b4be02ec4bb77059f79d3e4d6a6f1ee4843a01f9..b3d9133a569c0257c3ad2728f023a883
              return;
          }
  
-@@ -144,22 +154,28 @@ public class ThreadedLevelLightEngine extends LevelLightEngine implements AutoCl
-             return;
+@@ -151,22 +161,28 @@ public class ThreadedLevelLightEngine extends LevelLightEngine implements AutoCl
          }
+         updateFuture.isTicketAdded = true;
  
 -        final int references = this.chunksBeingWorkedOn.addTo(key, 1);
 +        final int references = this.chunkMap.level.getCurrentWorldData().chunksBeingWorkedOn.addTo(key, 1); // Folia - region threading
@@ -15421,7 +15421,7 @@ index b4be02ec4bb77059f79d3e4d6a6f1ee4843a01f9..b3d9133a569c0257c3ad2728f023a883
              world.getChunkSource().addRegionTicket(ca.spottedleaf.starlight.common.light.StarLightInterface.CHUNK_WORK_TICKET, pos, 0, pos);
          }
  
--        updateFuture.thenAcceptAsync((final Void ignore) -> {
+-        updateFuture.onComplete.thenAcceptAsync((final Void ignore) -> {
 -            final int newReferences = this.chunksBeingWorkedOn.get(key);
 -            if (newReferences == 1) {
 -                this.chunksBeingWorkedOn.remove(key);
@@ -15432,7 +15432,7 @@ index b4be02ec4bb77059f79d3e4d6a6f1ee4843a01f9..b3d9133a569c0257c3ad2728f023a883
 -            }
 -        }, world.getChunkSource().chunkMap.mainThreadExecutor).whenComplete((final Void ignore, final Throwable thr) -> {
 +        // Folia start - region threading
-+        updateFuture.thenAccept((final Void ignore) -> {
++        updateFuture.onComplete.thenAccept((final Void ignore) -> {
 +            io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
 +                this.chunkMap.level, chunkX, chunkZ, () -> {
 +                    final int newReferences = this.chunkMap.level.getCurrentWorldData().chunksBeingWorkedOn.get(key);
@@ -17792,7 +17792,7 @@ index e8485fb900b25e911a858678a833852731cb2ace..71830b5fbeda3c7c63460c7cee05217d
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index e11d7283662834047b2ff81a2fd25a4263792deb..40dd667bacd296a3a329391dc87a5713c464f4a2 100644
+index 7763450e85146d43fcf84d380d0e7a8183d83747..50e1390f455cf8e6da9153760f32ccb81aa20bd1 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -276,6 +276,13 @@ public abstract class LivingEntity extends Entity implements Attackable {
@@ -18405,7 +18405,7 @@ index 18eaccb39a4c81338a8cbebe3de03934913ac2a4..34b3541603b8cca16c7d62f3981d7ce3
                  boolean flag = this.blockState.is(BlockTags.ANVIL);
  
 diff --git a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
-index 52196431a6538872755344859a0454a0e50c3b6e..76e010769786132d8af3889051b3f52e9f683509 100644
+index d39f31e7cf315c7cdc1daab28164380e44dd8341..c213ef54c93b98837528c2d5ca45e6659cd43515 100644
 --- a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
 @@ -52,7 +52,7 @@ public class ItemEntity extends Entity implements TraceableEntity {
@@ -19645,7 +19645,7 @@ index 8f97c9df726ac20cfce7bdddd5dd4f8c5aa76c35..e8c4815960ab144298d4352f393b9670
  
      static class CacheKey {
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f7860bb8874 100644
+index 773bfdd3ed457a352b5329f280c0d10297d579ba..3a760887aa1469963c34886b38cdb51e91408cd3 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -117,10 +117,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -19779,7 +19779,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
          this.registryAccess = iregistrycustom;
          this.damageSources = new DamageSources(iregistrycustom);
          // CraftBukkit start
-@@ -457,8 +474,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -541,8 +558,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      @Nullable
      public final BlockState getBlockStateIfLoaded(BlockPos pos) {
          // CraftBukkit start - tree generation
@@ -19790,7 +19790,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
              if (previous != null) {
                  return previous.getHandle();
              }
-@@ -520,16 +537,18 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -604,16 +621,18 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public boolean setBlock(BlockPos pos, BlockState state, int flags, int maxUpdateDepth) {
@@ -19812,7 +19812,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
              }
              blockstate.setFlag(flags); // Paper - update the flag also
              blockstate.setData(state);
-@@ -546,10 +565,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -630,10 +649,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
              // CraftBukkit start - capture blockstates
              boolean captured = false;
@@ -19825,7 +19825,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
                  captured = true;
              }
              // CraftBukkit end
-@@ -559,8 +578,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -643,8 +662,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
              if (iblockdata1 == null) {
                  // CraftBukkit start - remove blockstate if failed (or the same)
@@ -19836,7 +19836,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
                  }
                  // CraftBukkit end
                  return false;
-@@ -597,7 +616,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -681,7 +700,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  */
  
                  // CraftBukkit start
@@ -19845,7 +19845,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
                      // Modularize client and physic updates
                      // Spigot start
                      try {
-@@ -647,7 +666,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -731,7 +750,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  iblockdata1.updateIndirectNeighbourShapes(this, blockposition, k, j - 1); // Don't call an event for the old block to limit event spam
                  CraftWorld world = ((ServerLevel) this).getWorld();
                  boolean cancelledUpdates = false; // Paper
@@ -19854,7 +19854,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
                      BlockPhysicsEvent event = new BlockPhysicsEvent(world.getBlockAt(blockposition.getX(), blockposition.getY(), blockposition.getZ()), CraftBlockData.fromData(iblockdata));
                      this.getCraftServer().getPluginManager().callEvent(event);
  
-@@ -661,7 +680,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -745,7 +764,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              }
  
              // CraftBukkit start - SPIGOT-5710
@@ -19863,7 +19863,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
                  this.onBlockStateChange(blockposition, iblockdata1, iblockdata2);
              }
              // CraftBukkit end
-@@ -740,7 +759,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -824,7 +843,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public void neighborShapeChanged(Direction direction, BlockState neighborState, BlockPos pos, BlockPos neighborPos, int flags, int maxUpdateDepth) {
@@ -19872,7 +19872,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
      }
  
      @Override
-@@ -765,11 +784,34 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -849,11 +868,34 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          return this.getChunkSource().getLightEngine();
      }
  
@@ -19909,7 +19909,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
              if (previous != null) {
                  return previous.getHandle();
              }
-@@ -860,7 +902,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -944,7 +986,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      }
  
      public void addBlockEntityTicker(TickingBlockEntity ticker) {
@@ -19918,7 +19918,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
      }
  
      protected void tickBlockEntities() {
-@@ -868,11 +910,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -952,11 +994,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
          gameprofilerfiller.push("blockEntities");
          timings.tileEntityPending.startTiming(); // Spigot
@@ -19934,7 +19934,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
          timings.tileEntityPending.stopTiming(); // Spigot
  
          timings.tileEntityTick.startTiming(); // Spigot
-@@ -881,9 +922,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -965,9 +1006,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          int tilesThisCycle = 0;
          var toRemove = new it.unimi.dsi.fastutil.objects.ObjectOpenCustomHashSet<TickingBlockEntity>(net.minecraft.Util.identityStrategy()); // Paper - use removeAll
          toRemove.add(null);
@@ -19946,7 +19946,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
              // Spigot start
              if (tickingblockentity == null) {
                  this.getCraftServer().getLogger().severe("Spigot has detected a null entity and has removed it, preventing a crash");
-@@ -900,19 +940,19 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -984,19 +1024,19 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              } else if (this.shouldTickBlocksAt(tickingblockentity.getPos())) {
                  tickingblockentity.tick();
                  // Paper start - execute chunk tasks during tick
@@ -19971,7 +19971,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
      }
  
      public <T extends Entity> void guardEntityTick(Consumer<T> tickConsumer, T entity) {
-@@ -925,7 +965,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1009,7 +1049,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              final String msg = String.format("Entity threw exception at %s:%s,%s,%s", entity.level().getWorld().getName(), entity.getX(), entity.getY(), entity.getZ());
              MinecraftServer.LOGGER.error(msg, throwable);
              getCraftServer().getPluginManager().callEvent(new ServerExceptionEvent(new ServerInternalException(msg, throwable)));
@@ -19981,7 +19981,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
              // Paper end
          }
      }
-@@ -1008,9 +1049,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1092,9 +1133,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Nullable
      public BlockEntity getBlockEntity(BlockPos blockposition, boolean validate) {
@@ -19997,7 +19997,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
              return blockEntity;
          }
          // Paper end
-@@ -1023,8 +1069,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1107,8 +1153,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
          if (!this.isOutsideBuildHeight(blockposition)) {
              // CraftBukkit start
@@ -20008,7 +20008,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
                  return;
              }
              // CraftBukkit end
-@@ -1104,6 +1150,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1188,6 +1234,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public List<Entity> getEntities(@Nullable Entity except, AABB box, Predicate<? super Entity> predicate) {
@@ -20016,7 +20016,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
          this.getProfiler().incrementCounter("getEntities");
          List<Entity> list = Lists.newArrayList();
          ((ServerLevel)this).getEntityLookup().getEntities(except, box, list, predicate); // Paper - optimise this call
-@@ -1123,6 +1170,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1207,6 +1254,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      }
  
      public <T extends Entity> void getEntities(EntityTypeTest<Entity, T> filter, AABB box, Predicate<? super T> predicate, List<? super T> result, int limit) {
@@ -20024,7 +20024,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
          this.getProfiler().incrementCounter("getEntities");
          // Paper start - optimise this call
          //TODO use limit
-@@ -1160,13 +1208,30 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1244,13 +1292,30 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      public void disconnect() {}
  
@@ -20057,7 +20057,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
  
      public boolean mayInteract(Player player, BlockPos pos) {
          return true;
-@@ -1368,8 +1433,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1452,8 +1517,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      }
      public final BlockPos.MutableBlockPos getRandomBlockPosition(int x, int y, int z, int l, BlockPos.MutableBlockPos out) {
          // Paper end
@@ -20067,7 +20067,7 @@ index f39ab10c5b0b8d86b579a5b683491204c51db70b..53b51bab52c8bf1becc98916e5a25f78
  
          out.set(x + (i1 & 15), y + (i1 >> 16 & l), z + (i1 >> 8 & 15)); // Paper - change to setValues call
          return out; // Paper
-@@ -1400,7 +1464,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1484,7 +1548,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
  
      @Override
      public long nextSubTickCount() {
