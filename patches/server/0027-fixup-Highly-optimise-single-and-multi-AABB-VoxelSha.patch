@@ -3695,6 +3695,28 @@ index d4477b0dda6a1ef7bd8323c0d11b636bd071d18e..f0de72afad4bb571153436399386a6a8
      }
  
      public PalettedContainer<BlockState> getStates() {
+diff --git a/src/main/java/net/minecraft/world/level/material/FlowingFluid.java b/src/main/java/net/minecraft/world/level/material/FlowingFluid.java
+index 5502ad143fd2575f1346334b5b4fe7846628f54e..1bbe534bb3058fe804fcaa5fce62c64b48a4dd19 100644
+--- a/src/main/java/net/minecraft/world/level/material/FlowingFluid.java
++++ b/src/main/java/net/minecraft/world/level/material/FlowingFluid.java
+@@ -240,6 +240,17 @@ public abstract class FlowingFluid extends Fluid {
+     }
+ 
+     private boolean canPassThroughWall(Direction face, BlockGetter world, BlockPos pos, BlockState state, BlockPos fromPos, BlockState fromState) {
++        // Paper start - optimise collisions
++        if (state.emptyCollisionShape() & fromState.emptyCollisionShape()) {
++            // don't even try to cache simple cases
++            return true;
++        }
++
++        if (state.occludesFullBlock() | fromState.occludesFullBlock()) {
++            // don't even try to cache simple cases
++            return false;
++        }
++        // Paper end - optimise collisions
+         Object2ByteLinkedOpenHashMap object2bytelinkedopenhashmap;
+ 
+         if (!state.getBlock().hasDynamicShape() && !fromState.getBlock().hasDynamicShape()) {
 diff --git a/src/main/java/net/minecraft/world/phys/AABB.java b/src/main/java/net/minecraft/world/phys/AABB.java
 index ffc76354ead6937daf366c3d87bcb51d3e4c47f5..e3dbf3066337a482460238f8a94d854cf88adfa2 100644
 --- a/src/main/java/net/minecraft/world/phys/AABB.java
