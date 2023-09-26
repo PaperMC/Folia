@@ -2813,19 +2813,6 @@ index b66a7d4aab887309579154815a0d4abf9de506b0..08075b8895f816420c2a940bf551dfad
          }
  
          return true;
-diff --git a/src/main/java/io/papermc/paper/command/PaperCommand.java b/src/main/java/io/papermc/paper/command/PaperCommand.java
-index 05b29305f5e3018a662884c2ef1af5ae4f6867ee..a500d00538c2490fcb2a6cdfd187f95185d2ed54 100644
---- a/src/main/java/io/papermc/paper/command/PaperCommand.java
-+++ b/src/main/java/io/papermc/paper/command/PaperCommand.java
-@@ -42,7 +42,7 @@ public final class PaperCommand extends Command {
-         commands.put(Set.of("debug", "chunkinfo", "holderinfo"), new ChunkDebugCommand());
-         commands.put(Set.of("syncloadinfo"), new SyncLoadInfoCommand());
-         commands.put(Set.of("dumpitem"), new DumpItemCommand());
--        commands.put(Set.of("mobcaps", "playermobcaps"), new MobcapsCommand());
-+        commands.put(Set.of("mobcaps"), new MobcapsCommand()); // Folia - region threading - revert per player mob caps
-         commands.put(Set.of("dumplisteners"), new DumpListenersCommand());
- 
-         return commands.entrySet().stream()
 diff --git a/src/main/java/io/papermc/paper/command/PaperCommands.java b/src/main/java/io/papermc/paper/command/PaperCommands.java
 index 7b58b2d6297800c2dcdbf7539e5ab8e7703f39f1..a587d83b78af4efc484f939529acf70834f60d7e 100644
 --- a/src/main/java/io/papermc/paper/command/PaperCommands.java
@@ -2865,71 +2852,6 @@ index cd2e4d792e972b8bf1e07b8961594a670ae949cf..3ab8dbf2768a4ef8fb53af6f5431f7f6
          return true;
      }
  
-diff --git a/src/main/java/io/papermc/paper/command/subcommands/MobcapsCommand.java b/src/main/java/io/papermc/paper/command/subcommands/MobcapsCommand.java
-index d3b39d88a72ca25057fd8574d32f28db0d420818..41aaa709dc2e474f23e759ebc51f33021c4f5485 100644
---- a/src/main/java/io/papermc/paper/command/subcommands/MobcapsCommand.java
-+++ b/src/main/java/io/papermc/paper/command/subcommands/MobcapsCommand.java
-@@ -46,7 +46,7 @@ public final class MobcapsCommand implements PaperSubcommand {
-     public boolean execute(final CommandSender sender, final String subCommand, final String[] args) {
-         switch (subCommand) {
-             case "mobcaps" -> this.printMobcaps(sender, args);
--            case "playermobcaps" -> this.printPlayerMobcaps(sender, args);
-+            //case "playermobcaps" -> this.printPlayerMobcaps(sender, args); // Folia - region threading - revert per player mob caps
-         }
-         return true;
-     }
-@@ -55,7 +55,7 @@ public final class MobcapsCommand implements PaperSubcommand {
-     public List<String> tabComplete(final CommandSender sender, final String subCommand, final String[] args) {
-         return switch (subCommand) {
-             case "mobcaps" -> CommandUtil.getListMatchingLast(sender, args, this.suggestMobcaps(args));
--            case "playermobcaps" -> CommandUtil.getListMatchingLast(sender, args, this.suggestPlayerMobcaps(sender, args));
-+            //case "playermobcaps" -> CommandUtil.getListMatchingLast(sender, args, this.suggestPlayerMobcaps(sender, args)); // Folia - region threading - revert per player mob caps
-             default -> throw new IllegalArgumentException();
-         };
-     }
-@@ -140,41 +140,7 @@ public final class MobcapsCommand implements PaperSubcommand {
-         }
-     }
- 
--    private void printPlayerMobcaps(final CommandSender sender, final String[] args) {
--        final @Nullable Player player;
--        if (args.length == 0) {
--            if (sender instanceof Player pl) {
--                player = pl;
--            } else {
--                sender.sendMessage(Component.text("Must specify a player! ex: '/paper playermobcount playerName'", NamedTextColor.RED));
--                return;
--            }
--        } else if (args.length == 1) {
--            final String input = args[0];
--            player = Bukkit.getPlayerExact(input);
--            if (player == null) {
--                sender.sendMessage(Component.text("Could not find player named '" + input + "'", NamedTextColor.RED));
--                return;
--            }
--        } else {
--            sender.sendMessage(Component.text("Too many arguments!", NamedTextColor.RED));
--            return;
--        }
--
--        final ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
--        final ServerLevel level = serverPlayer.serverLevel();
--
--        if (!level.paperConfig().entities.spawning.perPlayerMobSpawns) {
--            sender.sendMessage(Component.text("Use '/paper mobcaps' for worlds where per-player mob spawning is disabled.", NamedTextColor.RED));
--            return;
--        }
--
--        sender.sendMessage(Component.join(JoinConfiguration.noSeparators(), Component.text("Mobcaps for player: "), Component.text(player.getName(), NamedTextColor.GREEN)));
--        sender.sendMessage(createMobcapsComponent(
--            category -> level.chunkSource.chunkMap.getMobCountNear(serverPlayer, category),
--            category -> level.getWorld().getSpawnLimitUnsafe(org.bukkit.craftbukkit.util.CraftSpawnCategory.toBukkit(category))
--        ));
--    }
-+    // Folia - region threading - revert per player mob caps
- 
-     private static Component createMobcapsComponent(final ToIntFunction<MobCategory> countGetter, final ToIntFunction<MobCategory> limitGetter) {
-         return MOB_CATEGORY_COLORS.entrySet().stream()
 diff --git a/src/main/java/io/papermc/paper/command/subcommands/ReloadCommand.java b/src/main/java/io/papermc/paper/command/subcommands/ReloadCommand.java
 index bd68139ae635f2ad7ec8e7a21e0056a139c4c62e..48a43341b17247355a531164019d5cc9c5555f26 100644
 --- a/src/main/java/io/papermc/paper/command/subcommands/ReloadCommand.java
@@ -19965,23 +19887,10 @@ index 12eaafdbd324fa36b3f46c3b644bc8117a4123ad..c8c358a2ce567567159039ed6a1ba804
      @Deprecated
      default boolean hasChunksAt(int minX, int minZ, int maxX, int maxZ) {
 diff --git a/src/main/java/net/minecraft/world/level/NaturalSpawner.java b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
-index 3cdddda9c0618e95288b81b975d499c8dd30c05f..ae9aa09ba41e1f0ffe071bbac503590eeaf3bf47 100644
+index 3cdddda9c0618e95288b81b975d499c8dd30c05f..5caca2a34849189ea42d2699f6d8672e0d7251cb 100644
 --- a/src/main/java/net/minecraft/world/level/NaturalSpawner.java
 +++ b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
-@@ -115,11 +115,7 @@ public final class NaturalSpawner {
-                     }
- 
-                     object2intopenhashmap.addTo(enumcreaturetype, 1);
--                    // Paper start
--                    if (countMobs) {
--                        chunk.level.getChunkSource().chunkMap.updatePlayerMobTypeMap(entity);
--                    }
--                    // Paper end
-+                    // Folia - rewrite chunk system - revert per player mob caps
-                 });
-             }
-         }
-@@ -146,7 +142,7 @@ public final class NaturalSpawner {
+@@ -146,7 +146,7 @@ public final class NaturalSpawner {
              int limit = enumcreaturetype.getMaxInstancesPerChunk();
              SpawnCategory spawnCategory = CraftSpawnCategory.toBukkit(enumcreaturetype);
              if (CraftSpawnCategory.isValidForLimits(spawnCategory)) {
@@ -19990,32 +19899,6 @@ index 3cdddda9c0618e95288b81b975d499c8dd30c05f..ae9aa09ba41e1f0ffe071bbac503590e
                  limit = world.getWorld().getSpawnLimit(spawnCategory);
              }
  
-@@ -178,11 +174,7 @@ public final class NaturalSpawner {
-                 NaturalSpawner.SpawnPredicate spawnercreature_c = info::canSpawn;
- 
-                 Objects.requireNonNull(info);
--                // Paper start
--                int spawnCount = NaturalSpawner.spawnCategoryForChunk(enumcreaturetype, world, chunk, spawnercreature_c, info::afterSpawn,
--                    difference, world.paperConfig().entities.spawning.perPlayerMobSpawns ? world.getChunkSource().chunkMap::updatePlayerMobTypeMap : null);
--                info.mobCategoryCounts.mergeInt(enumcreaturetype, spawnCount, Integer::sum);
--                // Paper end
-+                NaturalSpawner.spawnCategoryForChunk(enumcreaturetype, world, chunk, spawnercreature_c, info::afterSpawn); // Folia - region threading - revert per player mob caps
-             }
-         }
- 
-@@ -277,11 +269,7 @@ public final class NaturalSpawner {
- 
-                                     // Paper start
-                                     PreSpawnStatus doSpawning = isValidSpawnPostitionForType(world, group, structuremanager, chunkgenerator, biomesettingsmobs_c, blockposition_mutableblockposition, d2);
--                                    // Paper start - mob count backoff
--                                    if (doSpawning == PreSpawnStatus.ABORT || doSpawning == PreSpawnStatus.CANCELLED) {
--                                        world.getChunkSource().chunkMap.updateFailurePlayerMobTypeMap(blockposition_mutableblockposition.getX() >> 4, blockposition_mutableblockposition.getZ() >> 4, group);
--                                    }
--                                    // Paper end - mob count backoff
-+                                    // Folia - region threading - revert per player mob caps
-                                     if (doSpawning == PreSpawnStatus.ABORT) {
-                                         return j; // Paper
-                                     }
 diff --git a/src/main/java/net/minecraft/world/level/ServerLevelAccessor.java b/src/main/java/net/minecraft/world/level/ServerLevelAccessor.java
 index 3d377b9e461040405e0a7dcbd72d1506b48eb44e..782890e227ff9dab44dd92327979c201985f116e 100644
 --- a/src/main/java/net/minecraft/world/level/ServerLevelAccessor.java
