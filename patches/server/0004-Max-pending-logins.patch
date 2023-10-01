@@ -6,30 +6,30 @@ Subject: [PATCH] Max pending logins
 Should help the floodgates on launch
 
 diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index 2e96377d628b3a07fb565020074d665f594f32e8..75b1877f8c3e4da3183437f327ef3376fd0a3c21 100644
+index 57649d7fd11bef6395e04c075980e4c34eeffaa8..106b06a1d8fbda3fae7229252e78b9c17793e988 100644
 --- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-@@ -85,7 +85,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
-             UUID uniqueId = UUIDUtil.getOrCreatePlayerUUID(this.gameProfile);
+@@ -88,7 +88,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
              if (this.server.getPlayerList().pushPendingJoin(name, uniqueId, this.connection)) {
-                 this.handleAcceptedLogin();
--            }
-+            } else { --this.tick; } // Folia - max concurrent logins
              // Folia end - region threading - rewrite login process
-         } // Folia - region threading - remove delayed accept
+             this.verifyLoginAndFinishConnectionSetup((GameProfile) Objects.requireNonNull(this.authenticatedProfile));
+-            } // Folia - region threading - rewrite login process
++            } else { --this.tick; } // Folia - region threading - rewrite login process // Folia - max concurrent logins
+         }
  
+         if (this.state == ServerLoginPacketListenerImpl.State.WAITING_FOR_DUPE_DISCONNECT && !this.isPlayerAlreadyInWorld((GameProfile) Objects.requireNonNull(this.authenticatedProfile))) {
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 82c7235ad9f4bc4a9f6e018c9905d49790396918..1f70b0810ab992851662fe27c7522bc9eabf5f5f 100644
+index 3f3d3cfa046124197bf7ed8d7f4b651bf8a73416..3ed41fc4c73e418ea11ed11e365423e014c88715 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -180,6 +180,17 @@ public abstract class PlayerList {
+@@ -173,6 +173,17 @@ public abstract class PlayerList {
              conflictingId = this.connectionById.get(byId);
  
              if (conflictingName == null && conflictingId == null) {
 +                // Folia start - max concurrent login
 +                int loggedInCount = 0;
 +                for (Connection value : this.connectionById.values()) {
-+                    if (value.isPlayerConnected()) {
++                    if (value.getPacketListener() instanceof ServerGamePacketListenerImpl) {
 +                        ++loggedInCount;
 +                    }
 +                }
