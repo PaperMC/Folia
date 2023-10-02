@@ -9,6 +9,10 @@ plugins {
 
 val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
 
+compileLog4jPluginsJava {
+    inputs.files tasks.getByPath(':clonePaperRepo')
+}
+
 repositories {
     mavenCentral()
     maven(paperMavenPublicUrl) {
