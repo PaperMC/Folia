@@ -1351,485 +1351,6 @@ index 0000000000000000000000000000000000000000..63688716244066581d5b505703576e33
 +
 +    private TimeUtil() {}
 +}
-diff --git a/src/main/java/ca/spottedleaf/leafprofiler/LProfileGraph.java b/src/main/java/ca/spottedleaf/leafprofiler/LProfileGraph.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..1083a3dc0fc824da176e6ee64654b8c01b80ca4b
---- /dev/null
-+++ b/src/main/java/ca/spottedleaf/leafprofiler/LProfileGraph.java
-@@ -0,0 +1,89 @@
-+package ca.spottedleaf.leafprofiler;
-+
-+import it.unimi.dsi.fastutil.ints.Int2IntMap;
-+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
-+import java.util.ArrayDeque;
-+import java.util.ArrayList;
-+import java.util.Arrays;
-+import java.util.Iterator;
-+import java.util.List;
-+
-+public final class LProfileGraph {
-+
-+    public static final int ROOT_NODE = 0;
-+    // Array idx is the graph node id, where the int->int mapping is a mapping of profile timer id to graph node id
-+    private Int2IntOpenHashMap[] nodes;
-+    private int nodeCount;
-+
-+    public LProfileGraph() {
-+        final Int2IntOpenHashMap[] nodes = new Int2IntOpenHashMap[16];
-+        nodes[ROOT_NODE] = new Int2IntOpenHashMap();
-+
-+        this.nodes = nodes;
-+        this.nodeCount = 1;
-+    }
-+
-+    public static record GraphNode(GraphNode parent, int nodeId, int timerId) {}
-+
-+    public List<GraphNode> getDFS() {
-+        final List<GraphNode> ret = new ArrayList<>();
-+        final ArrayDeque<GraphNode> queue = new ArrayDeque<>();
-+
-+        queue.addFirst(new GraphNode(null, ROOT_NODE, -1));
-+        final Int2IntOpenHashMap[] nodes = this.nodes;
-+
-+        GraphNode graphNode;
-+        while ((graphNode = queue.pollFirst()) != null) {
-+            ret.add(graphNode);
-+
-+            final int parent = graphNode.nodeId;
-+
-+            final Int2IntOpenHashMap children = nodes[parent];
-+
-+            for (final Iterator<Int2IntMap.Entry> iterator = children.int2IntEntrySet().fastIterator(); iterator.hasNext();) {
-+                final Int2IntMap.Entry entry = iterator.next();
-+                queue.addFirst(new GraphNode(graphNode, entry.getIntValue(), entry.getIntKey()));
-+            }
-+        }
-+
-+        return ret;
-+    }
-+
-+    private int createNode(final int parent, final int timerId) {
-+        Int2IntOpenHashMap[] nodes = this.nodes;
-+
-+        final Int2IntOpenHashMap node = nodes[parent];
-+
-+        final int newNode = this.nodeCount;
-+        final int prev = node.putIfAbsent(timerId, newNode);
-+
-+        if (prev != 0) {
-+            // already exists
-+            return prev;
-+        }
-+
-+        // insert new node
-+        ++this.nodeCount;
-+
-+        if (newNode >= nodes.length) {
-+            this.nodes = (nodes = Arrays.copyOf(nodes, nodes.length * 2));
-+        }
-+
-+        nodes[newNode] = new Int2IntOpenHashMap();
-+
-+        return newNode;
-+    }
-+
-+    public int getOrCreateNode(final int parent, final int timerId) {
-+        // note: requires parent node to exist
-+        final Int2IntOpenHashMap[] nodes = this.nodes;
-+
-+        final int mapping = nodes[parent].get(timerId);
-+
-+        if (mapping != 0) {
-+            return mapping;
-+        }
-+
-+        return this.createNode(parent, timerId);
-+    }
-+}
-diff --git a/src/main/java/ca/spottedleaf/leafprofiler/LProfilerRegistry.java b/src/main/java/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..66200c6f4bcf27d060eedf066f56b70bd0cc3929
---- /dev/null
-+++ b/src/main/java/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
-@@ -0,0 +1,59 @@
-+package ca.spottedleaf.leafprofiler;
-+
-+import java.util.Arrays;
-+import java.util.concurrent.ConcurrentHashMap;
-+
-+public final class LProfilerRegistry {
-+
-+    // volatile required to ensure correct publishing when resizing
-+    private volatile ProfilerEntry[] typesById = new ProfilerEntry[16];
-+    private int totalEntries;
-+    private final ConcurrentHashMap<String, ProfilerEntry> nameToEntry = new ConcurrentHashMap<>();
-+
-+    public LProfilerRegistry() {
-+
-+    }
-+
-+    public ProfilerEntry getById(final int id) {
-+        final ProfilerEntry[] entries = this.typesById;
-+
-+        return id < 0 || id >= entries.length ? null : entries[id];
-+    }
-+
-+    public ProfilerEntry getByName(final String name) {
-+        return this.nameToEntry.get(name);
-+    }
-+
-+    public int createType(final ProfileType type, final String name) {
-+        synchronized (this) {
-+            final int id = this.totalEntries;
-+
-+            final ProfilerEntry ret = new ProfilerEntry(type, name, id);
-+
-+            final ProfilerEntry prev = this.nameToEntry.putIfAbsent(name, ret);
-+
-+            if (prev != null) {
-+                throw new IllegalStateException("Entry already exists: " + prev);
-+            }
-+
-+            ++this.totalEntries;
-+
-+            ProfilerEntry[] entries = this.typesById;
-+
-+            if (id >= entries.length) {
-+                this.typesById = entries = Arrays.copyOf(entries, entries.length * 2);
-+            }
-+
-+            // should be opaque, but I don't think that matters here.
-+            entries[id] = ret;
-+
-+            return id;
-+        }
-+    }
-+
-+    public static enum ProfileType {
-+        COUNTER, TIMER;
-+    }
-+
-+    public static record ProfilerEntry(ProfileType type, String name, int id) {}
-+}
-diff --git a/src/main/java/ca/spottedleaf/leafprofiler/LeafProfiler.java b/src/main/java/ca/spottedleaf/leafprofiler/LeafProfiler.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..24d041db762f82c16a735271dd4266b8630666ca
---- /dev/null
-+++ b/src/main/java/ca/spottedleaf/leafprofiler/LeafProfiler.java
-@@ -0,0 +1,313 @@
-+package ca.spottedleaf.leafprofiler;
-+
-+import it.unimi.dsi.fastutil.ints.IntArrayFIFOQueue;
-+import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
-+import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
-+import java.text.DecimalFormat;
-+import java.util.ArrayDeque;
-+import java.util.ArrayList;
-+import java.util.Arrays;
-+import java.util.List;
-+
-+public final class LeafProfiler {
-+
-+    private static final ThreadLocal<DecimalFormat> THREE_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0.000");
-+    });
-+    private static final ThreadLocal<DecimalFormat> NO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0");
-+    });
-+
-+    public final LProfilerRegistry registry;
-+    private final LProfileGraph graph;
-+
-+    private long[] timers = new long[16];
-+    private long[] counters = new long[16];
-+    private final IntArrayFIFOQueue callStack = new IntArrayFIFOQueue();
-+    private int topOfStack = LProfileGraph.ROOT_NODE;
-+    private final LongArrayFIFOQueue timerStack = new LongArrayFIFOQueue();
-+    private long lastTimerStart = 0L;
-+
-+    public LeafProfiler(final LProfilerRegistry registry, final LProfileGraph graph) {
-+        this.registry = registry;
-+        this.graph = graph;
-+    }
-+
-+    private long[] resizeTimers(final long[] old, final int least) {
-+        return this.timers = Arrays.copyOf(old, Math.max(old.length * 2, least * 2));
-+    }
-+
-+    private void incrementTimersDirect(final int nodeId, final long count) {
-+        final long[] timers = this.timers;
-+        if (nodeId >= timers.length) {
-+            this.resizeTimers(timers, nodeId)[nodeId] += count;
-+        } else {
-+            timers[nodeId] += count;
-+        }
-+    }
-+
-+    private long[] resizeCounters(final long[] old, final int least) {
-+        return this.counters = Arrays.copyOf(old, Math.max(old.length * 2, least * 2));
-+    }
-+
-+    private void incrementCountersDirect(final int nodeId, final long count) {
-+        final long[] counters = this.counters;
-+        if (nodeId >= counters.length) {
-+            this.resizeTimers(counters, nodeId)[nodeId] += count;
-+        } else {
-+            counters[nodeId] += count;
-+        }
-+    }
-+
-+    public void incrementCounter(final int timerId, final long count) {
-+        final int node = this.graph.getOrCreateNode(this.topOfStack, timerId);
-+        this.incrementCountersDirect(node, count);
-+    }
-+
-+    public void incrementTimer(final int timerId, final long count) {
-+        final int node = this.graph.getOrCreateNode(this.topOfStack, timerId);
-+        this.incrementTimersDirect(node, count);
-+    }
-+
-+    public void startTimer(final int timerId, final long startTime) {
-+        final long lastTimerStart = this.lastTimerStart;
-+        final LProfileGraph graph = this.graph;
-+        final int parentNode = this.topOfStack;
-+        final IntArrayFIFOQueue callStack = this.callStack;
-+        final LongArrayFIFOQueue timerStack = this.timerStack;
-+
-+        this.lastTimerStart = startTime;
-+        this.topOfStack = graph.getOrCreateNode(parentNode, timerId);
-+
-+        callStack.enqueue(parentNode);
-+        timerStack.enqueue(lastTimerStart);
-+    }
-+
-+    public void stopTimer(final int timerId, final long endTime) {
-+        final long lastStart = this.lastTimerStart;
-+        final int currentNode = this.topOfStack;
-+        final IntArrayFIFOQueue callStack = this.callStack;
-+        final LongArrayFIFOQueue timerStack = this.timerStack;
-+        this.lastTimerStart = timerStack.dequeueLastLong();
-+        this.topOfStack = callStack.dequeueLastInt();
-+
-+        this.incrementTimersDirect(currentNode, endTime - lastStart);
-+        this.incrementCountersDirect(currentNode, 1L);
-+    }
-+
-+    private static final char[][] INDENT_PATTERNS = new char[][] {
-+        "|---".toCharArray(),
-+        "|+++".toCharArray(),
-+    };
-+
-+    public List<String> dumpToString() {
-+        final List<LProfileGraph.GraphNode> graphDFS = this.graph.getDFS();
-+        final Reference2ReferenceOpenHashMap<LProfileGraph.GraphNode, ProfileNode> nodeMap = new Reference2ReferenceOpenHashMap<>();
-+
-+        final ArrayDeque<ProfileNode> orderedNodes = new ArrayDeque<>();
-+
-+        for (int i = 0, len = graphDFS.size(); i < len; ++i) {
-+            final LProfileGraph.GraphNode graphNode = graphDFS.get(i);
-+            final ProfileNode parent = nodeMap.get(graphNode.parent());
-+            final int nodeId = graphNode.nodeId();
-+
-+            final long totalTime = this.timers[nodeId];
-+            final long totalCount = this.counters[nodeId];
-+            final LProfilerRegistry.ProfilerEntry profiler = this.registry.getById(graphNode.timerId());
-+
-+            final ProfileNode profileNode = new ProfileNode(parent, nodeId, profiler, totalTime, totalCount);
-+
-+            if (parent != null) {
-+                parent.childrenTimingCount += totalTime;
-+                parent.children.add(profileNode);
-+            } else if (i != 0) { // i == 0 is root
-+                throw new IllegalStateException("Node " + nodeId + " must have parent");
-+            } else {
-+                // set up
-+                orderedNodes.add(profileNode);
-+            }
-+
-+            nodeMap.put(graphNode, profileNode);
-+        }
-+
-+        final List<String> ret = new ArrayList<>();
-+
-+        long totalTime = 0L;
-+
-+        // totalTime = sum of times for root node's children
-+        for (final ProfileNode node : orderedNodes.peekFirst().children) {
-+            totalTime += node.totalTime;
-+        }
-+
-+        ProfileNode profileNode;
-+        final StringBuilder builder = new StringBuilder();
-+        while ((profileNode = orderedNodes.pollFirst()) != null) {
-+            if (profileNode.nodeId != LProfileGraph.ROOT_NODE && profileNode.totalCount == 0L) {
-+                // skip nodes not recorded
-+                continue;
-+            }
-+
-+            final int depth = profileNode.depth;
-+            profileNode.children.sort((final ProfileNode p1, final ProfileNode p2) -> {
-+                final int typeCompare = p1.profiler.type().compareTo(p2.profiler.type());
-+                if (typeCompare != 0) {
-+                    // first count, then profiler
-+                    return typeCompare;
-+                }
-+
-+                if (p1.profiler.type() == LProfilerRegistry.ProfileType.COUNTER) {
-+                    // highest count first
-+                    return Long.compare(p2.totalCount, p1.totalCount);
-+                } else {
-+                    // highest time first
-+                    return Long.compare(p2.totalTime, p1.totalTime);
-+                }
-+            });
-+
-+            for (int i = profileNode.children.size() - 1; i >= 0; --i) {
-+                final ProfileNode child = profileNode.children.get(i);
-+                child.depth = depth + 1;
-+                orderedNodes.addFirst(child);
-+            }
-+
-+            if (profileNode.nodeId == LProfileGraph.ROOT_NODE) {
-+                // don't display root
-+                continue;
-+            }
-+
-+            final boolean noParent = profileNode.parent == null || profileNode.parent.nodeId == LProfileGraph.ROOT_NODE;
-+
-+            final long parentTime = noParent ? totalTime : profileNode.parent.totalTime;
-+            final LProfilerRegistry.ProfilerEntry profilerEntry = profileNode.profiler;
-+
-+            // format:
-+            // For profiler type:
-+            // <indent><name> X% of total, Y% of parent, self A% of total, self B% of children, Dms raw sum
-+            // For counter type:
-+            // <indent>#<name> avg X sum Y
-+            builder.setLength(0);
-+            // prepare indent
-+            final char[] indent = INDENT_PATTERNS[ret.size() % INDENT_PATTERNS.length];
-+            for (int i = 0; i < depth; ++i) {
-+                builder.append(indent);
-+            }
-+
-+            switch (profilerEntry.type()) {
-+                case TIMER: {
-+                    ret.add(
-+                        builder
-+                            .append(profilerEntry.name())
-+                            .append(' ')
-+                            .append(THREE_DECIMAL_PLACES.get().format(((double)profileNode.totalTime / (double)totalTime) * 100.0))
-+                            .append("% of total, ")
-+                            .append(THREE_DECIMAL_PLACES.get().format(((double)profileNode.totalTime / (double)parentTime) * 100.0))
-+                            .append("% of parent, self ")
-+                            .append(THREE_DECIMAL_PLACES.get().format(((double)(profileNode.totalTime - profileNode.childrenTimingCount) / (double)totalTime) * 100.0))
-+                            .append("% of total, self ")
-+                            .append(THREE_DECIMAL_PLACES.get().format(((double)(profileNode.totalTime - profileNode.childrenTimingCount) / (double)profileNode.totalTime) * 100.0))
-+                            .append("% of children, ")
-+                            .append(THREE_DECIMAL_PLACES.get().format((double)profileNode.totalTime / 1.0E6))
-+                            .append("ms raw sum")
-+                            .toString()
-+                    );
-+                    break;
-+                }
-+                case COUNTER: {
-+                    ret.add(
-+                        builder
-+                            .append('#')
-+                            .append(profilerEntry.name())
-+                            .append(" avg ")
-+                            .append(THREE_DECIMAL_PLACES.get().format((double)profileNode.totalCount / (double)(noParent ? 1L : profileNode.parent.totalCount)))
-+                            .append(" sum ")
-+                            .append(NO_DECIMAL_PLACES.get().format(profileNode.totalCount))
-+                            .toString()
-+                    );
-+                    break;
-+                }
-+                default: {
-+                    throw new IllegalStateException("Unknown type " + profilerEntry.type());
-+                }
-+            }
-+        }
-+
-+        return ret;
-+    }
-+
-+    private static final class ProfileNode {
-+
-+        public final ProfileNode parent;
-+        public final int nodeId;
-+        public final LProfilerRegistry.ProfilerEntry profiler;
-+        public final long totalTime;
-+        public final long totalCount;
-+        public final List<ProfileNode> children = new ArrayList<>();
-+        public long childrenTimingCount;
-+        public int depth = -1;
-+
-+        private ProfileNode(final ProfileNode parent, final int nodeId, final LProfilerRegistry.ProfilerEntry profiler,
-+                            final long totalTime, final long totalCount) {
-+            this.parent = parent;
-+            this.nodeId = nodeId;
-+            this.profiler = profiler;
-+            this.totalTime = totalTime;
-+            this.totalCount = totalCount;
-+        }
-+    }
-+
-+    /*
-+    public static void main(final String[] args) throws Throwable {
-+        final Thread timerHack = new Thread("Timer hack thread") {
-+            @Override
-+            public void run() {
-+                for (;;) {
-+                    try {
-+                        Thread.sleep(Long.MAX_VALUE);
-+                    } catch (final InterruptedException ex) {
-+                        continue;
-+                    }
-+                }
-+            }
-+        };
-+        timerHack.setDaemon(true);
-+        timerHack.start();
-+
-+        final LProfilerRegistry registry = new LProfilerRegistry();
-+
-+        final int tickId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "tick");
-+        final int entityTickId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "entity tick");
-+        final int getEntitiesId = registry.createType(LProfilerRegistry.ProfileType.COUNTER, "getEntities call");
-+        final int tileEntityId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "tile entity tick");
-+        final int creeperEntityId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "creeper entity tick");
-+        final int furnaceId = registry.createType(LProfilerRegistry.ProfileType.TIMER, "furnace tile entity tick");
-+
-+        final LeafProfiler profiler = new LeafProfiler(registry, new LProfileGraph());
-+
-+        profiler.startTimer(tickId, System.nanoTime());
-+        Thread.sleep(10L);
-+
-+        profiler.startTimer(entityTickId, System.nanoTime());
-+        Thread.sleep(1L);
-+
-+        profiler.startTimer(creeperEntityId, System.nanoTime());
-+        Thread.sleep(15L);
-+        profiler.incrementCounter(getEntitiesId, 50L);
-+        profiler.stopTimer(creeperEntityId, System.nanoTime());
-+
-+        profiler.stopTimer(entityTickId, System.nanoTime());
-+
-+        profiler.startTimer(tileEntityId, System.nanoTime());
-+        Thread.sleep(1L);
-+
-+        profiler.startTimer(furnaceId, System.nanoTime());
-+        Thread.sleep(20L);
-+        profiler.stopTimer(furnaceId, System.nanoTime());
-+
-+        profiler.stopTimer(tileEntityId, System.nanoTime());
-+
-+        profiler.stopTimer(tickId, System.nanoTime());
-+
-+        System.out.println("Done.");
-+    }
-+     */
-+}
 diff --git a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java b/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
 index 22a2547810d0c029f29685faddf7ac21cde2df0b..e36b4053eb2676e934b8c9c401bf58cfa7dd969c 100644
 --- a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
@@ -5557,10 +5078,10 @@ index 0000000000000000000000000000000000000000..7b31c4ea6d01f936271bdadc3626201d
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea882887d85f
+index 0000000000000000000000000000000000000000..531aa50f2c84e13358e8918bb0c15ea3cd036cb5
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/ThreadedRegionizer.java
-@@ -0,0 +1,1328 @@
+@@ -0,0 +1,1405 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.map.SWMRLong2ObjectHashTable;
@@ -5583,6 +5104,7 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +import java.util.Arrays;
 +import java.util.Iterator;
 +import java.util.List;
++import java.util.Set;
 +import java.util.concurrent.atomic.AtomicLong;
 +import java.util.concurrent.locks.StampedLock;
 +import java.util.function.BooleanSupplier;
@@ -5759,6 +5281,34 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +
 +    public void computeForAllRegionsUnsynchronised(final Consumer<? super ThreadedRegion<R, S>> consumer) {
 +        this.regionsById.forEachValue(consumer);
++    }
++
++    public int computeForRegions(final int fromChunkX, final int fromChunkZ, final int toChunkX, final int toChunkZ,
++                                  final Consumer<Set<ThreadedRegion<R, S>>> consumer) {
++        final int shift = this.sectionChunkShift;
++        final int fromSectionX = fromChunkX >> shift;
++        final int fromSectionZ = fromChunkZ >> shift;
++        final int toSectionX = toChunkX >> shift;
++        final int toSectionZ = toChunkZ >> shift;
++        this.acquireWriteLock();
++        try {
++            final ReferenceOpenHashSet<ThreadedRegion<R, S>> set = new ReferenceOpenHashSet<>();
++
++            for (int currZ = fromSectionZ; currZ <= toSectionZ; ++currZ) {
++                for (int currX = fromSectionX; currX <= toSectionX; ++currX) {
++                    final ThreadedRegionSection<R, S> section = this.sections.get(CoordinateUtils.getChunkKey(currX, currZ));
++                    if (section != null) {
++                        set.add(section.getRegionPlain());
++                    }
++                }
++            }
++
++            consumer.accept(set);
++
++            return set.size();
++        } finally {
++            this.releaseWriteLock();
++        }
 +    }
 +
 +    public ThreadedRegion<R, S> getRegionAtUnsynchronised(final int chunkX, final int chunkZ) {
@@ -5941,12 +5491,10 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +                    if (region == regionOfInterest) {
 +                        continue;
 +                    }
-+                    // need the relaxed check, as the region may already be
-+                    // a merge target
-+                    if (!region.tryKill()) {
++
++                    if (!region.killAndMergeInto(regionOfInterest)) {
++                        // note: the region may already be a merge target
 +                        regionOfInterest.mergeIntoLater(region);
-+                    } else {
-+                        region.mergeInto(regionOfInterest);
 +                    }
 +                }
 +
@@ -6044,10 +5592,9 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +            // merge the regions into this one
 +            final ReferenceOpenHashSet<ThreadedRegion<R, S>> expectingMergeFrom = region.expectingMergeFrom.clone();
 +            for (final ThreadedRegion<R, S> mergeFrom : expectingMergeFrom) {
-+                if (!mergeFrom.tryKill()) {
++                if (!mergeFrom.killAndMergeInto(region)) {
 +                    throw new IllegalStateException("Merge from region " + mergeFrom + " should be killable! Trying to merge into " + region);
 +                }
-+                mergeFrom.mergeInto(region);
 +            }
 +
 +            if (!region.expectingMergeFrom.isEmpty()) {
@@ -6165,17 +5712,24 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +            return;
 +        }
 +
++        final List<ThreadedRegion<R, S>> newRegionObjects = new ArrayList<>(newRegions.size());
++        for (int i = 0, len = newRegions.size(); i < len; ++i) {
++            newRegionObjects.add(new ThreadedRegion<>(this));
++        }
++
++        this.callbacks.preSplit(region, newRegionObjects);
++
 +        // need to split the region, so we need to kill the old one first
 +        region.state = ThreadedRegion.STATE_DEAD;
 +        region.onRemove(true);
 +
 +        // create new regions
 +        final Long2ReferenceOpenHashMap<ThreadedRegion<R, S>> newRegionsMap = new Long2ReferenceOpenHashMap<>();
-+        final ReferenceOpenHashSet<ThreadedRegion<R, S>> newRegionsSet = new ReferenceOpenHashSet<>();
++        final ReferenceOpenHashSet<ThreadedRegion<R, S>> newRegionsSet = new ReferenceOpenHashSet<>(newRegionObjects);
 +
-+        for (final List<ThreadedRegionSection<R, S>> sections : newRegions) {
-+            final ThreadedRegion<R, S> newRegion = new ThreadedRegion<>(this);
-+            newRegionsSet.add(newRegion);
++        for (int i = 0, len = newRegions.size(); i < len; i++) {
++            final List<ThreadedRegionSection<R, S>> sections = newRegions.get(i);
++            final ThreadedRegion<R, S> newRegion = newRegionObjects.get(i);
 +
 +            for (final ThreadedRegionSection<R, S> section : sections) {
 +                section.setRegionRelease(null);
@@ -6357,6 +5911,20 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +            if (this.data != null) {
 +                this.data.split(this.regioniser, into, regions);
 +            }
++        }
++
++        boolean killAndMergeInto(final ThreadedRegion<R, S> mergeTarget) {
++            if (this.state == STATE_TICKING) {
++                return false;
++            }
++
++            this.regioniser.callbacks.preMerge(this, mergeTarget);
++
++            this.tryKill();
++
++            this.mergeInto(mergeTarget);
++
++            return true;
 +        }
 +
 +        private void mergeInto(final ThreadedRegion<R, S> mergeTarget) {
@@ -6887,6 +6455,36 @@ index 0000000000000000000000000000000000000000..72a2b81a0a4dc6aab02d0dbad713ea88
 +         * @param region The region that is now inactive.
 +         */
 +        public void onRegionInactive(final ThreadedRegion<R, S> region);
++
++        /**
++         * Callback for when a region (from) is about to be merged into a target region (into). Note that
++         * {@code from} is still alive and is a distinct region.
++         * <p>
++         * <b>Note:</b>
++         * </p>
++         * <p>
++         * This function is always called while holding critical locks and as such should not attempt to block on anything, and
++         * should NOT retrieve or modify ANY world state.
++         * </p>
++         * @param from The region that will be merged into the target.
++         * @param into The target of the merge.
++         */
++        public void preMerge(final ThreadedRegion<R, S> from, final ThreadedRegion<R, S> into);
++
++        /**
++         * Callback for when a region (from) is about to be split into a list of target region (into). Note that
++         * {@code from} is still alive, while the list of target regions are not initialised.
++         * <p>
++         * <b>Note:</b>
++         * </p>
++         * <p>
++         * This function is always called while holding critical locks and as such should not attempt to block on anything, and
++         * should NOT retrieve or modify ANY world state.
++         * </p>
++         * @param from The region that will be merged into the target.
++         * @param into The list of regions to split into.
++         */
++        public void preSplit(final ThreadedRegion<R, S> from, final List<ThreadedRegion<R, S>> into);
 +    }
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickData.java b/src/main/java/io/papermc/paper/threadedregions/TickData.java
@@ -7230,7 +6828,7 @@ index 0000000000000000000000000000000000000000..29f9fed5f02530b3256e6b993e607d46
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1ea7cd670
+index 0000000000000000000000000000000000000000..150610d7bf25416dbbde7f003c47da562acc68ba
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 @@ -0,0 +1,565 @@
@@ -7551,10 +7149,6 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +                // don't release region for another tick
 +                return null;
 +            } finally {
-+                TickRegionScheduler.setTickTask(null);
-+                if (this.region != null) {
-+                    TickRegionScheduler.setTickingRegion(null);
-+                }
 +                final long tickEnd = System.nanoTime();
 +                final long cpuEnd = MEASURE_CPU_TIME ? THREAD_MX_BEAN.getCurrentThreadCpuTime() : 0L;
 +
@@ -7564,6 +7158,10 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +                );
 +
 +                this.addTickTime(time);
++                TickRegionScheduler.setTickTask(null);
++                if (this.region != null) {
++                    TickRegionScheduler.setTickingRegion(null);
++                }
 +            }
 +
 +            return !this.markNotTicking() || this.cancelled.get() ? null : Boolean.valueOf(ret);
@@ -7627,10 +7225,6 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +                // regionFailed will schedule a shutdown, so we should avoid letting this region tick further
 +                return false;
 +            } finally {
-+                TickRegionScheduler.setTickTask(null);
-+                if (this.region != null) {
-+                    TickRegionScheduler.setTickingRegion(null);
-+                }
 +                final long tickEnd = System.nanoTime();
 +                final long cpuEnd = MEASURE_CPU_TIME ? THREAD_MX_BEAN.getCurrentThreadCpuTime() : 0L;
 +
@@ -7645,6 +7239,10 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +                );
 +
 +                this.addTickTime(time);
++                TickRegionScheduler.setTickTask(null);
++                if (this.region != null) {
++                    TickRegionScheduler.setTickingRegion(null);
++                }
 +            }
 +
 +            // Only AFTER updating the tickStart
@@ -7654,7 +7252,7 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +        /**
 +         * Only safe to call if this tick data matches the current ticking region.
 +         */
-+        private void addTickTime(final TickTime time) {
++        protected void addTickTime(final TickTime time) {
 +            synchronized (this) {
 +                this.currentTickData = null;
 +                this.currentTickingThread = null;
@@ -7800,10 +7398,10 @@ index 0000000000000000000000000000000000000000..ee9f5e1f3387998cddbeb1dc6dc6e2b1
 +    }
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
-index d5d39e9c1f326e91010237b0db80d527ac52f4d6..6c76c70574642aa4f3a8fce74e4608781ce132ec 100644
+index d5d39e9c1f326e91010237b0db80d527ac52f4d6..902e82854c89779c7e23c63d1be5b04dad2a61e3 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
-@@ -1,9 +1,392 @@
+@@ -1,9 +1,404 @@
  package io.papermc.paper.threadedregions;
  
 -// placeholder class for Folia
@@ -7901,6 +7499,18 @@ index d5d39e9c1f326e91010237b0db80d527ac52f4d6..6c76c70574642aa4f3a8fce74e460878
 +        scheduler.descheduleRegion(data.tickHandle);
 +        // old handle cannot be scheduled anymore, copy to a new handle
 +        data.tickHandle = data.tickHandle.copy();
++    }
++
++    @Override
++    public void preMerge(final ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData> from,
++                         final ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData> into) {
++
++    }
++
++    @Override
++    public void preSplit(final ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData> from,
++                         final java.util.List<ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData>> into) {
++
 +    }
 +
 +    public static final class TickRegionSectionData implements ThreadedRegionizer.ThreadedRegionSectionData {}
