@@ -16066,6 +16066,91 @@ index 028d69907a988e191213a17e072ef22710b5bc83..ffa081156313247882747ea6da182ee5
                  }
              }
          }
+diff --git a/src/main/java/net/minecraft/world/RandomSequences.java b/src/main/java/net/minecraft/world/RandomSequences.java
+index b8adc775270a4cc179ce009d41f48c8c898a5b68..281f41edbb08ec2872e42f4fca0082a48e26d8a5 100644
+--- a/src/main/java/net/minecraft/world/RandomSequences.java
++++ b/src/main/java/net/minecraft/world/RandomSequences.java
+@@ -20,7 +20,7 @@ public class RandomSequences extends SavedData {
+     private int salt;
+     private boolean includeWorldSeed = true;
+     private boolean includeSequenceId = true;
+-    private final Map<ResourceLocation, RandomSequence> sequences = new Object2ObjectOpenHashMap<>();
++    private final Map<ResourceLocation, RandomSequence> sequences = new java.util.concurrent.ConcurrentHashMap<>(); // Folia - region threading
+ 
+     public static SavedData.Factory<RandomSequences> factory(long seed) {
+         return new SavedData.Factory<>(() -> {
+@@ -116,61 +116,61 @@ public class RandomSequences extends SavedData {
+         @Override
+         public RandomSource fork() {
+             RandomSequences.this.setDirty();
+-            return this.random.fork();
++            synchronized (this.random) { return this.random.fork(); } // Folia - region threading
+         }
+ 
+         @Override
+         public PositionalRandomFactory forkPositional() {
+             RandomSequences.this.setDirty();
+-            return this.random.forkPositional();
++            synchronized (this.random) { return this.random.forkPositional(); } // Folia - region threading
+         }
+ 
+         @Override
+         public void setSeed(long seed) {
+             RandomSequences.this.setDirty();
+-            this.random.setSeed(seed);
++            synchronized (this.random) { this.random.setSeed(seed); } // Folia - region threading
+         }
+ 
+         @Override
+         public int nextInt() {
+             RandomSequences.this.setDirty();
+-            return this.random.nextInt();
++            synchronized (this.random) { return this.random.nextInt(); } // Folia - region threading
+         }
+ 
+         @Override
+         public int nextInt(int bound) {
+             RandomSequences.this.setDirty();
+-            return this.random.nextInt(bound);
++            synchronized (this.random) { return this.random.nextInt(bound); } // Folia - region threading
+         }
+ 
+         @Override
+         public long nextLong() {
+             RandomSequences.this.setDirty();
+-            return this.random.nextLong();
++            synchronized (this.random) { return this.random.nextLong(); } // Folia - region threading
+         }
+ 
+         @Override
+         public boolean nextBoolean() {
+             RandomSequences.this.setDirty();
+-            return this.random.nextBoolean();
++            synchronized (this.random) { return this.random.nextBoolean(); } // Folia - region threading
+         }
+ 
+         @Override
+         public float nextFloat() {
+             RandomSequences.this.setDirty();
+-            return this.random.nextFloat();
++            synchronized (this.random) { return this.random.nextFloat(); } // Folia - region threading
+         }
+ 
+         @Override
+         public double nextDouble() {
+             RandomSequences.this.setDirty();
+-            return this.random.nextDouble();
++            synchronized (this.random) { return this.random.nextDouble(); } // Folia - region threading
+         }
+ 
+         @Override
+         public double nextGaussian() {
+             RandomSequences.this.setDirty();
+-            return this.random.nextGaussian();
++            synchronized (this.random) { return this.random.nextGaussian(); } // Folia - region threading
+         }
+ 
+         @Override
 diff --git a/src/main/java/net/minecraft/world/damagesource/CombatTracker.java b/src/main/java/net/minecraft/world/damagesource/CombatTracker.java
 index 9c99b2e365aacb8309f29acb9025faccd2c676b3..d02bc26812321745795d2f0bc3705addd0be912d 100644
 --- a/src/main/java/net/minecraft/world/damagesource/CombatTracker.java
