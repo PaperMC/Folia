@@ -12042,7 +12042,7 @@ index 8f5714221bc32fb2c9201cbc8a0a35610977f574..c78a7e5e5c6b012756e6a1e50159dd97
      }
  }
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index cf605aa56adf7f80d3b409f60a92a5ca7ae8fd07..50fd7b0299397e8b1d35f263205c999fb756f545 100644
+index cf605aa56adf7f80d3b409f60a92a5ca7ae8fd07..05d8cabd2294456e3c8df60265f8b035990dd896 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 @@ -442,9 +442,9 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
@@ -12058,19 +12058,33 @@ index cf605aa56adf7f80d3b409f60a92a5ca7ae8fd07..50fd7b0299397e8b1d35f263205c999f
      }
  
      @Override
-@@ -762,6 +762,12 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
-     }
- 
-     public String runCommand(RconConsoleSource rconConsoleSource, String s) {
-+        // Folia start - region threading
-+        // RIP RCON
-+        if (true) {
-+            throw new UnsupportedOperationException();
-+        }
-+        // Folia end - region threading
+@@ -765,7 +765,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
          Waitable[] waitableArray = new Waitable[1]; // Paper
          rconConsoleSource.prepareForCommand();
          final java.util.concurrent.atomic.AtomicReference<String> command = new java.util.concurrent.atomic.AtomicReference<>(s); // Paper
+-        this.executeBlocking(() -> {
++        Runnable sync = () -> { // Folia - region threading
+             CommandSourceStack wrapper = rconConsoleSource.createCommandSourceStack();
+             RemoteServerCommandEvent event = new RemoteServerCommandEvent(rconConsoleSource.getBukkitSender(wrapper), s);
+             this.server.getPluginManager().callEvent(event);
+@@ -789,7 +789,16 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             ConsoleInput serverCommand = new ConsoleInput(event.getCommand(), wrapper);
+             this.server.dispatchServerCommand(event.getSender(), serverCommand);
+             } // Paper
+-        });
++        }; // Folia start - region threading
++        java.util.concurrent.CompletableFuture
++            .runAsync(sync, io.papermc.paper.threadedregions.RegionizedServer.getInstance()::addTask)
++            .whenComplete((Void r, Throwable t) -> {
++                if (t != null) {
++                    LOGGER.error("Error handling command for rcon: " + s, t);
++                }
++            })
++            .join();
++        // Folia end - region threading
+         // Paper start
+         if (waitableArray[0] != null) {
+             //noinspection unchecked
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 index 5afeb59ff25fed2d565407acacffec8383398006..047e817eae19800d146970a3ab44913ea1d17c89 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
