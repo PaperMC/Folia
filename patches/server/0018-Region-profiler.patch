@@ -1518,7 +1518,7 @@ index f640a0b8742a8362401f91a9a0f8fbb31885dca0..50597a8b45bbd7dcc40b361da78358d9
      // Folia end - region threading - replace entity tracking ticking
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180ee846c51 100644
+index a21cc9c7d5981c742f379affe9c1ef4dcb0fa1e1..88db5ada13329a5fe0d0fb652d2c8a8d561649e8 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -434,16 +434,23 @@ public class ServerChunkCache extends ChunkSource {
@@ -1553,7 +1553,7 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
          //long i = this.level.getGameTime(); // Folia - region threading
          long j = 1; // Folia - region threading
  
-@@ -512,6 +520,7 @@ public class ServerChunkCache extends ChunkSource {
+@@ -479,6 +487,7 @@ public class ServerChunkCache extends ChunkSource {
                  // Paper start - per player mob spawning
                  int naturalSpawnChunkCount = k;
                  NaturalSpawner.SpawnState spawnercreature_d; // moved down
@@ -1561,7 +1561,7 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
                  if ((this.spawnFriendlies || this.spawnEnemies) && this.level.paperConfig().entities.spawning.perPlayerMobSpawns) { // don't count mobs when animals and monsters are disabled
                      // re-set mob counts
                      for (ServerPlayer player : this.level.getLocalPlayers()) { // Folia - region threading
-@@ -531,6 +540,7 @@ public class ServerChunkCache extends ChunkSource {
+@@ -498,6 +507,7 @@ public class ServerChunkCache extends ChunkSource {
                  } else {
                      spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, regionizedWorldData.getLoadedEntities(), this::getFullChunk, !this.level.paperConfig().entities.spawning.perPlayerMobSpawns ? new LocalMobCapCalculator(this.chunkMap) : null, false); // Folia - region threading - note: function only cares about loaded entities, doesn't need all
                  }
@@ -1569,7 +1569,7 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
                  // Paper end
                  this.level.timings.countNaturalMobs.stopTiming(); // Paper - timings
  
-@@ -592,6 +602,9 @@ public class ServerChunkCache extends ChunkSource {
+@@ -561,6 +571,9 @@ public class ServerChunkCache extends ChunkSource {
                  }
                  try {
                  // Paper end - optimise chunk tick iteration
@@ -1577,9 +1577,9 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
 +                long randomChunkCount = 0L; // Folia - profiler
 +                profiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.SPAWN_AND_RANDOM_TICK); try { // Folia - profiler
                  while (chunkIterator.hasNext()) {
-                     LevelChunk chunk1 = chunkIterator.next(); // Paper - optimise chunk tick iteration
-                     ChunkPos chunkcoordintpair = chunk1.getPos();
-@@ -623,15 +636,20 @@ public class ServerChunkCache extends ChunkSource {
+                     LevelChunk chunk1 = chunkIterator.next();
+                     // Paper end - optimise chunk tick iteration
+@@ -592,15 +605,20 @@ public class ServerChunkCache extends ChunkSource {
                          // Paper end - optimise chunk tick iteration
                          chunk1.incrementInhabitedTime(j);
                          if (spawn && flag && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair)) { // Spigot // Paper - optimise chunk tick iteration
@@ -1600,7 +1600,7 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
                  // Paper start - optimise chunk tick iteration
                  } finally {
                      if (chunkIterator instanceof io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet.Iterator safeIterator) {
-@@ -643,9 +661,11 @@ public class ServerChunkCache extends ChunkSource {
+@@ -612,9 +630,11 @@ public class ServerChunkCache extends ChunkSource {
  
                  gameprofilerfiller.popPush("customSpawners");
                  if (flag) {
@@ -1612,7 +1612,7 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
                  }
              }
  
-@@ -655,6 +675,7 @@ public class ServerChunkCache extends ChunkSource {
+@@ -624,6 +644,7 @@ public class ServerChunkCache extends ChunkSource {
              // Paper start - optimise chunk tick iteration
              // Folia start - region threading
              if (!this.level.needsChangeBroadcasting.isEmpty()) {
@@ -1620,7 +1620,7 @@ index a363c9d74d2a50a3bb3c3e323f7cf921c50bbff7..d248c0492a34c11fb96c9dd6f0a3d180
                  for (Iterator<ChunkHolder> iterator = this.level.needsChangeBroadcasting.iterator(); iterator.hasNext();) {
                      ChunkHolder holder = iterator.next();
                      if (!io.papermc.paper.util.TickThread.isTickThreadFor(holder.newChunkHolder.world, holder.pos)) {
-@@ -666,6 +687,7 @@ public class ServerChunkCache extends ChunkSource {
+@@ -635,6 +656,7 @@ public class ServerChunkCache extends ChunkSource {
                          iterator.remove();
                      }
                  }
