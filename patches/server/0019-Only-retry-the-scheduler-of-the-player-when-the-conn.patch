@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: MrHua269 <novau233@163.com>
+Date: Sun, 7 Jan 2024 07:31:06 +0000
+Subject: [PATCH] Only retry the scheduler of the player when the connection of
+ the disconnecting player is "in-game" state
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
+index 2bb944cef9bc8c5e56023ef20921ef13509d4823..6a62cc47d85993a0c878fd4a0a93b5fc210eac1f 100644
+--- a/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
+@@ -85,8 +85,6 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+             ServerCommonPacketListenerImpl.LOGGER.info("Stopping singleplayer server as player logged out");
+             this.server.halt(false);
+         }
+-        this.player.getBukkitEntity().taskScheduler.retire(); // Folia - region threading
+-
+     }
+ 
+     @Override
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 159d3a27c1686fd2b0025cab5b7e7775679c4ce9..e36e5614bdf0bda1611c866283611c943c5e2737 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2093,6 +2093,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+         ServerGamePacketListenerImpl.LOGGER.info("{} lost connection: {}", this.player.getName().getString(), reason.getString());
+         if (!this.waitingForSwitchToConfig) this.removePlayerFromWorld(quitMessage); // Paper // Folia - region threading
+         super.onDisconnect(reason, quitMessage); // Paper
++        this.player.getBukkitEntity().taskScheduler.retire(); // Folia - region threading
+     }
+ 
+     // Paper start
