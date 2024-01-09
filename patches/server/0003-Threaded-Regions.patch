@@ -14964,10 +14964,32 @@ index 14a5492428eac823a295ef3746d0aca6fbdab4ec..f06392b0515da3640720e115709fe98f
          this.generatingStatus = status;
          this.writeRadiusCutoff = placementRadius;
 diff --git a/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
-index d28d0ef6105ddeb562ddf31ae9088739856941fc..caa60d7ec56fa5da67f756297295296c2ff7c6d9 100644
+index d28d0ef6105ddeb562ddf31ae9088739856941fc..062cc713ef5239f934139bb9e4071cf958e57e32 100644
 --- a/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
-@@ -86,6 +86,7 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+@@ -75,17 +75,29 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+         // CraftBukkit end
+     }
+ 
++    // Folia start - region threading
++    private boolean handledDisconnect = false;
++    // Folia end - region threading
++
+     @Override
+     public void onDisconnect(Component reason) {
+         // Paper start
+         this.onDisconnect(reason, null);
+     }
+     public void onDisconnect(Component reason, @Nullable net.kyori.adventure.text.Component quitMessage) {
++        // Folia start - region threading
++        if (this.handledDisconnect) {
++            // avoid retiring scheduler twice
++            return;
++        }
++        this.handledDisconnect = true;
++        // Folia end - region threading
+         // Paper end
+         if (this.isSingleplayerOwner()) {
              ServerCommonPacketListenerImpl.LOGGER.info("Stopping singleplayer server as player logged out");
              this.server.halt(false);
          }
@@ -14975,7 +14997,7 @@ index d28d0ef6105ddeb562ddf31ae9088739856941fc..caa60d7ec56fa5da67f756297295296c
  
      }
  
-@@ -99,9 +100,9 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+@@ -99,9 +111,9 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
              this.keepAlivePending = false;
          } else if (!this.isSingleplayerOwner()) {
              // Paper start - This needs to be handled on the main thread for plugins
@@ -14987,7 +15009,7 @@ index d28d0ef6105ddeb562ddf31ae9088739856941fc..caa60d7ec56fa5da67f756297295296c
              // Paper endg
          }
  
-@@ -292,24 +293,8 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+@@ -292,24 +304,8 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
          if (this.processedDisconnect) {
              return;
          }
@@ -15014,7 +15036,7 @@ index d28d0ef6105ddeb562ddf31ae9088739856941fc..caa60d7ec56fa5da67f756297295296c
              return;
          }
  
-@@ -340,7 +325,7 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+@@ -340,7 +336,7 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
  
          Objects.requireNonNull(this.connection);
          // CraftBukkit - Don't wait
