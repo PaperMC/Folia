@@ -9,7 +9,7 @@ add explicit block update suppression techniques, it's better
 than the server crashing.
 
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index f2597960643a37c79ad189254b7073e22d607347..833f65c7b66a9b87b34118ed12d4d701a54b8e61 100644
+index 7334a522956649fdf606b560d52e127c2f500b5d..394ec4f018b676a441e49d7ccbef3f8c56673603 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -1763,7 +1763,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -22,7 +22,7 @@ index f2597960643a37c79ad189254b7073e22d607347..833f65c7b66a9b87b34118ed12d4d701
  
                  if (iblockdata.is(Blocks.COMPARATOR)) {
 diff --git a/src/main/java/net/minecraft/world/level/block/DetectorRailBlock.java b/src/main/java/net/minecraft/world/level/block/DetectorRailBlock.java
-index 034a3bc5b5e526e28088a9715a41ad8ab843860b..42877ed3c59141072a551d0f0d6db7e0eef919a0 100644
+index 9de6503f20396601a270e6eb0b66c40187fca690..f5fb81ebe2ca06cd8e4bf5b28494563f7beb4a7c 100644
 --- a/src/main/java/net/minecraft/world/level/block/DetectorRailBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/DetectorRailBlock.java
 @@ -134,9 +134,9 @@ public class DetectorRailBlock extends BaseRailBlock {
@@ -54,7 +54,7 @@ index b84c48902ef24fdae17578a304e6c93dc20c5dce..218c1954a7922c9e6bf6f34f9497f89c
          } else {
              RailShape blockpropertytrackposition1 = (RailShape) iblockdata.getValue(PoweredRailBlock.SHAPE);
 diff --git a/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java b/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
-index bf0e67921d96edde46a97543099f9c03634fca11..b64f0a30a0f7aee5ac9838a11756fdc5c93c36f6 100644
+index 875a776d5aa1399808e5d5eab1c608dd35011c85..1b34a5beb7f17b25552375d3b8017e26da0239b8 100644
 --- a/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
 @@ -200,8 +200,9 @@ public class RedStoneWireBlock extends Block {
@@ -69,7 +69,7 @@ index bf0e67921d96edde46a97543099f9c03634fca11..b64f0a30a0f7aee5ac9838a11756fdc5
                  BlockState iblockdata1 = world.getBlockState(blockposition_mutableblockposition);
  
 diff --git a/src/main/java/net/minecraft/world/level/redstone/CollectingNeighborUpdater.java b/src/main/java/net/minecraft/world/level/redstone/CollectingNeighborUpdater.java
-index 8a139bcfc9c3de5793b1b590be6cafaae01c86e1..a61672154c4f733cdadd9ac34ca5507355d06c68 100644
+index a25c2983a7e0df3292f701fc46487e5e15ec7ac8..8185959e02a82590dcc3f5625494b6f0f38e31b1 100644
 --- a/src/main/java/net/minecraft/world/level/redstone/CollectingNeighborUpdater.java
 +++ b/src/main/java/net/minecraft/world/level/redstone/CollectingNeighborUpdater.java
 @@ -119,7 +119,8 @@ public class CollectingNeighborUpdater implements NeighborUpdater {
@@ -79,13 +79,13 @@ index 8a139bcfc9c3de5793b1b590be6cafaae01c86e1..a61672154c4f733cdadd9ac34ca55073
 -            BlockState blockState = world.getBlockState(blockPos);
 +            BlockState blockState = !io.papermc.paper.util.TickThread.isTickThreadFor((net.minecraft.server.level.ServerLevel)world, blockPos) ? null : world.getBlockStateIfLoaded(blockPos); // Folia - block updates in unloaded chunks
 +            if (blockState != null) { // Folia - block updates in unloaded chunks
-             // Paper start
+             // Paper start - Call BlockPhysicsEvent
              try {
                  boolean cancelled = false;
 @@ -141,6 +142,7 @@ public class CollectingNeighborUpdater implements NeighborUpdater {
                  world.lastPhysicsProblem = new BlockPos(blockPos);
              }
-             // Paper end
+             // Paper end - Call BlockPhysicsEvent
 +            } // Folia - block updates in unloaded chunks
              if (this.idx < NeighborUpdater.UPDATE_ORDER.length && NeighborUpdater.UPDATE_ORDER[this.idx] == this.skipDirection) {
                  ++this.idx;
