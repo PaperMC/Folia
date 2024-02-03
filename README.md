@@ -4,6 +4,9 @@
     <p>Fork of <a href="https://github.com/PaperMC/Paper">Paper</a> which adds regionised multithreading to the dedicated server.</p>
 </div>
 
+## はじめに
+このフォークは日本語翻訳を主としています。
+
 ## Overview
 
 Folia groups nearby loaded chunks to form an "independent region."
