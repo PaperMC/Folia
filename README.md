@@ -1,7 +1,7 @@
 <div align=center>
     <img src="./folia.png">
     <br /><br />
-    <p>専用サーバーに範マルチスレッディングを追加した、<a href="https://github.com/PaperMC/Paper">Paper</a> のフォークです。</p>
+    <p>専用サーバーに範囲別マルチスレッディングを追加した、<a href="https://github.com/PaperMC/Paper">Paper</a> のフォークです。</p>
 </div>
 
 ## はじめに
