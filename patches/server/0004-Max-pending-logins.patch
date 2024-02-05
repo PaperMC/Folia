@@ -6,20 +6,20 @@ Subject: [PATCH] Max pending logins
 Should help the floodgates on launch
 
 diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index 586027a4c97a3c1be42f1c8d5a248e2672bb6489..d809dd5f6aa39fcd7583d7db822450297225eb49 100644
+index 58cdb65083134680230d7070f9f6209f2d32873b..aa4b461bbb2c8c4753f7c9057bab1740de2c0284 100644
 --- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 @@ -89,7 +89,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
              if (this.server.getPlayerList().pushPendingJoin(name, uniqueId, this.connection)) {
              // Folia end - region threading - rewrite login process
              this.verifyLoginAndFinishConnectionSetup((GameProfile) Objects.requireNonNull(this.authenticatedProfile));
--            } // Folia - region threading - rewrite login process
-+            } else { --this.tick; } // Folia - region threading - rewrite login process // Folia - max concurrent logins
+-            } // Paper - prevent logins to be processed even though disconnect was called
++            } else { --this.tick; } // Paper - prevent logins to be processed even though disconnect was called // Folia - max concurrent logins
          }
  
          if (this.state == ServerLoginPacketListenerImpl.State.WAITING_FOR_DUPE_DISCONNECT && !this.isPlayerAlreadyInWorld((GameProfile) Objects.requireNonNull(this.authenticatedProfile))) {
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 8284cde1984408a97a933f4299ad8541e7a015ca..739e8966c7326edf47e85f959374cbc8970d7b2a 100644
+index fa36e892b019877a770a618fe8d4cda118fe137d..93e192ea1a0cda2d7aae983980a6fead013c8b90 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -171,6 +171,17 @@ public abstract class PlayerList {
