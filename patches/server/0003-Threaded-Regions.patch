@@ -18538,10 +18538,10 @@ index ab777952bda1651796ed41e8a7fc6621f27db9aa..6b9365eba3339578ee2984605240b74d
          boolean flag = false;
  
 diff --git a/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java b/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
-index 3be611e7ae35b696ba44cd361042f79b69391815..2a304be5dc10db22de93aad4b9fccf321028c54d 100644
+index 3be611e7ae35b696ba44cd361042f79b69391815..f34d9fcf55a40b59a8753de656c128fc8917e5f7 100644
 --- a/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
 +++ b/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
-@@ -45,6 +45,62 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+@@ -45,6 +45,78 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
          entityHitResult.getEntity().hurt(this.damageSources().thrown(this, this.getOwner()), 0.0F);
      }
  
@@ -18551,6 +18551,7 @@ index 3be611e7ae35b696ba44cd361042f79b69391815..2a304be5dc10db22de93aad4b9fccf32
 +        source.getBukkitEntity().taskScheduler.schedule(
 +            (Entity entity) -> {
 +                // source is now an invalid reference, do not use it, use the entity parameter
++                net.minecraft.world.phys.Vec3 endermitePos = entity.position();
 +
 +                if (entity.level() != checkWorld) {
 +                    // cannot teleport cross-world
@@ -18584,8 +18585,23 @@ index 3be611e7ae35b696ba44cd361042f79b69391815..2a304be5dc10db22de93aad4b9fccf32
 +                                Endermite entityendermite = (Endermite) EntityType.ENDERMITE.create(world);
 +
 +                                if (entityendermite != null) {
-+                                    entityendermite.moveTo(entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot());
-+                                    world.addFreshEntity(entityendermite, CreatureSpawnEvent.SpawnReason.ENDER_PEARL);
++                                    float yRot = teleported.getYRot();
++                                    float xRot = teleported.getXRot();
++                                    Runnable spawn = () -> {
++                                        entityendermite.moveTo(endermitePos.x, endermitePos.y, endermitePos.z, yRot, xRot);
++                                        world.addFreshEntity(entityendermite, CreatureSpawnEvent.SpawnReason.ENDER_PEARL);
++                                    };
++
++                                    if (io.papermc.paper.util.TickThread.isTickThreadFor(world, endermitePos, net.minecraft.world.phys.Vec3.ZERO, 1)) {
++                                        spawn.run();
++                                    } else {
++                                        io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
++                                            world,
++                                            io.papermc.paper.util.CoordinateUtils.getChunkCoordinate(endermitePos.x),
++                                            io.papermc.paper.util.CoordinateUtils.getChunkCoordinate(endermitePos.z),
++                                            spawn
++                                        );
++                                    }
 +                                }
 +                            }
 +
@@ -18604,7 +18620,7 @@ index 3be611e7ae35b696ba44cd361042f79b69391815..2a304be5dc10db22de93aad4b9fccf32
      @Override
      protected void onHit(HitResult hitResult) {
          super.onHit(hitResult);
-@@ -54,6 +110,20 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+@@ -54,6 +126,20 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
          }
  
          if (!this.level().isClientSide && !this.isRemoved()) {
@@ -18625,7 +18641,7 @@ index 3be611e7ae35b696ba44cd361042f79b69391815..2a304be5dc10db22de93aad4b9fccf32
              Entity entity = this.getOwner();
  
              if (entity instanceof ServerPlayer) {
-@@ -112,6 +182,14 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+@@ -112,6 +198,14 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
  
      }
  
