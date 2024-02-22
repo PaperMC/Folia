@@ -1638,7 +1638,7 @@ index 15ee41452992714108efe53b708b5a4e1da7c1ff..5bef4f50082e56b89239cfd62dd74299
      }
  
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07bd11f0d56 100644
+index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..67bf841878eb8e3703782caeb16db4803d13f0d9 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 @@ -53,6 +53,14 @@ import java.util.concurrent.atomic.AtomicReference;
@@ -1656,7 +1656,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
  public final class ChunkHolderManager {
  
      private static final Logger LOGGER = LogUtils.getClassLogger();
-@@ -112,27 +120,92 @@ public final class ChunkHolderManager {
+@@ -112,27 +120,83 @@ public final class ChunkHolderManager {
      private final ChunkTaskScheduler taskScheduler;
      private long currentTick;
  
@@ -1666,15 +1666,6 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
 -            return 0;
 +    // Folia start - region threading
 +    public static final class HolderManagerRegionData {
-+        /*
-+         * This region data is a bit of a mess, because it is part global state and part region state.
-+         * Typically for region state we do not need to worry about threading concerns because it is only
-+         * accessed by the current region when ticking. But since this contains state (
-+         * tickets, and removeTickToChunkExpireTicketCount) that can be written to by any thread holding the
-+         * ticket lock, the merge logic is complicated as merging only holds the region lock. So, Folia has modified
-+         * the add and remove ticket functions to acquire the region lock if the current region does not own the target
-+         * position.
-+         */
 +        private final ArrayDeque<NewChunkHolder> pendingFullLoadUpdate = new ArrayDeque<>();
 +        private final ObjectRBTreeSet<NewChunkHolder> autoSaveQueue = new ObjectRBTreeSet<>((final NewChunkHolder c1, final NewChunkHolder c2) -> {
 +            if (c1 == c2) {
@@ -1716,9 +1707,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
 +            for (final NewChunkHolder fullLoadUpdate : this.pendingFullLoadUpdate) {
 +                final int regionCoordinateX = fullLoadUpdate.chunkX >> chunkToRegionShift;
 +                final int regionCoordinateZ = fullLoadUpdate.chunkZ >> chunkToRegionShift;
- 
--        if (saveTickCompare != 0) {
--            return saveTickCompare;
++
 +                final HolderManagerRegionData data = regionToData.get(CoordinateUtils.getChunkKey(regionCoordinateX, regionCoordinateZ));
 +                if (data != null) {
 +                    data.pendingFullLoadUpdate.add(fullLoadUpdate);
@@ -1728,7 +1717,9 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
 +            for (final NewChunkHolder autoSave : this.autoSaveQueue) {
 +                final int regionCoordinateX = autoSave.chunkX >> chunkToRegionShift;
 +                final int regionCoordinateZ = autoSave.chunkZ >> chunkToRegionShift;
-+
+ 
+-        if (saveTickCompare != 0) {
+-            return saveTickCompare;
 +                final HolderManagerRegionData data = regionToData.get(CoordinateUtils.getChunkKey(regionCoordinateX, regionCoordinateZ));
 +                if (data != null) {
 +                    data.autoSaveQueue.add(autoSave);
@@ -1762,7 +1753,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
  
      public ChunkHolderManager(final ServerLevel world, final ChunkTaskScheduler taskScheduler) {
          this.world = world;
-@@ -167,8 +240,13 @@ public final class ChunkHolderManager {
+@@ -167,8 +231,13 @@ public final class ChunkHolderManager {
      }
  
      public void close(final boolean save, final boolean halt) {
@@ -1777,7 +1768,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
              LOGGER.info("Waiting 60s for chunk system to halt for world '" + this.world.getWorld().getName() + "'");
              if (!this.taskScheduler.halt(true, TimeUnit.SECONDS.toNanos(60L))) {
                  LOGGER.warn("Failed to halt world generation/loading tasks for world '" + this.world.getWorld().getName() + "'");
-@@ -178,9 +256,10 @@ public final class ChunkHolderManager {
+@@ -178,9 +247,10 @@ public final class ChunkHolderManager {
          }
  
          if (save) {
@@ -1789,7 +1780,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
          if (this.world.chunkDataControllerNew.hasTasks() || this.world.entityDataControllerNew.hasTasks() || this.world.poiDataControllerNew.hasTasks()) {
              RegionFileIOThread.flush();
          }
-@@ -201,27 +280,34 @@ public final class ChunkHolderManager {
+@@ -201,27 +271,34 @@ public final class ChunkHolderManager {
          } catch (final IOException ex) {
              LOGGER.error("Failed to close poi regionfile cache for world '" + this.world.getWorld().getName() + "'", ex);
          }
@@ -1831,7 +1822,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
  
              holder.lastAutoSave = currentTick;
              if (holder.save(false, false) != null) {
-@@ -235,15 +321,38 @@ public final class ChunkHolderManager {
+@@ -235,15 +312,38 @@ public final class ChunkHolderManager {
  
          for (final NewChunkHolder holder : reschedule) {
              if (holder.getChunkStatus().isOrAfter(FullChunkStatus.FULL)) {
@@ -1873,7 +1864,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
              LOGGER.info("Saving all chunkholders for world '" + this.world.getWorld().getName() + "'");
          }
  
-@@ -251,7 +360,7 @@ public final class ChunkHolderManager {
+@@ -251,7 +351,7 @@ public final class ChunkHolderManager {
  
          int saved = 0;
  
@@ -1882,7 +1873,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
          long lastLog = start;
          boolean needsFlush = false;
          final int flushInterval = 50;
-@@ -262,6 +371,12 @@ public final class ChunkHolderManager {
+@@ -262,6 +362,12 @@ public final class ChunkHolderManager {
  
          for (int i = 0, len = holders.size(); i < len; ++i) {
              final NewChunkHolder holder = holders.get(i);
@@ -1895,7 +1886,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
              try {
                  final NewChunkHolder.SaveStat saveStat = holder.save(shutdown, false);
                  if (saveStat != null) {
-@@ -294,7 +409,7 @@ public final class ChunkHolderManager {
+@@ -294,7 +400,7 @@ public final class ChunkHolderManager {
                  }
              }
          }
@@ -1904,7 +1895,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
              RegionFileIOThread.flush();
              if (this.world.paperConfig().chunks.flushRegionsOnSave) {
                  try {
-@@ -707,6 +822,13 @@ public final class ChunkHolderManager {
+@@ -707,6 +813,13 @@ public final class ChunkHolderManager {
      }
  
      public void tick() {
@@ -1918,7 +1909,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
          final int sectionShift = this.world.getRegionChunkShift();
  
          final Predicate<Ticket<?>> expireNow = (final Ticket<?> ticket) -> {
-@@ -716,12 +838,12 @@ public final class ChunkHolderManager {
+@@ -716,12 +829,12 @@ public final class ChunkHolderManager {
              return --ticket.removeDelay <= 0L;
          };
  
@@ -1936,7 +1927,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
                  continue;
              }
  
-@@ -1024,19 +1146,51 @@ public final class ChunkHolderManager {
+@@ -1024,19 +1137,51 @@ public final class ChunkHolderManager {
          if (changedFullStatus.isEmpty()) {
              return;
          }
@@ -2000,7 +1991,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
              }
          }
      }
-@@ -1044,8 +1198,9 @@ public final class ChunkHolderManager {
+@@ -1044,8 +1189,9 @@ public final class ChunkHolderManager {
      private void removeChunkHolder(final NewChunkHolder holder) {
          holder.killed = true;
          holder.vanillaChunkHolder.onChunkRemove();
@@ -2011,7 +2002,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
          synchronized (this.chunkHolders) {
              this.chunkHolders.remove(CoordinateUtils.getChunkKey(holder.chunkX, holder.chunkZ));
          }
-@@ -1059,7 +1214,7 @@ public final class ChunkHolderManager {
+@@ -1059,7 +1205,7 @@ public final class ChunkHolderManager {
              throw new IllegalStateException("Cannot unload chunks recursively");
          }
          final int sectionShift = this.unloadQueue.coordinateShift; // sectionShift <= lock shift
@@ -2020,7 +2011,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
          int unloadCountTentative = 0;
          for (final ChunkQueue.SectionToUnload sectionRef : unloadSectionsForRegion) {
              final ChunkQueue.UnloadSection section
-@@ -1372,7 +1527,13 @@ public final class ChunkHolderManager {
+@@ -1372,7 +1518,13 @@ public final class ChunkHolderManager {
  
      // only call on tick thread
      protected final boolean processPendingFullUpdate() {
@@ -2035,7 +2026,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
  
          boolean ret = false;
  
-@@ -1383,9 +1544,7 @@ public final class ChunkHolderManager {
+@@ -1383,9 +1535,7 @@ public final class ChunkHolderManager {
              ret |= holder.handleFullStatusChange(changedFullStatus);
  
              if (!changedFullStatus.isEmpty()) {
@@ -2046,7 +2037,7 @@ index 6bc7c6f16a1649fc9e24e7cf90fca401e5bd4875..30259130f23dc07288a7cbb33456b07b
                  changedFullStatus.clear();
              }
          }
-@@ -1399,7 +1558,7 @@ public final class ChunkHolderManager {
+@@ -1399,7 +1549,7 @@ public final class ChunkHolderManager {
  
      private JsonObject getDebugJsonNoLock() {
          final JsonObject ret = new JsonObject();
@@ -10075,7 +10066,7 @@ index 3e2d5dcd62775b6ed7c0ce0ba51a71b635b1d644..98fb69a9adeb6eaab199aec127692acb
              // CraftBukkit start - SPIGOT-5477, MC-142590
          } else if (MinecraftServer.getServer().hasStopped() || (listener instanceof ServerCommonPacketListenerImpl && ((ServerCommonPacketListenerImpl) listener).processedDisconnect)) {
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d742a4dc0ac 100644
+index 680919045310be7e50e2d503a23d265f2e9b2bc6..11eb550cba3a8eee1deb2f00e5514863e255ea07 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -203,7 +203,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -10479,7 +10470,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          this.getProfiler().incrementCounter("runTask");
          super.doRunTask(ticktask);
      }
-@@ -1497,43 +1578,85 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1497,43 +1578,83 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          return false;
      }
  
@@ -10536,8 +10527,6 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
 +                    bukkit.taskScheduler.executeTick();
 +                }
 +            }
-+            // now tick connections
-+            region.world.getCurrentWorldData().tickConnections(); // Folia - region threading
 +        }
 +        // Folia end - region threading
  
@@ -10576,7 +10565,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
                  }
              }
          } finally {
-@@ -1543,63 +1666,37 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1543,63 +1664,37 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // Paper end - Incremental chunk and player saving
          io.papermc.paper.util.CachedLists.reset(); // Paper
          // Paper start - move executeAll() into full server tick timing
@@ -10652,7 +10641,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
      private ServerStatus buildServerStatus() {
          ServerStatus.Players serverping_serverpingplayersample = this.buildPlayerStatus();
  
-@@ -1607,7 +1704,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1607,7 +1702,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      private ServerStatus.Players buildPlayerStatus() {
@@ -10661,7 +10650,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          int i = this.getMaxPlayers();
  
          if (this.hidesOnlinePlayers()) {
-@@ -1628,31 +1725,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1628,31 +1723,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          }
      }
  
@@ -10699,7 +10688,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          MinecraftTimings.commandFunctionsTimer.stopTiming(); // Spigot // Paper
          this.profiler.popPush("levels");
          //Iterator iterator = this.getAllLevels().iterator(); // Paper - Throw exception on world create while being ticked; moved down
-@@ -1660,7 +1744,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1660,7 +1742,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // CraftBukkit start
          // Run tasks that are waiting on processing
          MinecraftTimings.processQueueTimer.startTiming(); // Spigot
@@ -10708,7 +10697,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
              this.processQueue.remove().run();
          }
          MinecraftTimings.processQueueTimer.stopTiming(); // Spigot
-@@ -1668,13 +1752,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1668,13 +1750,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          MinecraftTimings.timeUpdateTimer.startTiming(); // Spigot // Paper
          // Send time updates to everyone, it will get the right time from the world the player is in.
          // Paper start - Perf: Optimize time updates
@@ -10725,7 +10714,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
                      continue;
                  }
                  ServerPlayer entityplayer = (ServerPlayer) entityhuman;
-@@ -1687,14 +1771,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1687,14 +1769,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // Paper end - Perf: Optimize time updates
          MinecraftTimings.timeUpdateTimer.stopTiming(); // Spigot // Paper
  
@@ -10743,7 +10732,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
  
              this.profiler.push(() -> {
                  return worldserver + " " + worldserver.dimension().location();
-@@ -1711,7 +1792,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1711,7 +1790,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              try {
                  worldserver.timings.doTick.startTiming(); // Spigot
@@ -10752,7 +10741,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
                  // Paper start
                  for (final io.papermc.paper.chunk.SingleThreadChunkRegionManager regionManager : worldserver.getChunkSource().chunkMap.regionManagers) {
                      regionManager.recalculateRegions();
-@@ -1727,17 +1808,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1727,17 +1806,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              this.profiler.pop();
              this.profiler.pop();
@@ -10765,7 +10754,8 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          this.profiler.popPush("connection");
          MinecraftTimings.connectionTimer.startTiming(); // Spigot // Paper
 -        this.getConnection().tick();
-+        if (region == null) this.getConnection().tick(); // Folia - region threading - moved into post entity scheduler tick
++        if (region == null) this.getConnection().tick(); // Folia - region threading
++        if (region != null) regionizedWorldData.tickConnections(); // Folia - region threading
          MinecraftTimings.connectionTimer.stopTiming(); // Spigot // Paper
          this.profiler.popPush("players");
          MinecraftTimings.playerListTimer.startTiming(); // Spigot // Paper
@@ -10774,7 +10764,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          MinecraftTimings.playerListTimer.stopTiming(); // Spigot // Paper
          if (SharedConstants.IS_RUNNING_IN_IDE && this.tickRateManager.runsNormally()) {
              GameTestTicker.SINGLETON.tick();
-@@ -1746,7 +1827,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1746,7 +1826,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.profiler.popPush("server gui refresh");
  
          MinecraftTimings.tickablesTimer.startTiming(); // Spigot // Paper
@@ -10783,7 +10773,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
              ((Runnable) this.tickables.get(i)).run();
          }
          MinecraftTimings.tickablesTimer.stopTiming(); // Spigot // Paper
-@@ -1754,7 +1835,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1754,7 +1834,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.profiler.popPush("send chunks");
          iterator = this.playerList.getPlayers().iterator();
  
@@ -10792,7 +10782,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
  
              entityplayer.connection.chunkSender.sendNextChunks(entityplayer);
-@@ -2097,7 +2178,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2097,7 +2177,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public int getTickCount() {
@@ -10801,7 +10791,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
      }
  
      public int getSpawnProtectionRadius() {
-@@ -2152,6 +2233,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2152,6 +2232,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void invalidateStatus() {
@@ -10817,7 +10807,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          this.lastServerStatus = 0L;
      }
  
-@@ -2166,6 +2256,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2166,6 +2255,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      public void executeIfPossible(Runnable runnable) {
@@ -10825,7 +10815,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
          if (this.isStopped()) {
              throw new RejectedExecutionException("Server already shutting down");
          } else {
-@@ -2424,7 +2515,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2424,7 +2514,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public long getAverageTickTimeNanos() {
@@ -10839,7 +10829,7 @@ index 680919045310be7e50e2d503a23d265f2e9b2bc6..0330f180ef8fed3091b69758cea64d74
      }
  
      public long[] getTickTimesNanos() {
-@@ -2781,14 +2877,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2781,14 +2876,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public ProfileResults stopTimeProfiler() {
