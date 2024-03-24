@@ -8896,7 +8896,7 @@ index e028353e0261310afc42ca0454b723d9f1ffc131..08d282400644be5949f28eb879b333cc
       * Converts an NMS entity's current location to a Bukkit Location
       * @param entity
 diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
-index bdaf062f9b66ceab303a0807eca301342886a8ea..61fc8d4a52d6fb29b09eefd7b0fa880c0cf97849 100644
+index bdaf062f9b66ceab303a0807eca301342886a8ea..906f1c9e619a924c622acc76652a4569305edc8d 100644
 --- a/src/main/java/io/papermc/paper/util/TickThread.java
 +++ b/src/main/java/io/papermc/paper/util/TickThread.java
 @@ -1,5 +1,11 @@
@@ -8911,7 +8911,7 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..61fc8d4a52d6fb29b09eefd7b0fa880c
  import net.minecraft.core.BlockPos;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerLevel;
-@@ -114,46 +120,137 @@ public class TickThread extends Thread {
+@@ -114,46 +120,149 @@ public class TickThread extends Thread {
      }
  
      public static boolean isShutdownThread() {
@@ -9036,7 +9036,19 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..61fc8d4a52d6fb29b09eefd7b0fa880c
 +                    return false;
 +                }
 +            }
-+            return isShutdownThread();
++            if (isShutdownThread()) {
++                return true;
++            }
++            if (entity instanceof ServerPlayer serverPlayer) {
++                // off-main access to server player is never ok, server player is owned by one of global context or region context always
++                return false;
++            }
++            // only own entities that have not yet been added to the world
++
++            // if the entity is removed, then it was in the world previously - which means that a region containing its location
++            // owns it
++            // if the entity has a callback, then it is contained in a world
++            return entity.hasNullCallback() && !entity.isRemoved();
 +        }
 +
 +        final Level level = entity.level();
