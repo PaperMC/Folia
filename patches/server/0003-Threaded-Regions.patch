@@ -20394,10 +20394,19 @@ index 37e0b762b86e74f607a4541ecb7b24ad7a591d0e..4ddc3b3dc704610bf1fb7082e1c89a28
  
          if (i % 40L == 0L) {
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049a537eecf 100644
+index cdb739df2a285032d25d84f4464f202a7a3fa578..82e7e76fecceb55522b5828a56f036e42ef55201 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-@@ -82,6 +82,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -50,7 +50,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     public static final int HOPPER_CONTAINER_SIZE = 5;
+     private NonNullList<ItemStack> items;
+     public int cooldownTime;
+-    private long tickedGameTime;
++    private long tickedGameTime = Long.MIN_VALUE; // Folia - region threading
+ 
+     // CraftBukkit start - add fields and methods
+     public List<HumanEntity> transaction = new java.util.ArrayList<HumanEntity>();
+@@ -82,6 +82,16 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
      // CraftBukkit end
  
@@ -20405,14 +20414,16 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
 +    @Override
 +    public void updateTicks(final long fromTickOffset, final long fromRedstoneTimeOffset) {
 +        super.updateTicks(fromTickOffset, fromRedstoneTimeOffset);
-+        this.tickedGameTime += fromRedstoneTimeOffset;
++        if (this.tickedGameTime != Long.MIN_VALUE) {
++            this.tickedGameTime += fromRedstoneTimeOffset;
++        }
 +    }
 +    // Folia end - region threading
 +
      public HopperBlockEntity(BlockPos pos, BlockState state) {
          super(BlockEntityType.HOPPER, pos, state);
          this.items = NonNullList.withSize(5, ItemStack.EMPTY);
-@@ -137,7 +145,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -137,7 +147,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      public static void pushItemsTick(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity) {
          --blockEntity.cooldownTime;
@@ -20421,7 +20432,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
          if (!blockEntity.isOnCooldown()) {
              blockEntity.setCooldown(0);
              // Spigot start
-@@ -234,12 +242,11 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -234,12 +244,11 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
  
      // Paper start - Perf: Optimize Hoppers
@@ -20437,7 +20448,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
          boolean foundItem = false;
          for (int i = 0; i < hopper.getContainerSize(); ++i) {
              final ItemStack item = hopper.getItem(i);
-@@ -254,7 +261,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -254,7 +263,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
                  // We only need to fire the event once to give protection plugins a chance to cancel this event
                  // Because nothing uses getItem, every event call should end up the same result.
@@ -20446,7 +20457,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
                      movedItem = callPushMoveEvent(destination, movedItem, hopper);
                      if (movedItem == null) { // cancelled
                          origItemStack.setCount(originalItemCount);
-@@ -284,13 +291,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -284,13 +293,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
  
      private static boolean hopperPull(final Level level, final Hopper hopper, final Container container, ItemStack origItemStack, final int i) {
@@ -20462,7 +20473,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
              movedItem = callPullMoveEvent(hopper, container, movedItem);
              if (movedItem == null) { // cancelled
                  origItemStack.setCount(originalItemCount);
-@@ -310,9 +318,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -310,9 +320,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                  origItemStack.setCount(originalItemCount - movedItemCount + remainingItemCount);
              }
  
@@ -20474,7 +20485,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
              container.setChanged();
              return true;
          }
-@@ -327,12 +335,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -327,12 +337,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      @Nullable
      private static ItemStack callPushMoveEvent(Container iinventory, ItemStack itemstack, HopperBlockEntity hopper) {
@@ -20489,7 +20500,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
          }
          if (!result) {
              cooldownHopper(hopper);
-@@ -348,6 +357,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -348,6 +359,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      @Nullable
      private static ItemStack callPullMoveEvent(final Hopper hopper, final Container container, final ItemStack itemstack) {
@@ -20497,7 +20508,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
          final Inventory sourceInventory = getInventory(container);
          final Inventory destination = getInventory(hopper);
  
-@@ -355,7 +365,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -355,7 +367,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
          final io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent event = new io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent(sourceInventory, CraftItemStack.asCraftMirror(itemstack), destination, false);
          final boolean result = event.callEvent();
          if (!event.calledGetItem && !event.calledSetItem) {
@@ -20506,7 +20517,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
          }
          if (!result) {
              cooldownHopper(hopper);
-@@ -518,13 +528,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -518,13 +530,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
  
      public static boolean suckInItems(Level world, Hopper hopper) {
@@ -20522,7 +20533,7 @@ index cdb739df2a285032d25d84f4464f202a7a3fa578..c1d835555fe57745c3d9e416044bd049
              // merge container isEmpty check and move logic into one loop
              if (iinventory instanceof WorldlyContainer worldlyContainer) {
                  for (final int slot : worldlyContainer.getSlotsForFace(enumdirection)) {
-@@ -724,9 +735,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -724,9 +737,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      stack = stack.split(to.getMaxStackSize());
                  }
                  // Spigot end
