@@ -18882,7 +18882,7 @@ index 6b81be03f87967124b046708557e05d519aa79e4..2220ac02eec17c0791e5b4ce8f5e0853
              }
  
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index 1ad126d992d95062a3db08374db7a927f23a0cac..7de615a1b474269bb1c1dcb613d564fbc59c13b5 100644
+index 1ad126d992d95062a3db08374db7a927f23a0cac..43d8f91cdbc4e197f2811fb406a7dae8a8ebfdc1 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
 @@ -379,31 +379,32 @@ public final class ItemStack {
@@ -18927,8 +18927,12 @@ index 1ad126d992d95062a3db08374db7a927f23a0cac..7de615a1b474269bb1c1dcb613d564fb
                  StructureGrowEvent structureEvent = null;
                  if (treeType != null) {
                      boolean isBonemeal = this.getItem() == Items.BONE_MEAL;
-@@ -432,13 +433,13 @@ public final class ItemStack {
-                 SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
+@@ -429,16 +430,16 @@ public final class ItemStack {
+                     entityhuman.awardStat(Stats.ITEM_USED.get(item)); // SPIGOT-7236 - award stat
+                 }
+ 
+-                SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
++                SignItem.openSign.set(null); // SPIGOT-6758 - Reset on early return // Folia - region threading
                  return enuminteractionresult;
              }
 -            world.captureTreeGeneration = false;
@@ -18961,6 +18965,15 @@ index 1ad126d992d95062a3db08374db7a927f23a0cac..7de615a1b474269bb1c1dcb613d564fb
  
                      // Brute force all possible updates
                      // Paper start - Don't resync blocks
+@@ -464,7 +465,7 @@ public final class ItemStack {
+                     //     ((ServerPlayer) entityhuman).connection.send(new ClientboundBlockUpdatePacket(world, placedPos.relative(dir)));
+                     // }
+                     // Paper end - Don't resync blocks
+-                    SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
++                    SignItem.openSign.set(null); // SPIGOT-6758 - Reset on early return // Folia - region threading
+                 } else {
+                     // Change the stack to its new contents if it hasn't been tampered with.
+                     if (this.getCount() == oldCount && Objects.equals(this.tag, oldData)) {
 @@ -472,7 +473,7 @@ public final class ItemStack {
                          this.setCount(newCount);
                      }
@@ -18968,6 +18981,26 @@ index 1ad126d992d95062a3db08374db7a927f23a0cac..7de615a1b474269bb1c1dcb613d564fb
 -                    for (Map.Entry<BlockPos, BlockEntity> e : world.capturedTileEntities.entrySet()) {
 +                    for (Map.Entry<BlockPos, BlockEntity> e : worldData.capturedTileEntities.entrySet()) { // Folia - region threading
                          world.setBlockEntity(e.getValue());
+                     }
+ 
+@@ -523,15 +524,15 @@ public final class ItemStack {
+                     }
+ 
+                     // SPIGOT-4678
+-                    if (this.item instanceof SignItem && SignItem.openSign != null) {
++                    if (this.item instanceof SignItem && SignItem.openSign.get() != null) { // Folia - region threading
+                         try {
+-                            if (world.getBlockEntity(SignItem.openSign) instanceof SignBlockEntity tileentitysign) {
+-                                if (world.getBlockState(SignItem.openSign).getBlock() instanceof SignBlock blocksign) {
++                            if (world.getBlockEntity(SignItem.openSign.get()) instanceof SignBlockEntity tileentitysign) { // Folia - region threading
++                                if (world.getBlockState(SignItem.openSign.get()).getBlock() instanceof SignBlock blocksign) { // Folia - region threading
+                                     blocksign.openTextEdit(entityhuman, tileentitysign, true, io.papermc.paper.event.player.PlayerOpenSignEvent.Cause.PLACE); // Paper - Add PlayerOpenSignEvent
+                                 }
+                             }
+                         } finally {
+-                            SignItem.openSign = null;
++                            SignItem.openSign.set(null); // Folia - region threading
+                         }
                      }
  
 @@ -559,8 +560,8 @@ public final class ItemStack {
@@ -19058,6 +19091,28 @@ index 3aa73cd44aa8c86b78c35bc1788e4f83018c49ed..cfead7686da25d2cd9203256962170d7
                  worldserver.getCraftServer().getPluginManager().callEvent(event);
              }
  
+diff --git a/src/main/java/net/minecraft/world/item/SignItem.java b/src/main/java/net/minecraft/world/item/SignItem.java
+index 21c25026da4117b2cb2c85576d2def945a97dbe2..e0b51cb4ef9e847dc9a2e66f2c87c94d6d93c6a3 100644
+--- a/src/main/java/net/minecraft/world/item/SignItem.java
++++ b/src/main/java/net/minecraft/world/item/SignItem.java
+@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
+ 
+ public class SignItem extends StandingAndWallBlockItem {
+ 
+-    public static BlockPos openSign; // CraftBukkit
++    public static final ThreadLocal<BlockPos> openSign = new ThreadLocal<>(); // CraftBukkit // Folia - region threading
+ 
+     public SignItem(Item.Properties settings, Block standingBlock, Block wallBlock) {
+         super(standingBlock, wallBlock, settings, Direction.DOWN);
+@@ -39,7 +39,7 @@ public class SignItem extends StandingAndWallBlockItem {
+ 
+                     // CraftBukkit start - SPIGOT-4678
+                     // blocksign.openTextEdit(entityhuman, tileentitysign, true);
+-                    SignItem.openSign = pos;
++                    SignItem.openSign.set(pos); // Folia - region threading
+                     // CraftBukkit end
+                 }
+             }
 diff --git a/src/main/java/net/minecraft/world/level/BaseCommandBlock.java b/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
 index 524b0f1086c01888fe0b76e180c40915d16a1eb9..50b3025189938374886c7e2725dd3e4d54ac2160 100644
 --- a/src/main/java/net/minecraft/world/level/BaseCommandBlock.java
