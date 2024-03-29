@@ -16402,7 +16402,7 @@ index ea27b46eec01bda427653335f922ccd068cffcb5..e551d3b875eab6851b75041f418c9a08
              return blockToFallLocation(blockState);
          } else {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f2191176347e25 100644
+index b2eff51f1ad1e702525ef298807ea7d2083f6218..79e9039d77a993d8f1e02942f87fac2a0bd9e8a8 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -170,7 +170,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
@@ -16423,6 +16423,15 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
  
      public @org.jetbrains.annotations.Nullable net.minecraft.server.level.ChunkMap.TrackedEntity tracker; // Paper
      public CraftEntity getBukkitEntity() {
+@@ -378,7 +378,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+     private boolean hasGlowingTag;
+     private final Set<String> tags;
+     private final double[] pistonDeltas;
+-    private long pistonDeltasGameTime;
++    private long pistonDeltasGameTime = Long.MIN_VALUE; // Folia - region threading
+     private EntityDimensions dimensions;
+     private float eyeHeight;
+     public boolean isInPowderSnow;
 @@ -479,28 +479,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          this.isLegacyTrackingEntity = isLegacyTrackingEntity;
      }
@@ -16453,7 +16462,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
      // Paper end - optimise entity tracking
      public float getBukkitYaw() {
          return this.yRot;
-@@ -567,6 +546,16 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -567,6 +546,19 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
  
      public boolean updatingSectionStatus = false;
      // Paper end
@@ -16465,12 +16474,15 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
 +        if (this.activatedImmunityTick != Integer.MIN_VALUE) {
 +            this.activatedImmunityTick += fromTickOffset;
 +        }
++        if (this.pistonDeltasGameTime != Long.MIN_VALUE) {
++            this.pistonDeltasGameTime += fromRedstoneTimeOffset;
++        }
 +    }
 +    // Folia end - region ticking
  
      public Entity(EntityType<?> type, Level world) {
          this.id = Entity.ENTITY_COUNTER.incrementAndGet();
-@@ -825,6 +814,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -825,6 +817,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
  
      // CraftBukkit start
      public void postTick() {
@@ -16483,7 +16495,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          // No clean way to break out of ticking once the entity has been copied to a new world, so instead we move the portalling later in the tick cycle
          if (!(this instanceof ServerPlayer) && this.isAlive()) { // Paper - don't attempt to teleport dead entities
              this.handleNetherPortal();
-@@ -847,7 +842,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -847,7 +845,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          this.walkDistO = this.walkDist;
          this.xRotO = this.getXRot();
          this.yRotO = this.getYRot();
@@ -16492,7 +16504,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          if (this.canSpawnSprintParticle()) {
              this.spawnSprintParticle();
          }
-@@ -1105,8 +1100,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -1105,8 +1103,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          } else {
              this.wasOnFire = this.isOnFire();
              if (movementType == MoverType.PISTON) {
@@ -16503,7 +16515,16 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
                  movement = this.limitPistonMovement(movement);
                  if (movement.equals(Vec3.ZERO)) {
                      return;
-@@ -3018,7 +3013,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -1433,7 +1431,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+         if (movement.lengthSqr() <= 1.0E-7D) {
+             return movement;
+         } else {
+-            long i = this.level().getGameTime();
++            long i = this.level().getRedstoneGameTime(); // Folia - region threading
+ 
+             if (i != this.pistonDeltasGameTime) {
+                 Arrays.fill(this.pistonDeltas, 0.0D);
+@@ -3018,7 +3016,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
                  this.passengers = ImmutableList.copyOf(list);
              }
  
@@ -16512,7 +16533,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          }
      }
  
-@@ -3066,7 +3061,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -3066,7 +3064,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
              }
  
              entity.boardingCooldown = 60;
@@ -16521,7 +16542,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          }
          return true; // CraftBukkit
      }
-@@ -3346,6 +3341,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -3346,6 +3344,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
  
      @Nullable
      public PlayerTeam getTeam() {
@@ -16533,7 +16554,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof Player)) { return null; } // Paper - Perf: Disable Scoreboards for non players by default
          return this.level().getScoreboard().getPlayersTeam(this.getScoreboardName());
      }
-@@ -3635,6 +3635,775 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -3635,6 +3638,775 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          this.portalEntrancePos = original.portalEntrancePos;
      }
  
@@ -17309,7 +17330,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
      @Nullable
      public Entity changeDimension(ServerLevel destination) {
          // CraftBukkit start
-@@ -3643,6 +4412,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -3643,6 +4415,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
  
      @Nullable
      public Entity teleportTo(ServerLevel worldserver, Vec3 location) {
@@ -17321,7 +17342,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          // CraftBukkit end
          // Paper start - Fix item duplication and teleport issues
          if (!this.isAlive() || !this.valid) {
-@@ -3735,6 +4509,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -3735,6 +4512,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          }
      }
  
@@ -17334,7 +17355,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
      }
-@@ -4669,7 +5449,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -4669,7 +5452,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
              }
          }
          // Paper end - Fix MC-4
@@ -17344,7 +17365,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
              synchronized (this.posLock) { // Paper
              this.position = new Vec3(x, y, z);
              } // Paper
-@@ -4690,7 +5471,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -4690,7 +5474,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
  
          // Paper start - Block invalid positions and bounding box; don't allow desync of pos and AABB
          // hanging has its own special logic
@@ -17353,7 +17374,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end - Block invalid positions and bounding box
-@@ -4777,6 +5558,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -4777,6 +5561,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          return this.removalReason != null;
      }
  
@@ -17366,7 +17387,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
      @Nullable
      public Entity.RemovalReason getRemovalReason() {
          return this.removalReason;
-@@ -4800,6 +5587,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -4800,6 +5590,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          CraftEventFactory.callEntityRemoveEvent(this, cause);
          // CraftBukkit end
          final boolean alreadyRemoved = this.removalReason != null; // Paper - Folia schedulers
@@ -17376,7 +17397,7 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
          if (this.removalReason == null) {
              this.removalReason = entity_removalreason;
          }
-@@ -4822,6 +5612,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+@@ -4822,6 +5615,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
          this.removalReason = null;
      }
  
@@ -17388,14 +17409,31 @@ index b2eff51f1ad1e702525ef298807ea7d2083f6218..39434804e84418e44d595012e8f21911
      /**
       * Invoked only when the entity is truly removed from the server, never to be added to any world.
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501c135017c 100644
+index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..a8b47867f05af2a1a4409be5ff49ad0d95bebcae 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -276,6 +276,13 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -246,7 +246,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+     private Optional<BlockPos> lastClimbablePos;
+     @Nullable
+     private DamageSource lastDamageSource;
+-    private long lastDamageStamp;
++    private long lastDamageStamp = Long.MIN_VALUE; // Folia - region threading
+     protected int autoSpinAttackTicks;
+     private float swimAmount;
+     private float swimAmountO;
+@@ -276,6 +276,21 @@ public abstract class LivingEntity extends Entity implements Attackable {
          ++this.noActionTime; // Above all the floats
      }
      // Spigot end
 +    // Folia start - region threading
++    @Override
++    public void updateTicks(long fromTickOffset, long fromRedstoneTimeOffset) {
++        super.updateTicks(fromTickOffset, fromRedstoneTimeOffset);
++        if (this.lastDamageStamp != Long.MIN_VALUE) {
++            this.lastDamageStamp += fromRedstoneTimeOffset;
++        }
++    }
++
 +    @Override
 +    protected void resetStoredPositions() {
 +        super.resetStoredPositions();
@@ -17405,7 +17443,7 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
  
      protected LivingEntity(EntityType<? extends LivingEntity> type, Level world) {
          super(type, world);
-@@ -481,7 +488,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -481,7 +496,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
          if (this.isDeadOrDying() && this.level().shouldTickDeath(this)) {
              this.tickDeath();
@@ -17414,7 +17452,7 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
  
          if (this.lastHurtByPlayerTime > 0) {
              --this.lastHurtByPlayerTime;
-@@ -627,11 +634,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -627,11 +642,14 @@ public abstract class LivingEntity extends Entity implements Attackable {
          return true;
      }
  
@@ -17431,7 +17469,7 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
          }
  
      }
-@@ -860,9 +870,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -860,9 +878,9 @@ public abstract class LivingEntity extends Entity implements Attackable {
          }
  
          this.hurtTime = nbt.getShort("HurtTime");
@@ -17443,7 +17481,7 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
              String s = nbt.getString("Team");
              PlayerTeam scoreboardteam = this.level().getScoreboard().getPlayerTeam(s);
              if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof net.minecraft.world.entity.player.Player)) { scoreboardteam = null; } // Paper - Perf: Disable Scoreboards for non players by default
-@@ -1149,6 +1159,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1149,6 +1167,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
      public boolean addEffect(MobEffectInstance mobeffect, @Nullable Entity entity, EntityPotionEffectEvent.Cause cause, boolean fireEvent) {
          // Paper end - Don't fire sync event during generation
          // org.spigotmc.AsyncCatcher.catchOp("effect add"); // Spigot // Paper - move to API
@@ -17451,7 +17489,25 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
          if (this.isTickingEffects) {
              this.effectsToProcess.add(new ProcessableEffect(mobeffect, cause));
              return true;
-@@ -2359,7 +2370,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1573,7 +1592,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
+             if (flag2) {
+                 this.lastDamageSource = source;
+-                this.lastDamageStamp = this.level().getGameTime();
++                this.lastDamageStamp = this.level().getRedstoneGameTime(); // Folia - region threading
+             }
+ 
+             if (this instanceof ServerPlayer) {
+@@ -1656,7 +1675,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
+     @Nullable
+     public DamageSource getLastDamageSource() {
+-        if (this.level().getGameTime() - this.lastDamageStamp > 40L) {
++        if (this.level().getRedstoneGameTime() - this.lastDamageStamp > 40L || this.lastDamageStamp == Long.MIN_VALUE) { // Folia - region threading
+             this.lastDamageSource = null;
+         }
+ 
+@@ -2359,7 +2378,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      @Nullable
      public LivingEntity getKillCredit() {
@@ -17460,7 +17516,16 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
      }
  
      public final float getMaxHealth() {
-@@ -3502,7 +3513,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -2437,7 +2456,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
+         this.hurt(this.damageSources().generic(), 0.0F);
+         this.lastDamageSource = damageSource;
+-        this.lastDamageStamp = this.level().getGameTime();
++        this.lastDamageStamp = this.level().getRedstoneGameTime(); // Folia - region threading
+     }
+ 
+     @Override
+@@ -3502,7 +3521,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          this.pushEntities();
          this.level().getProfiler().pop();
          // Paper start - Add EntityMoveEvent
@@ -17469,7 +17534,7 @@ index 23570a0b1227a840b9c1e6ae326827ea655bb5f7..206e662c8a43604d5a7563868348d501
              if (this.xo != this.getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
                  Location from = new Location(this.level().getWorld(), this.xo, this.yo, this.zo, this.yRotO, this.xRotO);
                  Location to = new Location(this.level().getWorld(), this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
-@@ -4195,7 +4206,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -4195,7 +4214,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
          BlockPos blockposition = BlockPos.containing(d0, d1, d2);
          Level world = this.level();
  
@@ -20869,11 +20934,45 @@ index 8cb822fed0cda4268f288feae1079a3dc4dc103e..3f53d51960ded5df3b8be12362110f22
      }
      // CraftBukkit end
  
+diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+index be74adc86f0ca467f3b59e7b57fd47a8f381d86e..363a712d6b9e717b075aa52643c6cf91497e7c3b 100644
+--- a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+@@ -152,7 +152,7 @@ public class PistonBaseBlock extends DirectionalBlock {
+                 if (tileentity instanceof PistonMovingBlockEntity) {
+                     PistonMovingBlockEntity tileentitypiston = (PistonMovingBlockEntity) tileentity;
+ 
+-                    if (tileentitypiston.isExtending() && (tileentitypiston.getProgress(0.0F) < 0.5F || world.getGameTime() == tileentitypiston.getLastTicked() || ((ServerLevel) world).isHandlingTick())) {
++                    if (tileentitypiston.isExtending() && (tileentitypiston.getProgress(0.0F) < 0.5F || world.getRedstoneGameTime() == tileentitypiston.getLastTicked() || ((ServerLevel) world).isHandlingTick())) { // Folia - region threading
+                         b0 = 2;
+                     }
+                 }
 diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java b/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
-index c71690dbc3dc52803945f1608f0ee3ba94146354..1c23597f172f46eec714b510acfedb415bb01bff 100644
+index c71690dbc3dc52803945f1608f0ee3ba94146354..1955b660907c5d6b5ca4bf7741f8d568b9255347 100644
 --- a/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
-@@ -144,8 +144,8 @@ public class PistonMovingBlockEntity extends BlockEntity {
+@@ -41,9 +41,19 @@ public class PistonMovingBlockEntity extends BlockEntity {
+     });
+     private float progress;
+     private float progressO;
+-    private long lastTicked;
++    private long lastTicked = Long.MIN_VALUE; // Folia - region threading
+     private int deathTicks;
+ 
++    // Folia start - region threading
++    @Override
++    public void updateTicks(long fromTickOffset, long fromRedstoneTimeOffset) {
++        super.updateTicks(fromTickOffset, fromRedstoneTimeOffset);
++        if (this.lastTicked != Long.MIN_VALUE) {
++            this.lastTicked += fromRedstoneTimeOffset;
++        }
++    }
++    // Folia end - region threading
++
+     public PistonMovingBlockEntity(BlockPos pos, BlockState state) {
+         super(BlockEntityType.PISTON, pos, state);
+     }
+@@ -144,8 +154,8 @@ public class PistonMovingBlockEntity extends BlockEntity {
  
                                  entity.setDeltaMovement(e, g, h);
                                  // Paper - EAR items stuck in in slime pushed by a piston
@@ -20884,6 +20983,15 @@ index c71690dbc3dc52803945f1608f0ee3ba94146354..1c23597f172f46eec714b510acfedb41
                                  // Paper end
                                  break;
                              }
+@@ -277,7 +287,7 @@ public class PistonMovingBlockEntity extends BlockEntity {
+     }
+ 
+     public static void tick(Level world, BlockPos pos, BlockState state, PistonMovingBlockEntity blockEntity) {
+-        blockEntity.lastTicked = world.getGameTime();
++        blockEntity.lastTicked = world.getRedstoneGameTime(); // Folia - region threading
+         blockEntity.progressO = blockEntity.progress;
+         if (blockEntity.progressO >= 1.0F) {
+             if (world.isClientSide && blockEntity.deathTicks < 5) {
 diff --git a/src/main/java/net/minecraft/world/level/border/WorldBorder.java b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
 index 350aabd20329f429248c84d73ab8b5eb145943a7..bdb864f5e7a1bacde88be632442c9de000ce7729 100644
 --- a/src/main/java/net/minecraft/world/level/border/WorldBorder.java
