@@ -19085,7 +19085,7 @@ index 893efb2c4a07c33d41e934279dd914a9dbd4ef79..5baa5e38123d6777370efb286e85352e
  
              return enuminteractionresult;
 diff --git a/src/main/java/net/minecraft/world/item/MapItem.java b/src/main/java/net/minecraft/world/item/MapItem.java
-index ce461b1a8d7fab87ae28e30205f6fab67f1808b6..e52ea9865b41938e766f4c5f39ad509aef737ae4 100644
+index ce461b1a8d7fab87ae28e30205f6fab67f1808b6..068d0fd56483648a991ba023bacd003be4049712 100644
 --- a/src/main/java/net/minecraft/world/item/MapItem.java
 +++ b/src/main/java/net/minecraft/world/item/MapItem.java
 @@ -69,6 +69,7 @@ public class MapItem extends ComplexItem {
@@ -19102,8 +19102,8 @@ index ce461b1a8d7fab87ae28e30205f6fab67f1808b6..e52ea9865b41938e766f4c5f39ad509a
                              Multiset<MapColor> multiset = LinkedHashMultiset.create();
 -                            LevelChunk levelChunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(r), SectionPos.blockToSectionCoord(s)); // Paper - Maps shouldn't load chunks
 -                            if (levelChunk != null && !levelChunk.isEmpty()) { // Paper - Maps shouldn't load chunks
-+                            LevelChunk chunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(r), SectionPos.blockToSectionCoord(s)); // Paper - Maps shouldn't load chunks // Folia - super important that it uses getChunkIfLoaded
-+                            if (chunk != null && !chunk.isEmpty() && io.papermc.paper.util.TickThread.isTickThreadFor((ServerLevel)world, chunk.getPos())) { // Paper - Maps shouldn't load chunks // Folia - make sure chunk is owned
++                            LevelChunk levelChunk = world.getChunkIfLoaded(SectionPos.blockToSectionCoord(r), SectionPos.blockToSectionCoord(s)); // Paper - Maps shouldn't load chunks // Folia - super important that it uses getChunkIfLoaded
++                            if (levelChunk != null && !levelChunk.isEmpty() && io.papermc.paper.util.TickThread.isTickThreadFor((ServerLevel)world, levelChunk.getPos())) { // Paper - Maps shouldn't load chunks // Folia - make sure chunk is owned
                                  int t = 0;
                                  double e = 0.0;
                                  if (world.dimensionType().hasCeiling()) {
@@ -19119,7 +19119,7 @@ index ce461b1a8d7fab87ae28e30205f6fab67f1808b6..e52ea9865b41938e766f4c5f39ad509a
      public static void renderBiomePreviewMap(ServerLevel world, ItemStack map) {
          MapItemSavedData mapItemSavedData = getSavedData(map, world);
          if (mapItemSavedData != null) {
-+            synchronized (worldmap) { // Folia - make map data thread-safe
++            synchronized (mapItemSavedData) { // Folia - make map data thread-safe
              if (world.dimension() == mapItemSavedData.dimension) {
                  int i = 1 << mapItemSavedData.scale;
                  int j = mapItemSavedData.centerX;
@@ -19135,7 +19135,7 @@ index ce461b1a8d7fab87ae28e30205f6fab67f1808b6..e52ea9865b41938e766f4c5f39ad509a
      public void inventoryTick(ItemStack stack, Level world, Entity entity, int slot, boolean selected) {
          if (!world.isClientSide) {
              MapItemSavedData mapItemSavedData = getSavedData(stack, world);
-+            synchronized (worldmap) { // Folia - region threading
++            synchronized (mapItemSavedData) { // Folia - region threading
              if (mapItemSavedData != null) {
                  if (entity instanceof Player player) {
                      mapItemSavedData.tickCarriedBy(player, stack);
