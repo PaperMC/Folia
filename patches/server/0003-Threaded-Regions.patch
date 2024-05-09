@@ -15212,7 +15212,7 @@ index 8aff5129f85ab5729b3da2e465871be62d15bdf2..8044271ff01dfc6808f5a3b60be74f6d
                  Collections.shuffle( this.connections );
              }
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6bb22ee56 100644
+index 5e9202bc7fc649764568b55d66ba0d684118c00c..6adca1b41f2b4c44b67592722e799386c3a1f722 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -300,7 +300,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
@@ -15542,7 +15542,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
          }, true); // CraftBukkit - sync commands
      }
  
-@@ -2330,7 +2384,9 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -2330,14 +2384,20 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
  
      private void tryHandleChat(String s, Runnable runnable, boolean sync) { // CraftBukkit
          if (ServerGamePacketListenerImpl.isChatMessageIllegal(s)) {
@@ -15552,7 +15552,19 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
          } else if (this.player.isRemoved() || this.player.getChatVisibility() == ChatVisiblity.HIDDEN) { // CraftBukkit - dead men tell no tales
              this.send(new ClientboundSystemChatPacket(Component.translatable("chat.disabled.options").withStyle(ChatFormatting.RED), false));
          } else {
-@@ -2395,7 +2451,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+             this.player.resetLastActionTime();
+             // CraftBukkit start
+             if (sync) {
+-                this.server.execute(runnable);
++                // Folia start - region threading
++                this.player.getBukkitEntity().taskScheduler.schedule((ServerPlayer player) -> {
++                    runnable.run();
++                }, null, 1L);
++                // Folia end - region threading
+             } else {
+                 runnable.run();
+             }
+@@ -2395,7 +2455,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
              String originalFormat = event.getFormat(), originalMessage = event.getMessage();
              this.cserver.getPluginManager().callEvent(event);
  
@@ -15561,7 +15573,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
                  // Evil plugins still listening to deprecated event
                  final PlayerChatEvent queueEvent = new PlayerChatEvent(player, event.getMessage(), event.getFormat(), event.getRecipients());
                  queueEvent.setCancelled(event.isCancelled());
-@@ -2506,6 +2562,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -2506,6 +2566,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
          if (s.isEmpty()) {
              ServerGamePacketListenerImpl.LOGGER.warn(this.player.getScoreboardName() + " tried to send an empty message");
          } else if (this.getCraftPlayer().isConversing()) {
@@ -15569,7 +15581,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
              final String conversationInput = s;
              this.server.processQueue.add(new Runnable() {
                  @Override
-@@ -2741,8 +2798,25 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -2741,8 +2802,25 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
      // Spigot End
  
      public void switchToConfig() {
@@ -15596,7 +15608,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
          this.send(ClientboundStartConfigurationPacket.INSTANCE);
          this.connection.setupOutboundProtocol(ConfigurationProtocols.CLIENTBOUND);
      }
-@@ -2768,7 +2842,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -2768,7 +2846,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
  
          this.player.resetLastActionTime();
          this.player.setShiftKeyDown(packet.isUsingSecondaryAction());
@@ -15605,7 +15617,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
              if (!worldserver.getWorldBorder().isWithinBounds(entity.blockPosition())) {
                  return;
              }
-@@ -2912,6 +2986,12 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -2912,6 +2990,12 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
          switch (packetplayinclientcommand_enumclientcommand) {
              case PERFORM_RESPAWN:
                  if (this.player.wonGame) {
@@ -15618,7 +15630,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
                      this.player.wonGame = false;
                      this.player = this.server.getPlayerList().respawn(this.player, this.server.getLevel(this.player.getRespawnDimension()), true, null, true, RespawnReason.END_PORTAL, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag.END_PORTAL); // Paper - Expand PlayerRespawnEvent
                      CriteriaTriggers.CHANGED_DIMENSION.trigger(this.player, Level.END, Level.OVERWORLD);
-@@ -2920,6 +3000,18 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -2920,6 +3004,18 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
                          return;
                      }
  
@@ -15637,7 +15649,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
                      this.player = this.server.getPlayerList().respawn(this.player, false, RespawnReason.DEATH);
                      if (this.server.isHardcore()) {
                          this.player.setGameMode(GameType.SPECTATOR, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.HARDCORE_DEATH, null); // Paper - Expand PlayerGameModeChangeEvent
-@@ -3291,7 +3383,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -3291,7 +3387,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
          // Paper start - auto recipe limit
          if (!org.bukkit.Bukkit.isPrimaryThread()) {
              if (this.recipeSpamPackets.addAndGet(io.papermc.paper.configuration.GlobalConfiguration.get().spamLimiter.recipeSpamIncrement) > io.papermc.paper.configuration.GlobalConfiguration.get().spamLimiter.recipeSpamLimit) {
@@ -15646,7 +15658,7 @@ index 5e9202bc7fc649764568b55d66ba0d684118c00c..21fdafe00373e115a284c8d27940e3b6
                  return;
              }
          }
-@@ -3460,7 +3552,18 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -3460,7 +3556,18 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
  
          this.filterTextPacket(list).thenAcceptAsync((list1) -> {
              this.updateSignText(packet, list1);
