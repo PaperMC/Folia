@@ -5,29 +5,32 @@ Subject: [PATCH] MC-Dev fixes
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/ai/Brain.java b/src/main/java/net/minecraft/world/entity/ai/Brain.java
-index dea20f16ac97402f754c8e47d03e9ef38de73190..21e5d1451f90194aa415cf0a183d1a731854f605 100644
+index afbb027021acfbe25d534a84f1750e420bbde6e0..af6f91c66e9cc7e0d491e6efed992a140947155e 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/Brain.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/Brain.java
-@@ -72,15 +72,15 @@ public class Brain<E extends LivingEntity> {
-             }
+@@ -79,7 +79,7 @@ public class Brain<E extends LivingEntity> {
+                     }
  
-             public <T> DataResult<Brain<E>> decode(DynamicOps<T> dynamicOps, MapLike<T> mapLike) {
--                MutableObject<DataResult<ImmutableList.Builder<Brain.MemoryValue<?>>>> mutableObject = new MutableObject<>(DataResult.success(ImmutableList.builder()));
-+                MutableObject<DataResult<ImmutableList.Builder<Brain.MemoryValue<?>>>> mutableObject2 = new MutableObject<>(DataResult.success(ImmutableList.builder())); // Folia - decompile fix
-                 mapLike.entries().forEach((pair) -> {
-                     DataResult<MemoryModuleType<?>> dataResult = BuiltInRegistries.MEMORY_MODULE_TYPE.byNameCodec().parse(dynamicOps, pair.getFirst());
-                     DataResult<? extends Brain.MemoryValue<?>> dataResult2 = dataResult.flatMap((memoryType) -> {
-                         return this.captureRead(memoryType, dynamicOps, (T)pair.getSecond());
-                     });
--                    mutableObject.setValue(mutableObject.getValue().apply2(ImmutableList.Builder::add, dataResult2));
-+                    mutableObject2.setValue(mutableObject2.getValue().apply2(ImmutableList.Builder::add, dataResult2)); // Folia - decompile fix
-                 });
--                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject.getValue().resultOrPartial(Brain.LOGGER::error).map(ImmutableList.Builder::build).orElseGet(ImmutableList::of);
-+                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject2.getValue().resultOrPartial(Brain.LOGGER::error).map(ImmutableList.Builder::build).orElseGet(ImmutableList::of); // Folia - decompile fix
-                 return DataResult.success(new Brain<>(memoryModules, sensors, immutableList, mutableObject::getValue));
-             }
- 
-@@ -181,14 +181,14 @@ public class Brain<E extends LivingEntity> {
+                     public <T> DataResult<Brain<E>> decode(DynamicOps<T> dynamicOps, MapLike<T> mapLike) {
+-                        MutableObject<DataResult<Builder<Brain.MemoryValue<?>>>> mutableObject = new MutableObject<>(
++                        MutableObject<DataResult<Builder<Brain.MemoryValue<?>>>> mutableObject2 = new MutableObject<>( // Folia - decompile fix
+                             DataResult.success(ImmutableList.builder())
+                         );
+                         mapLike.entries()
+@@ -91,10 +91,10 @@ public class Brain<E extends LivingEntity> {
+                                     DataResult<? extends Brain.MemoryValue<?>> dataResult2 = dataResult.flatMap(
+                                         memoryType -> this.captureRead((MemoryModuleType<T>)memoryType, dynamicOps, (T)pair.getSecond())
+                                     );
+-                                    mutableObject.setValue(mutableObject.getValue().apply2(Builder::add, dataResult2));
++                                    mutableObject2.setValue(mutableObject2.getValue().apply2(Builder::add, dataResult2)); // Folia - decompile fix
+                                 }
+                             );
+-                        ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject.getValue()
++                        ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject2.getValue() // Folia - decompile fix
+                             .resultOrPartial(Brain.LOGGER::error)
+                             .map(Builder::build)
+                             .orElseGet(ImmutableList::of);
+@@ -194,14 +194,14 @@ public class Brain<E extends LivingEntity> {
          if (optional == null) {
              throw new IllegalStateException("Unregistered memory fetched: " + type);
          } else {
@@ -44,12 +47,3 @@ index dea20f16ac97402f754c8e47d03e9ef38de73190..21e5d1451f90194aa415cf0a183d1a73
      }
  
      public <U> long getTimeUntilExpiry(MemoryModuleType<U> type) {
-@@ -483,7 +483,7 @@ public class Brain<E extends LivingEntity> {
-         private final Optional<? extends ExpirableValue<U>> value;
- 
-         static <U> Brain.MemoryValue<U> createUnchecked(MemoryModuleType<U> type, Optional<? extends ExpirableValue<?>> data) {
--            return new Brain.MemoryValue<>(type, data);
-+            return new Brain.MemoryValue<>(type, (Optional<? extends ExpirableValue<U>>)data); // Folia - decompile fix
-         }
- 
-         MemoryValue(MemoryModuleType<U> type, Optional<? extends ExpirableValue<U>> data) {
