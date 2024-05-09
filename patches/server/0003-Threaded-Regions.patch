@@ -21708,10 +21708,10 @@ index 2cdd18f724296f10cd4a522d1e8196723d39cf45..b329d8327d73fc90586945834305fc3a
      public LevelChunkTicks() {
      }
 diff --git a/src/main/java/net/minecraft/world/ticks/LevelTicks.java b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
-index 7a69564572357a7acc043e35b9c113beeb738951..60e67681a942df77fd498dcc8d5904db7fe676b6 100644
+index 7a69564572357a7acc043e35b9c113beeb738951..f71661ef4250d3b668fffeea7cd74a28eec95acd 100644
 --- a/src/main/java/net/minecraft/world/ticks/LevelTicks.java
 +++ b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
-@@ -39,11 +39,68 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+@@ -39,12 +39,69 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
      private final List<ScheduledTick<T>> alreadyRunThisTick = new ArrayList<>();
      private final Set<ScheduledTick<?>> toRunThisTickSet = new ObjectOpenCustomHashSet<>(ScheduledTick.UNIQUE_TICK_HASH);
      private final BiConsumer<LevelChunkTicks<T>, ScheduledTick<T>> chunkScheduleUpdater = (chunkTickScheduler, tick) -> {
@@ -21722,6 +21722,7 @@ index 7a69564572357a7acc043e35b9c113beeb738951..60e67681a942df77fd498dcc8d5904db
          }
      };
  
+-    public LevelTicks(LongPredicate tickingFutureReadyPredicate, Supplier<ProfilerFiller> profilerGetter) {
 +    // Folia start - region threading
 +    public final net.minecraft.server.level.ServerLevel world;
 +    public final boolean isBlock;
@@ -21779,9 +21780,10 @@ index 7a69564572357a7acc043e35b9c113beeb738951..60e67681a942df77fd498dcc8d5904db
 +    }
 +    // Folia end - region threading
 +
-     public LevelTicks(LongPredicate tickingFutureReadyPredicate, Supplier<ProfilerFiller> profilerGetter) {
++    public LevelTicks(LongPredicate tickingFutureReadyPredicate, Supplier<ProfilerFiller> profilerGetter, net.minecraft.server.level.ServerLevel world, boolean isBlock) { this.world = world; this.isBlock = isBlock; // Folia - add world and isBlock
          this.tickCheck = tickingFutureReadyPredicate;
          this.profiler = profilerGetter;
+     }
 @@ -57,7 +114,17 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
              this.nextTickForContainer.put(l, scheduledTick.triggerTick());
          }
