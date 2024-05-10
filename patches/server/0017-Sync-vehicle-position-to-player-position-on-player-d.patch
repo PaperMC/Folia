@@ -7,20 +7,20 @@ This allows the player to be re-positioned before logging into
 the world without causing thread checks to trip on Folia.
 
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index a390227e5af1232f2090d2be72f7789805025f76..bbf43b5844a75a25c1757cfb1c3c9dbe9b1fadde 100644
+index db2903276c694d395f62afdc7c71344466ae505f..5f9c89dbbfa9b3e4d2b68c0d8628cf223c1f7aa0 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -522,7 +522,13 @@ public abstract class PlayerList {
-             CompoundTag nbttagcompound1 = nbttagcompound.getCompound("RootVehicle");
-             // CraftBukkit start
-             ServerLevel finalWorldServer = worldserver1;
+         if (optional.isPresent() && ((CompoundTag) optional.get()).contains("RootVehicle", 10)) {
+             CompoundTag nbttagcompound = ((CompoundTag) optional.get()).getCompound("RootVehicle");
+             ServerLevel finalWorldServer = worldserver1; // CraftBukkit - decompile error
 +            Vec3 playerPos = player.position(); // Paper - force sync root vehicle to player position
-             Entity entity = EntityType.loadEntityRecursive(nbttagcompound1.getCompound("Entity"), finalWorldServer, (entity1) -> {
+             Entity entity = EntityType.loadEntityRecursive(nbttagcompound.getCompound("Entity"), worldserver1, (entity1) -> {
 +                // Paper start - force sync root vehicle to player position
 +                if (entity1.distanceToSqr(player) > (5.0 * 5.0)) {
 +                    entity1.setPosRaw(playerPos.x, playerPos.y, playerPos.z, true);
 +                }
 +                // Paper end - force sync root vehicle to player position
-                 return !finalWorldServer.addWithUUID(entity1, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.MOUNT) ? null : entity1; // Paper - Entity#getEntitySpawnReason
-                 // CraftBukkit end
+                 return !finalWorldServer.addWithUUID(entity1, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.MOUNT) ? null : entity1; // CraftBukkit - decompile error // Paper - Entity#getEntitySpawnReason
              });
+ 
