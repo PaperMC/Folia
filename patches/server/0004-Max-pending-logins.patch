@@ -6,10 +6,10 @@ Subject: [PATCH] Max pending logins
 Should help the floodgates on launch
 
 diff --git a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index 58cdb65083134680230d7070f9f6209f2d32873b..aa4b461bbb2c8c4753f7c9057bab1740de2c0284 100644
+index 734f745ce383c8398fdedeb6fd71277e1482a4a6..83b09feec13a00c35e6f8d4f0ccdae1c8da9c0e5 100644
 --- a/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-@@ -89,7 +89,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+@@ -110,7 +110,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
              if (this.server.getPlayerList().pushPendingJoin(name, uniqueId, this.connection)) {
              // Folia end - region threading - rewrite login process
              this.verifyLoginAndFinishConnectionSetup((GameProfile) Objects.requireNonNull(this.authenticatedProfile));
@@ -17,12 +17,12 @@ index 58cdb65083134680230d7070f9f6209f2d32873b..aa4b461bbb2c8c4753f7c9057bab1740
 +            } else { --this.tick; } // Paper - prevent logins to be processed even though disconnect was called // Folia - max concurrent logins
          }
  
-         if (this.state == ServerLoginPacketListenerImpl.State.WAITING_FOR_DUPE_DISCONNECT && !this.isPlayerAlreadyInWorld((GameProfile) Objects.requireNonNull(this.authenticatedProfile))) {
+         // CraftBukkit start
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 08daa5ed0b4b599836b97eef1e53e630e7659443..a390227e5af1232f2090d2be72f7789805025f76 100644
+index 67b832c9a36f8af245e381c7fa3c56a7e9becd1e..db2903276c694d395f62afdc7c71344466ae505f 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -173,6 +173,17 @@ public abstract class PlayerList {
+@@ -175,6 +175,17 @@ public abstract class PlayerList {
              conflictingId = this.connectionById.get(byId);
  
              if (conflictingName == null && conflictingId == null) {
