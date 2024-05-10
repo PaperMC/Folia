@@ -13193,7 +13193,7 @@ index b99f50604bafecbc68835974c9ed0caa91911a40..034218c47afa99a0623b1f9c9b7830ae
      }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 0981d440d0dbfe4df668d1f3f1b5706a93bc4434..294cf71ce1d1a33842d6b71e790153ddf1fc2e03 100644
+index ca56a0b596976448da6bb2a0e82b3d5cd4133e12..559b6d0e3611b506ff10e5ae7c42b35f0d710173 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -197,38 +197,36 @@ public class ServerLevel extends Level implements WorldGenLevel {
@@ -13835,7 +13835,7 @@ index 0981d440d0dbfe4df668d1f3f1b5706a93bc4434..294cf71ce1d1a33842d6b71e790153dd
                  return true;
              }
              // Paper end - capture all item additions to the world
-@@ -1852,7 +2009,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1852,21 +2009,22 @@ public class ServerLevel extends Level implements WorldGenLevel {
  
      @Override
      public void sendBlockUpdated(BlockPos pos, BlockState oldState, BlockState newState, int flags) {
@@ -13844,13 +13844,13 @@ index 0981d440d0dbfe4df668d1f3f1b5706a93bc4434..294cf71ce1d1a33842d6b71e790153dd
              String s = "recursive call to sendBlockUpdated";
  
              Util.logAndPauseIfInIde("recursive call to sendBlockUpdated", new IllegalStateException("recursive call to sendBlockUpdated"));
-@@ -1860,13 +2017,14 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         }
  
          this.getChunkSource().blockChanged(pos);
-         if(this.paperConfig().misc.updatePathfindingOnBlockUpdate) { // Paper - option to disable pathfinding updates
 -        this.pathTypesByPosCache.invalidate(pos);
 +        final io.papermc.paper.threadedregions.RegionizedWorldData regionizedWorldData = this.getCurrentWorldData(); // Folia - region threading
 +        regionizedWorldData.pathTypesByPosCache.invalidate(pos); // Folia - region threading
+         if (this.paperConfig().misc.updatePathfindingOnBlockUpdate) { // Paper - option to disable pathfinding updates
          VoxelShape voxelshape = oldState.getCollisionShape(this, pos);
          VoxelShape voxelshape1 = newState.getCollisionShape(this, pos);
  
