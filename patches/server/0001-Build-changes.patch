@@ -5,34 +5,38 @@ Subject: [PATCH] Build changes
 
 
 diff --git a/build.gradle.kts b/build.gradle.kts
-index 079bf6878538a1c223ac912f29f6df79a1167218..b1d621ed91c74790fd5b66339c044ec444de62ef 100644
+index 4998aff0b7cb084dcda15c6a18bbe45e99b6000a..eb2f9941b24af591f1e56339b97f5284a765cf81 100644
 --- a/build.gradle.kts
 +++ b/build.gradle.kts
-@@ -12,8 +12,12 @@ configurations.named(log4jPlugins.compileClasspathConfigurationName) {
+@@ -13,7 +13,7 @@ configurations.named(log4jPlugins.compileClasspathConfigurationName) {
  val alsoShade: Configuration by configurations.creating
  
  dependencies {
 -    implementation(project(":paper-api"))
--    implementation(project(":paper-mojangapi"))
-+    // Folia start
-+    implementation(project(":folia-api"))
-+    implementation("io.papermc.paper:paper-mojangapi:${project.version}") {
-+        exclude("io.papermc.paper", "paper-api")
-+    }
-+    // Folia end
++    implementation(project(":folia-api")) // Folia
      // Paper start
      implementation("org.jline:jline-terminal-jansi:3.21.0")
      implementation("net.minecrell:terminalconsoleappender:1.3.0")
-@@ -79,7 +83,7 @@ tasks.jar {
+@@ -80,14 +80,14 @@ tasks.jar {
+         val gitBranch = git("rev-parse", "--abbrev-ref", "HEAD").getText().trim() // Paper
          attributes(
              "Main-Class" to "org.bukkit.craftbukkit.Main",
-             "Implementation-Title" to "CraftBukkit",
--            "Implementation-Version" to "git-Paper-$implementationVersion",
-+            "Implementation-Version" to "git-Folia-$implementationVersion", // Folia
+-            "Implementation-Title" to "Paper",
++            "Implementation-Title" to "Folia", // Folia
+             "Implementation-Version" to implementationVersion,
              "Implementation-Vendor" to date, // Paper
-             "Specification-Title" to "Bukkit",
+-            "Specification-Title" to "Paper",
++            "Specification-Title" to "Folia", // Folia
              "Specification-Version" to project.version,
-@@ -138,7 +142,7 @@ fun TaskContainer.registerRunTask(
+             "Specification-Vendor" to "Paper Team",
+-            "Brand-Id" to "papermc:paper",
+-            "Brand-Name" to "Paper",
++            "Brand-Id" to "papermc:folia", // Folia
++            "Brand-Name" to "Folia", // Folia
+             "Build-Number" to (build ?: ""),
+             "Build-Time" to Instant.now().toString(),
+             "Git-Branch" to gitBranch, // Paper
+@@ -144,7 +144,7 @@ fun TaskContainer.registerRunTask(
      name: String,
      block: JavaExec.() -> Unit
  ): TaskProvider<JavaExec> = register<JavaExec>(name) {
@@ -69,55 +73,43 @@ index 4b002e8b75d117b726b0de274a76d3596fce015b..cb60d58d4a7556dd896f31d0cd249f86
                  metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
                      Map<String, Map<String, Integer>> map = new HashMap<>();
 diff --git a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
-index 9d687da5bdf398bb3f6c84cdf1249a7213d09f2e..e2f704c115fd6e00960bb56bb0779f1100c89c17 100644
+index 532306cacd52579cdf37e4aca25887b1ed3ba6a1..29bd788ae8bc61c1e62a4f84b9e259931a7041ce 100644
 --- a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
 +++ b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
-@@ -31,8 +31,8 @@ public class PaperVersionFetcher implements VersionFetcher {
-     @Nonnull
-     @Override
-     public Component getVersionMessage(@Nonnull String serverVersion) {
--        String[] parts = serverVersion.substring("git-Paper-".length()).split("[-\\s]");
--        final Component updateMessage = getUpdateStatusMessage("PaperMC/Paper", GITHUB_BRANCH_NAME, parts[0]);
-+        String[] parts = serverVersion.substring("git-Folia-".length()).split("[-\\s]"); // Folia
-+        final Component updateMessage = getUpdateStatusMessage("PaperMC/Folia", GITHUB_BRANCH_NAME, parts[0]); // Folia
-         final Component history = getHistory();
+@@ -49,7 +49,7 @@ public class PaperVersionFetcher implements VersionFetcher {
+         if (build.buildNumber().isEmpty() && build.gitCommit().isEmpty()) {
+             updateMessage = text("You are running a development version without access to version information", color(0xFF5300));
+         } else {
+-            updateMessage = getUpdateStatusMessage("PaperMC/Paper", build);
++            updateMessage = getUpdateStatusMessage("PaperMC/Folia", build); // Folia
+         }
+         final @Nullable Component history = this.getHistory();
  
-         return history != null ? TextComponent.ofChildren(updateMessage, Component.newline(), history) : updateMessage;
-@@ -85,7 +85,7 @@ public class PaperVersionFetcher implements VersionFetcher {
-         if (siteApiVersion == null) { return -1; }
+@@ -86,7 +86,7 @@ public class PaperVersionFetcher implements VersionFetcher {
+     private static int fetchDistanceFromSiteApi(final ServerBuildInfo build, final int jenkinsBuild) {
          try {
-             try (BufferedReader reader = Resources.asCharSource(
--                new URL("https://api.papermc.io/v2/projects/paper/versions/" + siteApiVersion),
-+                new URL("https://api.papermc.io/v2/projects/folia/versions/" + siteApiVersion), // Folia
+             try (final BufferedReader reader = Resources.asCharSource(
+-                URI.create("https://api.papermc.io/v2/projects/paper/versions/" + build.minecraftVersionId()).toURL(),
++                URI.create("https://api.papermc.io/v2/projects/folia/versions/" + build.minecraftVersionId()).toURL(), // Folia
                  Charsets.UTF_8
              ).openBufferedStream()) {
-                 JsonObject json = new Gson().fromJson(reader, JsonObject.class);
-diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 8dc2f9df367c849ca333bf1a1fd92ff91617b548..5e5eeb5c954de1db5fa8ee57d456cf46cfebfd75 100644
---- a/src/main/java/net/minecraft/server/MinecraftServer.java
-+++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1924,7 +1924,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
- 
-     @DontObfuscate
-     public String getServerModName() {
--        return "Paper"; // Paper
-+        return "Folia"; // Paper // Folia - Folia
-     }
- 
-     public SystemReport fillSystemReport(SystemReport details) {
-diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 57db399bc1d3b6b015740b059987bc8d9bcc3101..d50b1f84dfb6e30fd0d0dd2ee66f874681ad6b78 100644
---- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-+++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -268,7 +268,7 @@ import javax.annotation.Nullable; // Paper
- import javax.annotation.Nonnull; // Paper
- 
- public final class CraftServer implements Server {
--    private final String serverName = "Paper"; // Paper
-+    private final String serverName = "Folia"; // Folia // Paper
-     private final String serverVersion;
-     private final String bukkitVersion = Versioning.getBukkitVersion();
-     private final Logger logger = Logger.getLogger("Minecraft");
+                 final JsonObject json = new Gson().fromJson(reader, JsonObject.class);
+diff --git a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
+index 790bad0494454ca12ee152e3de6da3da634d9b20..e741201fdbea0dbbc0e42313ebd33368014c9dc4 100644
+--- a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
++++ b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
+@@ -42,9 +42,9 @@ public record ServerBuildInfoImpl(
+         this(
+             getManifestAttribute(manifest, ATTRIBUTE_BRAND_ID)
+                 .map(Key::key)
+-                .orElse(BRAND_PAPER_ID),
++                .orElse(Key.key("papermc", "folia")), // Folia
+             getManifestAttribute(manifest, ATTRIBUTE_BRAND_NAME)
+-                .orElse(BRAND_PAPER_NAME),
++                .orElse("Folia"), // Folia
+             SharedConstants.getCurrentVersion().getId(),
+             SharedConstants.getCurrentVersion().getName(),
+             getManifestAttribute(manifest, ATTRIBUTE_BUILD_NUMBER)
 diff --git a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
 index 774556a62eb240da42e84db4502e2ed43495be17..e9b6ca3aa25e140467ae866d572483050ea3fa0e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
