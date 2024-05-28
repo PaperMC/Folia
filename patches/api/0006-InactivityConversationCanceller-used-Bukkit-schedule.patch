@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Euphyllia Bierque <bierque.euphyllia@gmail.com>
+Date: Tue, 28 May 2024 02:08:05 +0200
+Subject: [PATCH] InactivityConversationCanceller used Bukkit schedulers
+
+
+diff --git a/src/main/java/org/bukkit/conversations/InactivityConversationCanceller.java b/src/main/java/org/bukkit/conversations/InactivityConversationCanceller.java
+index fd8daa02063833a7457fec7a714ca37048487d94..3b8009d2db166600e347659880433a9dda212939 100644
+--- a/src/main/java/org/bukkit/conversations/InactivityConversationCanceller.java
++++ b/src/main/java/org/bukkit/conversations/InactivityConversationCanceller.java
+@@ -11,7 +11,7 @@ public class InactivityConversationCanceller implements ConversationCanceller {
+     protected Plugin plugin;
+     protected int timeoutSeconds;
+     protected Conversation conversation;
+-    private int taskId = -1;
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask scheduledTask = null; // Folia
+ 
+     /**
+      * Creates an InactivityConversationCanceller.
+@@ -48,27 +48,28 @@ public class InactivityConversationCanceller implements ConversationCanceller {
+      * Starts an inactivity timer.
+      */
+     private void startTimer() {
+-        taskId = plugin.getServer().getScheduler().scheduleSyncDelayedTask(plugin, new Runnable() {
+-            @Override
+-            public void run() {
+-                if (conversation.getState() == Conversation.ConversationState.UNSTARTED) {
+-                    startTimer();
+-                } else if (conversation.getState() == Conversation.ConversationState.STARTED) {
+-                    cancelling(conversation);
+-                    conversation.abandon(new ConversationAbandonedEvent(conversation, InactivityConversationCanceller.this));
+-                }
++        // Folia start - global scheduler
++        scheduledTask = plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, task -> {
++            if (conversation.getState() == Conversation.ConversationState.UNSTARTED) {
++                startTimer();
++            } else if (conversation.getState() == Conversation.ConversationState.STARTED) {
++                cancelling(conversation);
++                conversation.abandon(new ConversationAbandonedEvent(conversation, InactivityConversationCanceller.this));
+             }
+-        }, timeoutSeconds * 20);
++        }, timeoutSeconds * 20L);
++        // Folia end
+     }
+ 
+     /**
+      * Stops the active inactivity timer.
+      */
+     private void stopTimer() {
+-        if (taskId != -1) {
+-            plugin.getServer().getScheduler().cancelTask(taskId);
+-            taskId = -1;
++        // Folia start
++        if (scheduledTask != null) {
++            scheduledTask.cancel();
++            scheduledTask = null;
+         }
++        // Folia end
+     }
+ 
+     /**
