@@ -4,13 +4,13 @@ Date: Fri, 10 Mar 2023 00:16:26 -0800
 Subject: [PATCH] Add chunk system throughput counters to /tps
 
 
-diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java
-index c307b084f59f7bb94dc02f25bbcd3e01e01d2306..b53d15a3979f42cb1b9a4cba24147c32f9a1a676 100644
---- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java
-+++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkFullTask.java
-@@ -22,6 +22,9 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
-     protected final ChunkAccess fromChunk;
-     protected final PrioritisedExecutor.PrioritisedTask convertToFullTask;
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java
+index fbdf721e8b4cfe6cef4ee60c53c680cbfc858d88..8581b8771b8cc89ff7bdb63fbfd5628a1e7d4762 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java
+@@ -28,6 +28,9 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+     private final ChunkAccess fromChunk;
+     private final PrioritisedExecutor.PrioritisedTask convertToFullTask;
  
 +    public static final io.papermc.paper.util.IntervalledCounter chunkLoads = new io.papermc.paper.util.IntervalledCounter(java.util.concurrent.TimeUnit.SECONDS.toNanos(15L));
 +    public static final io.papermc.paper.util.IntervalledCounter chunkGenerates = new io.papermc.paper.util.IntervalledCounter(java.util.concurrent.TimeUnit.SECONDS.toNanos(15L));
@@ -18,7 +18,7 @@ index c307b084f59f7bb94dc02f25bbcd3e01e01d2306..b53d15a3979f42cb1b9a4cba24147c32
      public ChunkFullTask(final ChunkTaskScheduler scheduler, final ServerLevel world, final int chunkX, final int chunkZ,
                           final NewChunkHolder chunkHolder, final ChunkAccess fromChunk, final PrioritisedExecutor.Priority priority) {
          super(scheduler, world, chunkX, chunkZ);
-@@ -35,6 +38,20 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+@@ -41,6 +44,20 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
          return ChunkStatus.FULL;
      }
  
@@ -38,9 +38,9 @@ index c307b084f59f7bb94dc02f25bbcd3e01e01d2306..b53d15a3979f42cb1b9a4cba24147c32
 +
      @Override
      public void run() {
-         // See Vanilla protoChunkToFullChunk for what this function should be doing
-@@ -49,6 +66,17 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
-                 this.world.getPoiManager().checkConsistency(this.fromChunk);
+         // See Vanilla ChunkPyramid#LOADING_PYRAMID.FULL for what this function should be doing
+@@ -55,6 +72,17 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+                 ((ChunkSystemPoiManager)this.world.getPoiManager()).moonrise$checkConsistency(this.fromChunk);
              }
  
 +            final long time = System.nanoTime();
@@ -58,15 +58,15 @@ index c307b084f59f7bb94dc02f25bbcd3e01e01d2306..b53d15a3979f42cb1b9a4cba24147c32
                  chunk = wrappedFull.getWrapped();
              } else {
 diff --git a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
-index 3bcb1dc98c61e025874cc9e008faa722581a530c..0b48f45760829f1f4813b5f0f23e920dca7b1c45 100644
+index 3bcb1dc98c61e025874cc9e008faa722581a530c..012d3a7da7fe483393a0888c823bd2e78f5c3908 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 @@ -170,6 +170,9 @@ public final class CommandServerHealth extends Command {
              totalUtil += (report == null ? 0.0 : report.utilisation());
          }
  
-+        final double genRate = io.papermc.paper.chunk.system.scheduling.ChunkFullTask.genRate(currTime);
-+        final double loadRate = io.papermc.paper.chunk.system.scheduling.ChunkFullTask.loadRate(currTime);
++        final double genRate = ca.spottedleaf.moonrise.patches.chunk_system.scheduling.task.ChunkFullTask.genRate(currTime);
++        final double loadRate = ca.spottedleaf.moonrise.patches.chunk_system.scheduling.task.ChunkFullTask.loadRate(currTime);
 +
          totalUtil += globalTickReport.utilisation();
  

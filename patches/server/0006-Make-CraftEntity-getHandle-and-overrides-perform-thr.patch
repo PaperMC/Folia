@@ -8,7 +8,7 @@ While these checks are painful, it should assist in debugging
 threading issues for plugins.
 
 diff --git a/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java b/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java
-index 41bf71d116ffc5431586ce54abba7f8def6c1dcf..519da6886613b8460e989767b1a21e3126cb1894 100644
+index 41bf71d116ffc5431586ce54abba7f8def6c1dcf..1cf9a7677449ab8f03fb23d835e3fadce61542db 100644
 --- a/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java
 +++ b/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java
 @@ -11,8 +11,16 @@ public class PaperSchoolableFish extends CraftFish implements SchoolableFish {
@@ -24,15 +24,15 @@ index 41bf71d116ffc5431586ce54abba7f8def6c1dcf..519da6886613b8460e989767b1a21e31
 +
      @Override
      public AbstractSchoolingFish getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractSchoolingFish) super.getHandle();
      }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index afc4fced315f2177372597d88eaf90cc8f3d878a..fad6a7185e8e9ea160b47ec9da56d08af9df8396 100644
+index f736ad7e211c89e4c7edc689b089b1b3b486fbab..7a102b4e90fbc09b8653e5b566299efe24a04cf6 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -2991,6 +2991,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3044,6 +3044,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
              if (!force && (!this.canRide(entity) || !entity.canAddPassenger(this))) {
                  return false;
              } else {
@@ -40,7 +40,7 @@ index afc4fced315f2177372597d88eaf90cc8f3d878a..fad6a7185e8e9ea160b47ec9da56d08a
                  // CraftBukkit start
                  if (entity.getBukkitEntity() instanceof Vehicle && this.getBukkitEntity() instanceof LivingEntity) {
                      VehicleEnterEvent event = new VehicleEnterEvent((Vehicle) entity.getBukkitEntity(), this.getBukkitEntity());
-@@ -3012,6 +3013,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3065,6 +3066,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
                      return false;
                  }
                  // CraftBukkit end
@@ -48,7 +48,7 @@ index afc4fced315f2177372597d88eaf90cc8f3d878a..fad6a7185e8e9ea160b47ec9da56d08a
                  if (this.isPassenger()) {
                      this.stopRiding();
                  }
-@@ -3095,6 +3097,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3148,6 +3150,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
              throw new IllegalStateException("Use x.stopRiding(y), not y.removePassenger(x)");
          } else {
              // CraftBukkit start
@@ -56,7 +56,7 @@ index afc4fced315f2177372597d88eaf90cc8f3d878a..fad6a7185e8e9ea160b47ec9da56d08a
              CraftEntity craft = (CraftEntity) entity.getBukkitEntity().getVehicle();
              Entity orig = craft == null ? null : craft.getHandle();
              if (this.getBukkitEntity() instanceof Vehicle && entity.getBukkitEntity() instanceof LivingEntity) {
-@@ -3122,6 +3125,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3175,6 +3178,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
                  return false;
              }
              // CraftBukkit end
@@ -65,7 +65,7 @@ index afc4fced315f2177372597d88eaf90cc8f3d878a..fad6a7185e8e9ea160b47ec9da56d08a
                  this.passengers = ImmutableList.of();
              } else {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java b/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
-index 591af9d0d2fdc9953415979fc97a4a00afd85885..4d4c88b2464bd1a65082a3377fac8a5ec90fdeae 100644
+index 591af9d0d2fdc9953415979fc97a4a00afd85885..4a0fd1e3203342b7a5ffde579947057fe84a0d80 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/AbstractProjectile.java
 @@ -1,5 +1,6 @@
@@ -93,24 +93,24 @@ index 591af9d0d2fdc9953415979fc97a4a00afd85885..4d4c88b2464bd1a65082a3377fac8a5e
  
      @Override
      public net.minecraft.world.entity.projectile.Projectile getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.Projectile) entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractArrow.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractArrow.java
-index 656e1fc4321a804aa79a08bca8974637d4ffdb1b..b901fbfa0e8de17090cf82d4f4f0844866f335f8 100644
+index 501e2aa3a10dae94c4a8d9dfcdc902e434fcca62..865419a80712e111aeb1e436ff9c27fa4b6f37fb 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractArrow.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractArrow.java
-@@ -120,6 +120,7 @@ public class CraftAbstractArrow extends AbstractProjectile implements AbstractAr
+@@ -130,6 +130,7 @@ public class CraftAbstractArrow extends AbstractProjectile implements AbstractAr
  
      @Override
      public net.minecraft.world.entity.projectile.AbstractArrow getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.AbstractArrow) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java
-index 9bcc0931510607b8fbd01233e2b3c346369b214d..74aeff7b47b1f5325e5ac676d9aed3c94a2a843c 100644
+index 467693a60786688b753cebac3b0a88898e332eee..5c6bd9186e47d1414c5e7bd4fa46a8e305390908 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractHorse.java
 @@ -17,8 +17,16 @@ public abstract class CraftAbstractHorse extends CraftAnimals implements Abstrac
@@ -126,12 +126,12 @@ index 9bcc0931510607b8fbd01233e2b3c346369b214d..74aeff7b47b1f5325e5ac676d9aed3c9
 +
      @Override
      public net.minecraft.world.entity.animal.horse.AbstractHorse getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.horse.AbstractHorse) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractSkeleton.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractSkeleton.java
-index 5beaa2bb0d58fe477ce8d2de8b77600d3b416d8c..fa1bc80ae320c6d04acc20d6dec7df52a39d9920 100644
+index 5beaa2bb0d58fe477ce8d2de8b77600d3b416d8c..c8406f2d83f4c8b60efec0de546f45760c759a2a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractSkeleton.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractSkeleton.java
 @@ -15,8 +15,17 @@ public abstract class CraftAbstractSkeleton extends CraftMonster implements Abst
@@ -148,12 +148,12 @@ index 5beaa2bb0d58fe477ce8d2de8b77600d3b416d8c..fa1bc80ae320c6d04acc20d6dec7df52
 +
      @Override
      public net.minecraft.world.entity.monster.AbstractSkeleton getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.AbstractSkeleton) super.getHandle();
      }
      // Paper end
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractVillager.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractVillager.java
-index 34e4c763c7ec971885147ab2509281fad56e1ca6..a0a83e9111523a8080f30d0fdd35b9c9373ca359 100644
+index 34e4c763c7ec971885147ab2509281fad56e1ca6..7fb2e28c12dba743d8c2fb0a8a4e2f3e76d151f6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractVillager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractVillager.java
 @@ -17,8 +17,16 @@ public class CraftAbstractVillager extends CraftAgeable implements AbstractVilla
@@ -169,24 +169,24 @@ index 34e4c763c7ec971885147ab2509281fad56e1ca6..a0a83e9111523a8080f30d0fdd35b9c9
 +
      @Override
      public net.minecraft.world.entity.npc.AbstractVillager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Villager) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractWindCharge.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractWindCharge.java
-index 5e6bbeeea0cbf53180fd1260fc53f843469d6588..cb3c3c3294f0760956b6c5643e69afe0e9562f23 100644
+index 59df9031e8b4466c8687671d745318e7ee83d271..b91b11c2e1ed5df27e6ff99eb5cc25b931e0b79d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractWindCharge.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAbstractWindCharge.java
 @@ -17,6 +17,7 @@ public abstract class CraftAbstractWindCharge extends CraftFireball implements A
  
      @Override
      public net.minecraft.world.entity.projectile.windcharge.AbstractWindCharge getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.windcharge.AbstractWindCharge) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAgeable.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAgeable.java
-index ae16e8d1bfe8e9315391510eddb367a3fbdc9e03..bdbb54cc60c9afa8a7b89419563fcbe502554aac 100644
+index ae16e8d1bfe8e9315391510eddb367a3fbdc9e03..2b165c209f65de06f55ed51817e33b92463a2987 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAgeable.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAgeable.java
 @@ -63,8 +63,16 @@ public class CraftAgeable extends CraftCreature implements Ageable {
@@ -202,12 +202,12 @@ index ae16e8d1bfe8e9315391510eddb367a3fbdc9e03..bdbb54cc60c9afa8a7b89419563fcbe5
 +
      @Override
      public AgeableMob getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AgeableMob) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAllay.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAllay.java
-index c64918175ec08d20cde2bda9e0cac8b474385fe0..633c7581f9eec8a04598a62eae64adb617cf0fa7 100644
+index c64918175ec08d20cde2bda9e0cac8b474385fe0..0df0824d56d62f7b82fcca8f0b9a6175f012e8d3 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAllay.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAllay.java
 @@ -16,8 +16,16 @@ public class CraftAllay extends CraftCreature implements org.bukkit.entity.Allay
@@ -223,12 +223,12 @@ index c64918175ec08d20cde2bda9e0cac8b474385fe0..633c7581f9eec8a04598a62eae64adb6
 +
      @Override
      public Allay getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Allay) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAmbient.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAmbient.java
-index 2a2f9f0907eafcabef26a41d20f64a0aa953d181..8f654e3a210a332dc2d526b579d8fcf0c54e4d28 100644
+index 2a2f9f0907eafcabef26a41d20f64a0aa953d181..9d56293083aac5c14e8333366fd4cf6148486585 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAmbient.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAmbient.java
 @@ -9,8 +9,16 @@ public class CraftAmbient extends CraftMob implements Ambient {
@@ -244,12 +244,12 @@ index 2a2f9f0907eafcabef26a41d20f64a0aa953d181..8f654e3a210a332dc2d526b579d8fcf0
 +
      @Override
      public AmbientCreature getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AmbientCreature) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAnimals.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAnimals.java
-index ab42bc721d5b6c17c2ca6c7153b757571aea05e8..2887699c16b9452ce948f8b945c595ca55488cf7 100644
+index ab42bc721d5b6c17c2ca6c7153b757571aea05e8..e48528689d49c01aa2b0c1599c66f3c1e94c9cd6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAnimals.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAnimals.java
 @@ -15,8 +15,16 @@ public class CraftAnimals extends CraftAgeable implements Animals {
@@ -265,12 +265,12 @@ index ab42bc721d5b6c17c2ca6c7153b757571aea05e8..2887699c16b9452ce948f8b945c595ca
 +
      @Override
      public Animal getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Animal) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java
-index 88f2a9f310f30a08893f3fa68af13a54cf72fa7f..fc6bae91b4e894bda825b3fc6ccaa3a18acdb868 100644
+index 88f2a9f310f30a08893f3fa68af13a54cf72fa7f..b0cf5c7ee2542985ea704da26d36b272271ad096 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAreaEffectCloud.java
 @@ -28,8 +28,16 @@ public class CraftAreaEffectCloud extends CraftEntity implements AreaEffectCloud
@@ -286,24 +286,24 @@ index 88f2a9f310f30a08893f3fa68af13a54cf72fa7f..fc6bae91b4e894bda825b3fc6ccaa3a1
 +
      @Override
      public net.minecraft.world.entity.AreaEffectCloud getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.AreaEffectCloud) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftArmadillo.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftArmadillo.java
-index e7f2d8de25a489d7f52c78c750e6f7f9b8fee177..99f331b555cb6c55af4e0d7785d282645f92a570 100644
+index e7f2d8de25a489d7f52c78c750e6f7f9b8fee177..75191dd32bba12b5742702a2af151b1079a6b48f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftArmadillo.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftArmadillo.java
 @@ -11,6 +11,7 @@ public class CraftArmadillo extends CraftAnimals implements Armadillo {
  
      @Override
      public net.minecraft.world.entity.animal.armadillo.Armadillo getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.armadillo.Armadillo) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftArmorStand.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftArmorStand.java
-index 9fe85d6f807e64cf02d8e1921672e3196f6d606f..fd10d353305aa4095edf5f8b01a625fdfed8f1d3 100644
+index 9fe85d6f807e64cf02d8e1921672e3196f6d606f..8a95bc7b1250d47f518a62e625e78a7910ead7ff 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftArmorStand.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftArmorStand.java
 @@ -20,8 +20,16 @@ public class CraftArmorStand extends CraftLivingEntity implements ArmorStand {
@@ -319,19 +319,19 @@ index 9fe85d6f807e64cf02d8e1921672e3196f6d606f..fd10d353305aa4095edf5f8b01a625fd
 +
      @Override
      public net.minecraft.world.entity.decoration.ArmorStand getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.decoration.ArmorStand) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftArrow.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftArrow.java
-index 071be344c3265a0cd52b31ffbb02ff7a70bdf231..2d5cffc481ed137a60033d18eab6ce3a9c688fb5 100644
+index 071be344c3265a0cd52b31ffbb02ff7a70bdf231..0152b1ba40f505bfb5ba941f6d6d0a22d825519a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftArrow.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftArrow.java
 @@ -26,6 +26,7 @@ public class CraftArrow extends CraftAbstractArrow implements Arrow {
  
      @Override
      public net.minecraft.world.entity.projectile.Arrow getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.Arrow) this.entity;
      }
  
@@ -350,7 +350,7 @@ index 071be344c3265a0cd52b31ffbb02ff7a70bdf231..2d5cffc481ed137a60033d18eab6ce3a
      public void setBasePotionData(PotionData data) {
          this.setBasePotionType(CraftPotionUtil.fromBukkit(data));
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftAxolotl.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftAxolotl.java
-index cbfca242f820d238b112f8ce64e9de8398c48a1c..c5f0cd5e69a20f1fffcd017385bf9fab59630ffc 100644
+index cbfca242f820d238b112f8ce64e9de8398c48a1c..efbfc8480bddf901fe0acebc06408ee625b57418 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftAxolotl.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftAxolotl.java
 @@ -10,8 +10,16 @@ public class CraftAxolotl extends CraftAnimals implements Axolotl, io.papermc.pa
@@ -366,12 +366,12 @@ index cbfca242f820d238b112f8ce64e9de8398c48a1c..c5f0cd5e69a20f1fffcd017385bf9fab
 +
      @Override
      public net.minecraft.world.entity.animal.axolotl.Axolotl getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.axolotl.Axolotl) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBat.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBat.java
-index 1bb72f28085f3885bec068b586ec222111044884..1d09154b76d7f76e013a6980b5263215d26e81d9 100644
+index 1bb72f28085f3885bec068b586ec222111044884..cb56b6690a385e76197cfc0667ebdec72f0cd096 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBat.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBat.java
 @@ -8,8 +8,16 @@ public class CraftBat extends CraftAmbient implements Bat {
@@ -387,12 +387,12 @@ index 1bb72f28085f3885bec068b586ec222111044884..1d09154b76d7f76e013a6980b5263215
 +
      @Override
      public net.minecraft.world.entity.ambient.Bat getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.ambient.Bat) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBee.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBee.java
-index 3dac93b0ab5d5acf5b33dc4b0efed60319eb657b..4fce53e012067f2cc91ae89b2254ebfd030017d5 100644
+index 3dac93b0ab5d5acf5b33dc4b0efed60319eb657b..6ade6ca1a32f824271b7deeabc4dd154ae5a67b6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBee.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBee.java
 @@ -13,8 +13,16 @@ public class CraftBee extends CraftAnimals implements Bee {
@@ -408,12 +408,12 @@ index 3dac93b0ab5d5acf5b33dc4b0efed60319eb657b..4fce53e012067f2cc91ae89b2254ebfd
 +
      @Override
      public net.minecraft.world.entity.animal.Bee getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Bee) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBlaze.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBlaze.java
-index a4c9c73691300880777483b0beb17e1bd6779d06..e19c8cb6cf3d4306d2779bc7329e0fdc7aef59da 100644
+index a4c9c73691300880777483b0beb17e1bd6779d06..05951297aaed63c22f038703ad6fb68dfcec5227 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBlaze.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBlaze.java
 @@ -8,8 +8,16 @@ public class CraftBlaze extends CraftMonster implements Blaze {
@@ -429,12 +429,12 @@ index a4c9c73691300880777483b0beb17e1bd6779d06..e19c8cb6cf3d4306d2779bc7329e0fdc
 +
      @Override
      public net.minecraft.world.entity.monster.Blaze getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Blaze) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBlockDisplay.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBlockDisplay.java
-index dd91de8f24c27b9318c2a898a49991d74c100bff..d7c34f601ce66a6b090ec431a0503462865155a8 100644
+index dd91de8f24c27b9318c2a898a49991d74c100bff..b951571eda47da97ee73ba7d9b71b4f6cf0373d6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBlockDisplay.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBlockDisplay.java
 @@ -12,8 +12,16 @@ public class CraftBlockDisplay extends CraftDisplay implements BlockDisplay {
@@ -450,12 +450,12 @@ index dd91de8f24c27b9318c2a898a49991d74c100bff..d7c34f601ce66a6b090ec431a0503462
 +
      @Override
      public net.minecraft.world.entity.Display.BlockDisplay getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Display.BlockDisplay) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBoat.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBoat.java
-index e33b1b6fd50a4eea57500cc00dba20d6edcab75d..f9a8e684a04c4ffdf566b29252e18dbfcf09ade9 100644
+index e33b1b6fd50a4eea57500cc00dba20d6edcab75d..74d1f88ae81b01e7c00ec43fcbe5b9b159d89956 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBoat.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBoat.java
 @@ -102,8 +102,16 @@ public class CraftBoat extends CraftVehicle implements Boat {
@@ -471,48 +471,48 @@ index e33b1b6fd50a4eea57500cc00dba20d6edcab75d..f9a8e684a04c4ffdf566b29252e18dbf
 +
      @Override
      public net.minecraft.world.entity.vehicle.Boat getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.vehicle.Boat) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBogged.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBogged.java
-index 93481e2828f945b11ae9a20a8e5286232b449fa9..fc226a73e0938efcbd2b0eb296f6677229dfba72 100644
+index 93481e2828f945b11ae9a20a8e5286232b449fa9..ad5d48c7bb747eb9ea79fd1a3853a242037ed969 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBogged.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBogged.java
 @@ -12,6 +12,7 @@ public class CraftBogged extends CraftAbstractSkeleton implements Bogged, io.pap
  
      @Override
      public net.minecraft.world.entity.monster.Bogged getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Bogged) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBreeze.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBreeze.java
-index 3f3d087387d3169f352d7377c0e5a24668c3d17e..23f6eac9cec63da625c6328895702bc26c9c8ada 100644
+index 3f3d087387d3169f352d7377c0e5a24668c3d17e..fd22213bc7a8461f5e698792c426384683fb3b7b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBreeze.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBreeze.java
 @@ -11,6 +11,7 @@ public class CraftBreeze extends CraftMonster implements Breeze {
  
      @Override
      public net.minecraft.world.entity.monster.breeze.Breeze getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.breeze.Breeze) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftBreezeWindCharge.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftBreezeWindCharge.java
-index e88e52a9b8a4d2d750101b0529cbe2a9976e91dd..8ba5a80bb4847cf33e2618cf5122f1fcffc2453d 100644
+index e88e52a9b8a4d2d750101b0529cbe2a9976e91dd..0eadb421cc505c4639f68c932d284e8ef56f7f57 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftBreezeWindCharge.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftBreezeWindCharge.java
 @@ -10,6 +10,7 @@ public class CraftBreezeWindCharge extends CraftAbstractWindCharge implements Br
  
      @Override
      public net.minecraft.world.entity.projectile.windcharge.BreezeWindCharge getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.windcharge.BreezeWindCharge) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCamel.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCamel.java
-index 80e571c977db5cdf43bfbfce035f37a3fa325c95..6fafba37dd7128a397ba046be7b33067c9e88f25 100644
+index 80e571c977db5cdf43bfbfce035f37a3fa325c95..562ac40645f98452d0d923146d4e95c59b029f5b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCamel.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCamel.java
 @@ -11,8 +11,16 @@ public class CraftCamel extends CraftAbstractHorse implements Camel {
@@ -528,15 +528,15 @@ index 80e571c977db5cdf43bfbfce035f37a3fa325c95..6fafba37dd7128a397ba046be7b33067
 +
      @Override
      public net.minecraft.world.entity.animal.camel.Camel getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.camel.Camel) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCat.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCat.java
-index a565ac47b3dc9a27e043fc9cb00b6dea950f08cf..d753d481d84f3c6cabef79752b8164ebbb02e605 100644
+index 88e876da7df64b68a5b71fd1deab75b59c5a64e3..3319f46e2c464c553425e33ac31f1d5190c2d1b5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCat.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCat.java
-@@ -17,8 +17,16 @@ public class CraftCat extends CraftTameableAnimal implements Cat {
+@@ -19,8 +19,16 @@ public class CraftCat extends CraftTameableAnimal implements Cat {
          super(server, entity);
      }
  
@@ -549,12 +549,12 @@ index a565ac47b3dc9a27e043fc9cb00b6dea950f08cf..d753d481d84f3c6cabef79752b8164eb
 +
      @Override
      public net.minecraft.world.entity.animal.Cat getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Cat) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCaveSpider.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCaveSpider.java
-index 4f661fbdb860cf550da0d952b775fe6f990b43b3..4a8b2b6bf80d43bba551c34a1a03fd5c9a9d7a02 100644
+index 4f661fbdb860cf550da0d952b775fe6f990b43b3..2dfbfbbe98815a303516d88e6ea96b9fba9b7f39 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCaveSpider.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCaveSpider.java
 @@ -8,8 +8,16 @@ public class CraftCaveSpider extends CraftSpider implements CaveSpider {
@@ -570,12 +570,12 @@ index 4f661fbdb860cf550da0d952b775fe6f990b43b3..4a8b2b6bf80d43bba551c34a1a03fd5c
 +
      @Override
      public net.minecraft.world.entity.monster.CaveSpider getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.CaveSpider) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftChestBoat.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftChestBoat.java
-index e4f899a6a1d055b3ea17d1114ed0228fbba53352..0db4bd89f0b4ca6d1c855f7f6216a5a1511b9e5e 100644
+index e4f899a6a1d055b3ea17d1114ed0228fbba53352..4d9bb569b6a957c4ebd06f93d36a0f351961fd23 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftChestBoat.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftChestBoat.java
 @@ -15,8 +15,16 @@ public class CraftChestBoat extends CraftBoat implements org.bukkit.entity.Chest
@@ -591,12 +591,12 @@ index e4f899a6a1d055b3ea17d1114ed0228fbba53352..0db4bd89f0b4ca6d1c855f7f6216a5a1
 +
      @Override
      public ChestBoat getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ChestBoat) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftChestedHorse.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftChestedHorse.java
-index 40ee96e31dea64ab3a77553dbb6daad001736f2e..1a9986acde12881e32db67b9e7263072871331cb 100644
+index 40ee96e31dea64ab3a77553dbb6daad001736f2e..9cdb7e5ce6883709b709e88037e70a1953d755a0 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftChestedHorse.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftChestedHorse.java
 @@ -10,8 +10,16 @@ public abstract class CraftChestedHorse extends CraftAbstractHorse implements Ch
@@ -612,12 +612,12 @@ index 40ee96e31dea64ab3a77553dbb6daad001736f2e..1a9986acde12881e32db67b9e7263072
 +
      @Override
      public AbstractChestedHorse getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractChestedHorse) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftChicken.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftChicken.java
-index 96f6e2fd9c6b20d34122abfe5c7fba732502d5a0..a32874bc84a13c3be3512b46519e66b24a4dbce0 100644
+index 96f6e2fd9c6b20d34122abfe5c7fba732502d5a0..2546ce4d7a25bfe6be1533bfbc770726815e8148 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftChicken.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftChicken.java
 @@ -9,8 +9,16 @@ public class CraftChicken extends CraftAnimals implements Chicken {
@@ -633,12 +633,12 @@ index 96f6e2fd9c6b20d34122abfe5c7fba732502d5a0..a32874bc84a13c3be3512b46519e66b2
 +
      @Override
      public net.minecraft.world.entity.animal.Chicken getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Chicken) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCod.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCod.java
-index 63e6b07e3b159c74d9ef17be20b5ab43d07f0f5f..7e3a560ff4a3d56e52534eb909eaf60424b84514 100644
+index 63e6b07e3b159c74d9ef17be20b5ab43d07f0f5f..44fa01798eed8368fa0187cecb88de830d7d2e16 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCod.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCod.java
 @@ -9,8 +9,16 @@ public class CraftCod extends io.papermc.paper.entity.PaperSchoolableFish implem
@@ -654,12 +654,12 @@ index 63e6b07e3b159c74d9ef17be20b5ab43d07f0f5f..7e3a560ff4a3d56e52534eb909eaf604
 +
      @Override
      public net.minecraft.world.entity.animal.Cod getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Cod) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftComplexPart.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftComplexPart.java
-index c2583982d84c736639eec511daba594d7806a628..963ef176acd9e3a182b51722544001e309f5d7ae 100644
+index c2583982d84c736639eec511daba594d7806a628..d31bba789c51bc344d21a357f54dd8ef55b88873 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftComplexPart.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftComplexPart.java
 @@ -32,8 +32,16 @@ public class CraftComplexPart extends CraftEntity implements ComplexEntityPart {
@@ -675,12 +675,12 @@ index c2583982d84c736639eec511daba594d7806a628..963ef176acd9e3a182b51722544001e3
 +
      @Override
      public EnderDragonPart getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (EnderDragonPart) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCow.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCow.java
-index 7babc404e4920cd264206d4e83b1be6f841cdb8c..6fef0910ee934aedc09bac212ef3fba4f546d5ce 100644
+index 7babc404e4920cd264206d4e83b1be6f841cdb8c..7a5312ab0fe3a21907a1d6b82fab9b4dce15c44e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCow.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCow.java
 @@ -9,8 +9,16 @@ public class CraftCow extends CraftAnimals implements Cow {
@@ -696,12 +696,12 @@ index 7babc404e4920cd264206d4e83b1be6f841cdb8c..6fef0910ee934aedc09bac212ef3fba4
 +
      @Override
      public net.minecraft.world.entity.animal.Cow getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Cow) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCreature.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCreature.java
-index 664d9c1793b823ed03f198a936f2ebd9b7695898..da9a83f9b020f637e4485ca53bc97bb50596808c 100644
+index 664d9c1793b823ed03f198a936f2ebd9b7695898..6cbe6b6438296b6137ceea01b21ab6a69da2cc9c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCreature.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCreature.java
 @@ -9,8 +9,16 @@ public class CraftCreature extends CraftMob implements Creature {
@@ -717,15 +717,15 @@ index 664d9c1793b823ed03f198a936f2ebd9b7695898..da9a83f9b020f637e4485ca53bc97bb5
 +
      @Override
      public PathfinderMob getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (PathfinderMob) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftCreeper.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftCreeper.java
-index 4191845bfe05d8691e50143c42090566522f7e74..7aea0d9f5c17c8dcab73ffe9906a456534c292b0 100644
+index 42dd26b9170f7d217d73f725a6b8440b45ac2190..e59a29ee70e8b1f525c370bb711fa77a5732c500 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftCreeper.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftCreeper.java
-@@ -79,8 +79,16 @@ public class CraftCreeper extends CraftMonster implements Creeper {
+@@ -87,6 +87,13 @@ public class CraftCreeper extends CraftMonster implements Creeper {
          this.getHandle().ignite();
      }
  
@@ -737,13 +737,18 @@ index 4191845bfe05d8691e50143c42090566522f7e74..7aea0d9f5c17c8dcab73ffe9906a4565
 +    // Folia end - region threading
 +
      @Override
+     public Entity getIgniter() {
+         return (this.getHandle().entityIgniter != null) ? this.getHandle().entityIgniter.getBukkitEntity() : null;
+@@ -94,6 +101,7 @@ public class CraftCreeper extends CraftMonster implements Creeper {
+ 
+     @Override
      public net.minecraft.world.entity.monster.Creeper getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Creeper) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftDisplay.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftDisplay.java
-index 48eeb1d9ba0ad6f895bfe507a6fbe4b9c9530e47..4eb5c99862c38cbaf3ba89be3ffc7a78b1a7276a 100644
+index 48eeb1d9ba0ad6f895bfe507a6fbe4b9c9530e47..65301b94dc8d813c487deff24cd04b379e666e98 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftDisplay.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftDisplay.java
 @@ -12,8 +12,16 @@ public class CraftDisplay extends CraftEntity implements Display {
@@ -759,12 +764,12 @@ index 48eeb1d9ba0ad6f895bfe507a6fbe4b9c9530e47..4eb5c99862c38cbaf3ba89be3ffc7a78
 +
      @Override
      public net.minecraft.world.entity.Display getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Display) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftDolphin.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftDolphin.java
-index f93f8f6509b12eb9b1e07c829278bb0822dd7988..c693daa86c2e44165ca6a293563670dc82f30eb2 100644
+index f93f8f6509b12eb9b1e07c829278bb0822dd7988..2c3c2d7f51c60a5ece610edd0bb00cba3b9d5981 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftDolphin.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftDolphin.java
 @@ -9,8 +9,16 @@ public class CraftDolphin extends CraftWaterMob implements Dolphin {
@@ -780,12 +785,12 @@ index f93f8f6509b12eb9b1e07c829278bb0822dd7988..c693daa86c2e44165ca6a293563670dc
 +
      @Override
      public net.minecraft.world.entity.animal.Dolphin getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Dolphin) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftDrowned.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftDrowned.java
-index 51fc4acae9f20e8891069704e4a27f212b870766..9afa5a291deb68fca8e03cb89d2c192ec9bb53d0 100644
+index 51fc4acae9f20e8891069704e4a27f212b870766..2b27d3e685ee1882dc6ecc1ceaee2fb52f1b548f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftDrowned.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftDrowned.java
 @@ -9,8 +9,16 @@ public class CraftDrowned extends CraftZombie implements Drowned, com.destroysto
@@ -801,12 +806,12 @@ index 51fc4acae9f20e8891069704e4a27f212b870766..9afa5a291deb68fca8e03cb89d2c192e
 +
      @Override
      public net.minecraft.world.entity.monster.Drowned getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Drowned) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEgg.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEgg.java
-index 010e9e922a6e30df4e40da151cfd398d1062633e..250479c6b9c5089c7cc260588ef1ce574c1ce24a 100644
+index 010e9e922a6e30df4e40da151cfd398d1062633e..8f36a715a5fdf1595cdfdad3d9971cca39279777 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEgg.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEgg.java
 @@ -9,8 +9,16 @@ public class CraftEgg extends CraftThrowableProjectile implements Egg {
@@ -822,12 +827,12 @@ index 010e9e922a6e30df4e40da151cfd398d1062633e..250479c6b9c5089c7cc260588ef1ce57
 +
      @Override
      public ThrownEgg getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ThrownEgg) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderCrystal.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderCrystal.java
-index 676dd5331bec75407a74aea2a89e78ab72d69724..b87d6ccd12323f1760d83365c1bdd1d55baf3a0a 100644
+index 676dd5331bec75407a74aea2a89e78ab72d69724..4f876511b116dd6e7704f1f047af6fab2c3a3e47 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderCrystal.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderCrystal.java
 @@ -39,8 +39,16 @@ public class CraftEnderCrystal extends CraftEntity implements EnderCrystal {
@@ -843,12 +848,12 @@ index 676dd5331bec75407a74aea2a89e78ab72d69724..b87d6ccd12323f1760d83365c1bdd1d5
 +
      @Override
      public EndCrystal getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (EndCrystal) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragon.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragon.java
-index 7b7b89e67d53ed70efae714192c5fa32977f3d9c..00f334e5449f76b735b844fed44c98725e607db3 100644
+index 7b7b89e67d53ed70efae714192c5fa32977f3d9c..747907123b9a9b2b7cae4a20f77455ea48bc04e9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragon.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragon.java
 @@ -30,8 +30,16 @@ public class CraftEnderDragon extends CraftMob implements EnderDragon, CraftEnem
@@ -864,12 +869,12 @@ index 7b7b89e67d53ed70efae714192c5fa32977f3d9c..00f334e5449f76b735b844fed44c9872
 +
      @Override
      public net.minecraft.world.entity.boss.enderdragon.EnderDragon getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.boss.enderdragon.EnderDragon) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragonPart.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragonPart.java
-index 33ae03b78b01c005a291a343b42507fb539e81a6..a682c1653679f4f60d91c73681e489b46a0cfdb4 100644
+index 33ae03b78b01c005a291a343b42507fb539e81a6..36aec95539044edd429c17833338638262b9db00 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragonPart.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderDragonPart.java
 @@ -16,8 +16,16 @@ public class CraftEnderDragonPart extends CraftComplexPart implements EnderDrago
@@ -885,12 +890,12 @@ index 33ae03b78b01c005a291a343b42507fb539e81a6..a682c1653679f4f60d91c73681e489b4
 +
      @Override
      public net.minecraft.world.entity.boss.EnderDragonPart getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.boss.EnderDragonPart) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderPearl.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderPearl.java
-index 3bb8d74f2b59c7f0c7c1cbde47a570d628ceceb2..83308195a3a55abeb4c28b9cc69dc98e61c351af 100644
+index 3bb8d74f2b59c7f0c7c1cbde47a570d628ceceb2..25d7577d17d52dc00a355a684f1493efb2e88584 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderPearl.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderPearl.java
 @@ -9,8 +9,16 @@ public class CraftEnderPearl extends CraftThrowableProjectile implements EnderPe
@@ -906,12 +911,12 @@ index 3bb8d74f2b59c7f0c7c1cbde47a570d628ceceb2..83308195a3a55abeb4c28b9cc69dc98e
 +
      @Override
      public ThrownEnderpearl getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ThrownEnderpearl) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderSignal.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderSignal.java
-index 27f56fa4b7ef92a9a4dfa6b782350424b88210f2..d0b2f8abba0eb5e29beccfebcf48f840715b7908 100644
+index 27f56fa4b7ef92a9a4dfa6b782350424b88210f2..e76390fe22e2e846313c9a5b2c7f5492f798ca3e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderSignal.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderSignal.java
 @@ -15,8 +15,16 @@ public class CraftEnderSignal extends CraftEntity implements EnderSignal {
@@ -927,12 +932,12 @@ index 27f56fa4b7ef92a9a4dfa6b782350424b88210f2..d0b2f8abba0eb5e29beccfebcf48f840
 +
      @Override
      public EyeOfEnder getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (EyeOfEnder) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderman.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderman.java
-index 983b9d6ddb58eff297e96e5c8b28ec427efa267d..6ce0c8f24e5359c68e70092c8f488f1817221704 100644
+index 983b9d6ddb58eff297e96e5c8b28ec427efa267d..16e33e302f8a60f1f9ff67929dc7c63cd5192a37 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderman.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEnderman.java
 @@ -62,8 +62,16 @@ public class CraftEnderman extends CraftMonster implements Enderman {
@@ -948,12 +953,12 @@ index 983b9d6ddb58eff297e96e5c8b28ec427efa267d..6ce0c8f24e5359c68e70092c8f488f18
 +
      @Override
      public EnderMan getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (EnderMan) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEndermite.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEndermite.java
-index d657fd2c507a5b215aeab0a5f3e9c2ee892a27c8..9fc90b162aab15a9cd60b02aba56318130b394c4 100644
+index d657fd2c507a5b215aeab0a5f3e9c2ee892a27c8..399ef60ab5f1bf02b638c8c46a72d297932f6b38 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEndermite.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEndermite.java
 @@ -9,8 +9,16 @@ public class CraftEndermite extends CraftMonster implements Endermite {
@@ -969,15 +974,15 @@ index d657fd2c507a5b215aeab0a5f3e9c2ee892a27c8..9fc90b162aab15a9cd60b02aba563181
 +
      @Override
      public net.minecraft.world.entity.monster.Endermite getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Endermite) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index cf9282a46534319308e9ccf69f332a5c8c1745cf..9e883ff5ffd1298edc682873be248b8319061bb8 100644
+index fe6f31d7db873de64c0cfc5c8248d3e5e96f1500..e30bf9b2cb51e1639b414afa8fbe84a9e69b6d63 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -491,7 +491,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -493,7 +493,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public UUID getUniqueId() {
@@ -986,16 +991,16 @@ index cf9282a46534319308e9ccf69f332a5c8c1745cf..9e883ff5ffd1298edc682873be248b83
      }
  
      @Override
-@@ -506,6 +506,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -508,6 +508,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
      }
  
      public Entity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEvoker.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEvoker.java
-index 3a890cccf1766758794f3a3b5d31428f42590049..06863afd6bd855130ac0e672824aa2755e141286 100644
+index 3a890cccf1766758794f3a3b5d31428f42590049..8c148db1b84c65b89fb2779e5b96a71ea4900083 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEvoker.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEvoker.java
 @@ -11,8 +11,16 @@ public class CraftEvoker extends CraftSpellcaster implements Evoker {
@@ -1011,12 +1016,12 @@ index 3a890cccf1766758794f3a3b5d31428f42590049..06863afd6bd855130ac0e672824aa275
 +
      @Override
      public net.minecraft.world.entity.monster.Evoker getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Evoker) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEvokerFangs.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEvokerFangs.java
-index 19b368cc862cd7e3e1f0e89401a7d099e3eaefa3..5ae51638114a7931efdfc367b26791a22d7e8e2b 100644
+index 19b368cc862cd7e3e1f0e89401a7d099e3eaefa3..4a1c1af06719ff75f6ec2ac27198858b549b0302 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEvokerFangs.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEvokerFangs.java
 @@ -11,8 +11,16 @@ public class CraftEvokerFangs extends CraftEntity implements EvokerFangs {
@@ -1032,12 +1037,12 @@ index 19b368cc862cd7e3e1f0e89401a7d099e3eaefa3..5ae51638114a7931efdfc367b26791a2
 +
      @Override
      public net.minecraft.world.entity.projectile.EvokerFangs getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.EvokerFangs) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftExperienceOrb.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftExperienceOrb.java
-index 650e4a01cecc4cc08e7ff9ebcc4c367084351f21..9300f5e40a1adb5b381e194d06f15c89a81804f0 100644
+index 650e4a01cecc4cc08e7ff9ebcc4c367084351f21..81b2b850dd7d08f2fae7baf56733d753b68d294c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftExperienceOrb.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftExperienceOrb.java
 @@ -42,8 +42,16 @@ public class CraftExperienceOrb extends CraftEntity implements ExperienceOrb {
@@ -1053,12 +1058,12 @@ index 650e4a01cecc4cc08e7ff9ebcc4c367084351f21..9300f5e40a1adb5b381e194d06f15c89
 +
      @Override
      public net.minecraft.world.entity.ExperienceOrb getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.ExperienceOrb) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java
-index 1359d25a32b4a5d5e8e68ce737bd19f7b5afaf69..0be7f84a50b7568d0c639f5906b5ca76347d95fe 100644
+index 1359d25a32b4a5d5e8e68ce737bd19f7b5afaf69..4c6ac7f2531311d24081b397c60b2f8b183fad34 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFallingBlock.java
 @@ -14,8 +14,16 @@ public class CraftFallingBlock extends CraftEntity implements FallingBlock {
@@ -1074,12 +1079,12 @@ index 1359d25a32b4a5d5e8e68ce737bd19f7b5afaf69..0be7f84a50b7568d0c639f5906b5ca76
 +
      @Override
      public FallingBlockEntity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (FallingBlockEntity) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFireball.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFireball.java
-index 297b7e592caa2a05e1fb18a3ad22a91ae7621f5d..a04f1cd676bddc4f30907679b82edc52f37696da 100644
+index 43d7bea201a52cfeacf60c75caa28dfd2c4ff164..ac7237e8c28377d5f9abf38b628215ac865c9709 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFireball.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFireball.java
 @@ -83,8 +83,16 @@ public class CraftFireball extends AbstractProjectile implements Fireball {
@@ -1095,12 +1100,12 @@ index 297b7e592caa2a05e1fb18a3ad22a91ae7621f5d..a04f1cd676bddc4f30907679b82edc52
 +
      @Override
      public AbstractHurtingProjectile getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractHurtingProjectile) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFirework.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFirework.java
-index 95e35c223f2ad9b6de6749544abd68de71e4f1ab..88d0292ca062ea47b3b98ad6bc3257c1f4d40cc6 100644
+index 759b6e54db93792c9862b1f1625118ac6fa49d7a..6fdd39c78a2f7c1c53d5de16e09e0f271c42039e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFirework.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFirework.java
 @@ -37,8 +37,16 @@ public class CraftFirework extends CraftProjectile implements Firework {
@@ -1116,12 +1121,12 @@ index 95e35c223f2ad9b6de6749544abd68de71e4f1ab..88d0292ca062ea47b3b98ad6bc3257c1
 +
      @Override
      public FireworkRocketEntity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (FireworkRocketEntity) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFish.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFish.java
-index eb10f94d5ed8ca89d3786138647dd43357609a6c..e0ad8cedd4d2646d87f3b5abda23c0c603adfd3a 100644
+index eb10f94d5ed8ca89d3786138647dd43357609a6c..f4d92fb44fd7cee7debe3e283e8b672021e3e23f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFish.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFish.java
 @@ -10,8 +10,16 @@ public class CraftFish extends CraftWaterMob implements Fish, io.papermc.paper.e
@@ -1137,12 +1142,12 @@ index eb10f94d5ed8ca89d3786138647dd43357609a6c..e0ad8cedd4d2646d87f3b5abda23c0c6
 +
      @Override
      public AbstractFish getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractFish) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFishHook.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFishHook.java
-index e0d65df2e5b4c14abeb89a5f72cc2d9fa034dcf5..0dfcc07f64f29be048a7ff2f12536aeaa9f44ed2 100644
+index e0d65df2e5b4c14abeb89a5f72cc2d9fa034dcf5..bd8f1925cb3eee30a5b5ea83225b6d94c80bc69a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFishHook.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFishHook.java
 @@ -14,8 +14,16 @@ public class CraftFishHook extends CraftProjectile implements FishHook {
@@ -1158,12 +1163,12 @@ index e0d65df2e5b4c14abeb89a5f72cc2d9fa034dcf5..0dfcc07f64f29be048a7ff2f12536aea
 +
      @Override
      public FishingHook getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (FishingHook) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFlying.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFlying.java
-index 8117faa0c89a966d057f4bf251c03a09d1e8797e..7bdd9e033862a7d86742e05a63848c2fb804f6b2 100644
+index 8117faa0c89a966d057f4bf251c03a09d1e8797e..7c3827e6ef608ff15be9bced4788b09f1572aecb 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFlying.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFlying.java
 @@ -10,8 +10,16 @@ public class CraftFlying extends CraftMob implements Flying {
@@ -1179,12 +1184,12 @@ index 8117faa0c89a966d057f4bf251c03a09d1e8797e..7bdd9e033862a7d86742e05a63848c2f
 +
      @Override
      public FlyingMob getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (FlyingMob) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFox.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFox.java
-index c455deb4fd2a7684bcc01a8212c362a2375c190b..50ee6d3c3aa157fe69a483e02f33f23193628088 100644
+index c455deb4fd2a7684bcc01a8212c362a2375c190b..5f0ddb932df148859dc6a699082934cac8d48fcf 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFox.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFox.java
 @@ -14,8 +14,16 @@ public class CraftFox extends CraftAnimals implements Fox {
@@ -1200,15 +1205,15 @@ index c455deb4fd2a7684bcc01a8212c362a2375c190b..50ee6d3c3aa157fe69a483e02f33f231
 +
      @Override
      public net.minecraft.world.entity.animal.Fox getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Fox) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftFrog.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftFrog.java
-index 4b0aac4362b773f30dfe7c1867fad98fc30b414c..e83fae32769cc4f258011aa7d15f7b2b64674c1c 100644
+index ebf09c27e02a19d31c777b70a38376e4d01e5ee7..0eb55d6e7541acbc6727a108fdeed1711a17f3cd 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftFrog.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftFrog.java
-@@ -17,8 +17,16 @@ public class CraftFrog extends CraftAnimals implements org.bukkit.entity.Frog {
+@@ -19,8 +19,16 @@ public class CraftFrog extends CraftAnimals implements org.bukkit.entity.Frog {
          super(server, entity);
      }
  
@@ -1221,12 +1226,12 @@ index 4b0aac4362b773f30dfe7c1867fad98fc30b414c..e83fae32769cc4f258011aa7d15f7b2b
 +
      @Override
      public Frog getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Frog) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGhast.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGhast.java
-index 97fa4e1e70203194bd939618b2fad92665af6d59..8dc0e1332a5f8dd32e2b478432627a5d0c5cebcd 100644
+index 97fa4e1e70203194bd939618b2fad92665af6d59..27b309c9ce10798e3c3a7a9d39b8c300e471e177 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGhast.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGhast.java
 @@ -9,8 +9,16 @@ public class CraftGhast extends CraftFlying implements Ghast, CraftEnemy {
@@ -1242,12 +1247,12 @@ index 97fa4e1e70203194bd939618b2fad92665af6d59..8dc0e1332a5f8dd32e2b478432627a5d
 +
      @Override
      public net.minecraft.world.entity.monster.Ghast getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Ghast) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGiant.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGiant.java
-index 5826205339e99e2536b93c8589d95917749f8417..300f06f78c2814aa5650c02f714fee594ba61f98 100644
+index 5826205339e99e2536b93c8589d95917749f8417..9bb22fc146012310bca849fccb0a1e7e987875e9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGiant.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGiant.java
 @@ -9,8 +9,16 @@ public class CraftGiant extends CraftMonster implements Giant {
@@ -1263,12 +1268,12 @@ index 5826205339e99e2536b93c8589d95917749f8417..300f06f78c2814aa5650c02f714fee59
 +
      @Override
      public net.minecraft.world.entity.monster.Giant getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Giant) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowItemFrame.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowItemFrame.java
-index b9a7576d2481b64b7e5b46d66c1f55d1dc28c540..c288adee8ec60fa2bb83ae83f7be98c391379604 100644
+index b9a7576d2481b64b7e5b46d66c1f55d1dc28c540..00c95313a233a032518e2435922d4044a9d67aee 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowItemFrame.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowItemFrame.java
 @@ -9,8 +9,16 @@ public class CraftGlowItemFrame extends CraftItemFrame implements GlowItemFrame
@@ -1284,12 +1289,12 @@ index b9a7576d2481b64b7e5b46d66c1f55d1dc28c540..c288adee8ec60fa2bb83ae83f7be98c3
 +
      @Override
      public net.minecraft.world.entity.decoration.GlowItemFrame getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.decoration.GlowItemFrame) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowSquid.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowSquid.java
-index 253a0d2f987163cbbb28d261674b47137cbbcbe2..ad0b9025e38926555b47dee1e056c7c8714c91fe 100644
+index 253a0d2f987163cbbb28d261674b47137cbbcbe2..1ed09d2aa4077165e9f88dd9db34f4083a2953c2 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowSquid.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGlowSquid.java
 @@ -10,8 +10,16 @@ public class CraftGlowSquid extends CraftSquid implements GlowSquid {
@@ -1305,12 +1310,12 @@ index 253a0d2f987163cbbb28d261674b47137cbbcbe2..ad0b9025e38926555b47dee1e056c7c8
 +
      @Override
      public net.minecraft.world.entity.GlowSquid getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.GlowSquid) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGoat.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGoat.java
-index 2c21de478bff9cdf13ba46cd041831d54c11e924..ab87340df483787d59d8b1e2ce3a69235d39bba5 100644
+index 2c21de478bff9cdf13ba46cd041831d54c11e924..e64d7c4cfe65d34bdab13496741645f808f43dc6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGoat.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGoat.java
 @@ -9,8 +9,16 @@ public class CraftGoat extends CraftAnimals implements Goat {
@@ -1326,12 +1331,12 @@ index 2c21de478bff9cdf13ba46cd041831d54c11e924..ab87340df483787d59d8b1e2ce3a6923
 +
      @Override
      public net.minecraft.world.entity.animal.goat.Goat getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.goat.Goat) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGolem.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGolem.java
-index e27e469894bdd17cf7a004a85fdf0eaa746111a6..9fde15e62fd99c842c7c22e97217cc6d68460dfd 100644
+index e27e469894bdd17cf7a004a85fdf0eaa746111a6..bbb8ff66580e62b5fb66aac22de72b9b9eafd3ef 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGolem.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGolem.java
 @@ -9,8 +9,16 @@ public class CraftGolem extends CraftCreature implements Golem {
@@ -1347,12 +1352,12 @@ index e27e469894bdd17cf7a004a85fdf0eaa746111a6..9fde15e62fd99c842c7c22e97217cc6d
 +
      @Override
      public AbstractGolem getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractGolem) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftGuardian.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftGuardian.java
-index e232350f2c6ef1900b05fda4d3f94099057d10e5..96e7759b64f075e9f803763403d22573a4e35feb 100644
+index e232350f2c6ef1900b05fda4d3f94099057d10e5..2c411b569cc4b222ed3cdfb95237c86cd6a0fabb 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftGuardian.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftGuardian.java
 @@ -13,8 +13,16 @@ public class CraftGuardian extends CraftMonster implements Guardian {
@@ -1368,15 +1373,15 @@ index e232350f2c6ef1900b05fda4d3f94099057d10e5..96e7759b64f075e9f803763403d22573
 +
      @Override
      public net.minecraft.world.entity.monster.Guardian getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Guardian) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHanging.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHanging.java
-index cbdcf767c01e2c173913f56747d2dacbda2f0094..f45db5bb1a16bc3be5f70094c3f3902538f29b5b 100644
+index f1e3f2b89bcd969f3c80548e165881a9b290eb53..2e4b86b44ace5eecefc9ab09c6e1f0a31247ad2f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHanging.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHanging.java
-@@ -57,8 +57,16 @@ public class CraftHanging extends CraftEntity implements Hanging {
+@@ -57,8 +57,16 @@ public class CraftHanging extends CraftBlockAttachedEntity implements Hanging {
          return CraftBlock.notchToBlockFace(direction);
      }
  
@@ -1389,12 +1394,12 @@ index cbdcf767c01e2c173913f56747d2dacbda2f0094..f45db5bb1a16bc3be5f70094c3f39025
 +
      @Override
      public HangingEntity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (HangingEntity) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHoglin.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHoglin.java
-index 37007775d27598e319c0c78929c6a808b697724a..17265ad2eaa38259f3c311c1c73576a79001aa7e 100644
+index 37007775d27598e319c0c78929c6a808b697724a..b9819fc2c2ffc1a21a6e0973bb0d3595ee9c565d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHoglin.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHoglin.java
 @@ -51,8 +51,16 @@ public class CraftHoglin extends CraftAnimals implements Hoglin, CraftEnemy {
@@ -1410,12 +1415,12 @@ index 37007775d27598e319c0c78929c6a808b697724a..17265ad2eaa38259f3c311c1c73576a7
 +
      @Override
      public net.minecraft.world.entity.monster.hoglin.Hoglin getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.hoglin.Hoglin) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java
-index 9b6ff0f64966c78a3233860bb0840182b52f01bc..a9b9bebee183992d0abd4de78efae078f41fe4ec 100644
+index 9b6ff0f64966c78a3233860bb0840182b52f01bc..fb34651a9e4ed0cb05721d15524a26f89333d5e7 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHorse.java
 @@ -13,8 +13,16 @@ public class CraftHorse extends CraftAbstractHorse implements Horse {
@@ -1431,12 +1436,12 @@ index 9b6ff0f64966c78a3233860bb0840182b52f01bc..a9b9bebee183992d0abd4de78efae078
 +
      @Override
      public net.minecraft.world.entity.animal.horse.Horse getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.horse.Horse) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
-index 41f3cdec7deabf34358b8087df77169f85a5b919..51752a1ef885295e2c50832da1c1550ac0a8fb90 100644
+index c1bad887d1340ebc7c63fda3dceff929e4a44517..37c8bd3dc3e539ca92216ae5c2896b037d9af21e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
 @@ -290,8 +290,16 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
@@ -1452,12 +1457,12 @@ index 41f3cdec7deabf34358b8087df77169f85a5b919..51752a1ef885295e2c50832da1c1550a
 +
      @Override
      public Player getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Player) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftIllager.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftIllager.java
-index fb3c518f02cb4c428f022523d2f838625841332b..7becaa4d26df7309984b7aa271a0ae6f778acc0a 100644
+index fb3c518f02cb4c428f022523d2f838625841332b..846a429493236f5002f0fae85c6cd7d20169dbe0 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftIllager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftIllager.java
 @@ -10,8 +10,16 @@ public class CraftIllager extends CraftRaider implements Illager {
@@ -1473,12 +1478,12 @@ index fb3c518f02cb4c428f022523d2f838625841332b..7becaa4d26df7309984b7aa271a0ae6f
 +
      @Override
      public AbstractIllager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractIllager) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftIllusioner.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftIllusioner.java
-index 5b2af80e584977683cd39e6f440e65a76e929be9..89c0121c40da1596a4bf5db6e1d7d611d5053153 100644
+index 5b2af80e584977683cd39e6f440e65a76e929be9..789191168f74b3272e8da2131e0311853033c938 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftIllusioner.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftIllusioner.java
 @@ -9,8 +9,16 @@ public class CraftIllusioner extends CraftSpellcaster implements Illusioner, com
@@ -1494,12 +1499,12 @@ index 5b2af80e584977683cd39e6f440e65a76e929be9..89c0121c40da1596a4bf5db6e1d7d611
 +
      @Override
      public net.minecraft.world.entity.monster.Illusioner getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Illusioner) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftInteraction.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftInteraction.java
-index caa3016bf9742222205e3ea9a327fad3c4f912bb..4a77b1cf13cfae35331c1e5c5df0b3b9972a0ac1 100644
+index caa3016bf9742222205e3ea9a327fad3c4f912bb..2e00c7fe8dadd4c57c83a51cdfce165b6bfd6807 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftInteraction.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftInteraction.java
 @@ -12,8 +12,16 @@ public class CraftInteraction extends CraftEntity implements Interaction {
@@ -1515,12 +1520,12 @@ index caa3016bf9742222205e3ea9a327fad3c4f912bb..4a77b1cf13cfae35331c1e5c5df0b3b9
 +
      @Override
      public net.minecraft.world.entity.Interaction getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Interaction) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftIronGolem.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftIronGolem.java
-index 63cae1a2e95d8da17c45c4404a8dd0ca6a413c39..f57139f03da9519802ee156f37691d0824bc531b 100644
+index 63cae1a2e95d8da17c45c4404a8dd0ca6a413c39..e417ff87b047dcffa6121835af6f4e713526e16b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftIronGolem.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftIronGolem.java
 @@ -8,8 +8,16 @@ public class CraftIronGolem extends CraftGolem implements IronGolem {
@@ -1536,12 +1541,12 @@ index 63cae1a2e95d8da17c45c4404a8dd0ca6a413c39..f57139f03da9519802ee156f37691d08
 +
      @Override
      public net.minecraft.world.entity.animal.IronGolem getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.IronGolem) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftItem.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftItem.java
-index 30d62ee4d5cd2ddacb8783b5bbbf475d592b3e02..c78498010a01b7d4c0b5c7350a11d0e1cf8ab013 100644
+index 30d62ee4d5cd2ddacb8783b5bbbf475d592b3e02..3985b6bea750341f5336babb237aab8874a4cbd9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftItem.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftItem.java
 @@ -18,8 +18,16 @@ public class CraftItem extends CraftEntity implements Item {
@@ -1557,12 +1562,12 @@ index 30d62ee4d5cd2ddacb8783b5bbbf475d592b3e02..c78498010a01b7d4c0b5c7350a11d0e1
 +
      @Override
      public ItemEntity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ItemEntity) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftItemDisplay.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftItemDisplay.java
-index 787f91566fc53c2b4aeba1ec10d8f46ccf15cbe6..eb2b4272b09e5df06e49afc2ccf7063ebc3d42b8 100644
+index 787f91566fc53c2b4aeba1ec10d8f46ccf15cbe6..04a73a31ba09557e901ff1985dc5d5e53f18d99a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftItemDisplay.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftItemDisplay.java
 @@ -13,8 +13,16 @@ public class CraftItemDisplay extends CraftDisplay implements ItemDisplay {
@@ -1578,12 +1583,12 @@ index 787f91566fc53c2b4aeba1ec10d8f46ccf15cbe6..eb2b4272b09e5df06e49afc2ccf7063e
 +
      @Override
      public net.minecraft.world.entity.Display.ItemDisplay getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Display.ItemDisplay) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftItemFrame.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftItemFrame.java
-index 2fcd9b836d42e3549a3b6b921c57a4c103146dff..051d15967436109d4267a800ab7e1bdf83cbd47a 100644
+index 350ad61ab3fe66abd528e353b431a4a6dac17506..332f209980d3e645ad469fcebb93cc09253ebc20 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftItemFrame.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftItemFrame.java
 @@ -157,8 +157,16 @@ public class CraftItemFrame extends CraftHanging implements ItemFrame {
@@ -1599,12 +1604,12 @@ index 2fcd9b836d42e3549a3b6b921c57a4c103146dff..051d15967436109d4267a800ab7e1bdf
 +
      @Override
      public net.minecraft.world.entity.decoration.ItemFrame getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.decoration.ItemFrame) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLargeFireball.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLargeFireball.java
-index 0848963e61e03aa2a1740208ee372fd9edb7fc11..a55a329125775a7b78b3a779a8525ab1e734235b 100644
+index 0848963e61e03aa2a1740208ee372fd9edb7fc11..de2236f0106330ebe9d76bd308f9eee8751db826 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLargeFireball.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLargeFireball.java
 @@ -14,8 +14,16 @@ public class CraftLargeFireball extends CraftSizedFireball implements LargeFireb
@@ -1620,15 +1625,15 @@ index 0848963e61e03aa2a1740208ee372fd9edb7fc11..a55a329125775a7b78b3a779a8525ab1
 +
      @Override
      public net.minecraft.world.entity.projectile.LargeFireball getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.LargeFireball) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLeash.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLeash.java
-index 06fa256c5528af9c1d63fbd044f53b63bed324ee..896d34bd55e308fe322865f8cf7fd077a382df5e 100644
+index 76a7fc3d6c561d12bde17b9f93cae03a6cbb84b3..cd1ba99a75da644d06c4eb2f2c1ff91bfa5afa01 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLeash.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLeash.java
-@@ -24,8 +24,16 @@ public class CraftLeash extends CraftHanging implements LeashHitch {
+@@ -24,6 +24,13 @@ public class CraftLeash extends CraftBlockAttachedEntity implements LeashHitch {
          return BlockFace.SELF;
      }
  
@@ -1640,13 +1645,18 @@ index 06fa256c5528af9c1d63fbd044f53b63bed324ee..896d34bd55e308fe322865f8cf7fd077
 +    // Folia end - region threading
 +
      @Override
+     public BlockFace getAttachedFace() {
+         // Leash hitch has no facing direction, so we return self
+@@ -37,6 +44,7 @@ public class CraftLeash extends CraftBlockAttachedEntity implements LeashHitch {
+ 
+     @Override
      public LeashFenceKnotEntity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (LeashFenceKnotEntity) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLightningStrike.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLightningStrike.java
-index e9f471e60af0725ec34e2985d63ae9ea9f88590a..6a443f42ecec16abea3ddf7bc2e85bb8a6af726e 100644
+index e9f471e60af0725ec34e2985d63ae9ea9f88590a..cd824fc65ac2b1fe55710da4700f7c31f820f205 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLightningStrike.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLightningStrike.java
 @@ -41,8 +41,16 @@ public class CraftLightningStrike extends CraftEntity implements LightningStrike
@@ -1662,15 +1672,15 @@ index e9f471e60af0725ec34e2985d63ae9ea9f88590a..6a443f42ecec16abea3ddf7bc2e85bb8
 +
      @Override
      public LightningBolt getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (LightningBolt) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
-index 0196a49a5822e257b0e065e2383ec92b1bc27bba..c086e530b524186d21607e5edc4bd7d1ae60bbd0 100644
+index d2bb0831394c03b620b2cbd8306cb82b621f34f7..3015910083bae42f200b977f74ed53db46a93342 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
-@@ -476,6 +476,13 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+@@ -477,6 +477,13 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
          this.getHandle().invulnerableTime = ticks;
      }
  
@@ -1684,16 +1694,16 @@ index 0196a49a5822e257b0e065e2383ec92b1bc27bba..c086e530b524186d21607e5edc4bd7d1
      @Override
      public int getNoActionTicks() {
          return this.getHandle().getNoActionTime();
-@@ -489,6 +496,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+@@ -490,6 +497,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
  
      @Override
      public net.minecraft.world.entity.LivingEntity getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.LivingEntity) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java
-index 351f42842b780d053cd2e5bad9ae299449141b10..6329f0b069fc03eef14e2c85525c93b47b8d3945 100644
+index 351f42842b780d053cd2e5bad9ae299449141b10..63513eff9b849f240b16ea28060b78c774e23934 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLlama.java
 @@ -14,8 +14,16 @@ public class CraftLlama extends CraftChestedHorse implements Llama, com.destroys
@@ -1709,12 +1719,12 @@ index 351f42842b780d053cd2e5bad9ae299449141b10..6329f0b069fc03eef14e2c85525c93b4
 +
      @Override
      public net.minecraft.world.entity.animal.horse.Llama getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.horse.Llama) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLlamaSpit.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLlamaSpit.java
-index 47633f05b4fab1dcabc2117e7645fe6d6949622a..f1e78960622b71aa63e172a1d856a757d6926a5a 100644
+index 47633f05b4fab1dcabc2117e7645fe6d6949622a..5e51d6eeda2abdc5df9c9a280a191ca1cbf615b9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLlamaSpit.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLlamaSpit.java
 @@ -10,8 +10,16 @@ public class CraftLlamaSpit extends AbstractProjectile implements LlamaSpit {
@@ -1730,12 +1740,12 @@ index 47633f05b4fab1dcabc2117e7645fe6d6949622a..f1e78960622b71aa63e172a1d856a757
 +
      @Override
      public net.minecraft.world.entity.projectile.LlamaSpit getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.LlamaSpit) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMagmaCube.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMagmaCube.java
-index 58b638ffd338e1b0f4962490c665c1eebcf33dcc..321e41e21723fa3e28f73176c9abe34d16a42fcc 100644
+index 58b638ffd338e1b0f4962490c665c1eebcf33dcc..9f1b4d0561c10fbbfe0daec3d9dabfdaca9cf70b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMagmaCube.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMagmaCube.java
 @@ -9,8 +9,16 @@ public class CraftMagmaCube extends CraftSlime implements MagmaCube {
@@ -1751,12 +1761,12 @@ index 58b638ffd338e1b0f4962490c665c1eebcf33dcc..321e41e21723fa3e28f73176c9abe34d
 +
      @Override
      public net.minecraft.world.entity.monster.MagmaCube getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.MagmaCube) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMarker.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMarker.java
-index e6782a48d22ba1e683e3fe463e970e8a5ed60fbd..9c04388e9d38103b40a154b6f0e13920ede451f5 100644
+index e6782a48d22ba1e683e3fe463e970e8a5ed60fbd..afaa4570c1991cd4260ffcdba823ba2452ad156a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMarker.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMarker.java
 @@ -9,8 +9,16 @@ public class CraftMarker extends CraftEntity implements Marker {
@@ -1772,12 +1782,12 @@ index e6782a48d22ba1e683e3fe463e970e8a5ed60fbd..9c04388e9d38103b40a154b6f0e13920
 +
      @Override
      public net.minecraft.world.entity.Marker getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Marker) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecart.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecart.java
-index 8920af5a0dfe737c1f38d906b53e6a278456d2aa..8bc87cfe29d61b09eee8ecfccda319b5610c6969 100644
+index 8920af5a0dfe737c1f38d906b53e6a278456d2aa..5652ec4aea839fae3f8ea31d7cd5c80ecf129fb5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecart.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecart.java
 @@ -86,8 +86,16 @@ public abstract class CraftMinecart extends CraftVehicle implements Minecart {
@@ -1793,12 +1803,12 @@ index 8920af5a0dfe737c1f38d906b53e6a278456d2aa..8bc87cfe29d61b09eee8ecfccda319b5
 +
      @Override
      public AbstractMinecart getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractMinecart) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartCommand.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartCommand.java
-index f34fa6715e477936097367a7aefd1a2bf87d3d90..40ecce7b710650a893ff5d4e5fac99cfa1b06cf9 100644
+index f34fa6715e477936097367a7aefd1a2bf87d3d90..e5310b138b13d54448072c15f6768acc1c33a45c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartCommand.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartCommand.java
 @@ -20,8 +20,16 @@ public class CraftMinecartCommand extends CraftMinecart implements CommandMineca
@@ -1814,12 +1824,12 @@ index f34fa6715e477936097367a7aefd1a2bf87d3d90..40ecce7b710650a893ff5d4e5fac99cf
 +
      @Override
      public MinecartCommandBlock getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (MinecartCommandBlock) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartContainer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartContainer.java
-index 451f3a6f0b47493da3af3f5d6baced6a8c97f350..f89a5d7c4e76f2061b72006917c626d53ba550a0 100644
+index 451f3a6f0b47493da3af3f5d6baced6a8c97f350..d4f98fe5eb5e463679ebc5b82b077c98e4448203 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartContainer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartContainer.java
 @@ -13,8 +13,16 @@ public abstract class CraftMinecartContainer extends CraftMinecart implements co
@@ -1835,12 +1845,12 @@ index 451f3a6f0b47493da3af3f5d6baced6a8c97f350..f89a5d7c4e76f2061b72006917c626d5
 +
      @Override
      public AbstractMinecartContainer getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractMinecartContainer) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartFurnace.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartFurnace.java
-index 1b41026ab638bb2764b19429706eb0aded5aad12..c04acbffe5e0b1024f885490c5238cd40b36e701 100644
+index 1b41026ab638bb2764b19429706eb0aded5aad12..4d242bed3bd40c9749236e138f81d5e8583f7dc3 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartFurnace.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartFurnace.java
 @@ -11,8 +11,16 @@ public class CraftMinecartFurnace extends CraftMinecart implements PoweredMineca
@@ -1856,12 +1866,12 @@ index 1b41026ab638bb2764b19429706eb0aded5aad12..c04acbffe5e0b1024f885490c5238cd4
 +
      @Override
      public MinecartFurnace getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (MinecartFurnace) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartHopper.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartHopper.java
-index 3a3563a1bdbc0d84d973b3a04b50b78b4bc3d379..9a9f37b9c8931771d90ae22c4ca9a684e24fff32 100644
+index 3a3563a1bdbc0d84d973b3a04b50b78b4bc3d379..1e86ce7c1a3fc1f4eae2d8136fc0d879fbde5301 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartHopper.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartHopper.java
 @@ -34,8 +34,17 @@ public final class CraftMinecartHopper extends CraftMinecartContainer implements
@@ -1878,12 +1888,12 @@ index 3a3563a1bdbc0d84d973b3a04b50b78b4bc3d379..9a9f37b9c8931771d90ae22c4ca9a684
 +
      @Override
      public net.minecraft.world.entity.vehicle.MinecartHopper getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.vehicle.MinecartHopper) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartTNT.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartTNT.java
-index 79b608e89d4d1f76a58868c585bb87c82e2689b1..7767a342b3d8bf9c07fbd73ad4ccacd8065c5869 100644
+index 79b608e89d4d1f76a58868c585bb87c82e2689b1..7884de5348f325ee12db41a521a042be4b33a793 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartTNT.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMinecartTNT.java
 @@ -42,8 +42,16 @@ public final class CraftMinecartTNT extends CraftMinecart implements ExplosiveMi
@@ -1899,15 +1909,15 @@ index 79b608e89d4d1f76a58868c585bb87c82e2689b1..7767a342b3d8bf9c07fbd73ad4ccacd8
 +
      @Override
      public MinecartTNT getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (MinecartTNT) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java
-index e155501fb3a88edf3ddac3aa0aae1b6a5a84962e..c17d5f6e60c4e2e0266e5c4288418d127e0ccdc8 100644
+index deb66c04abefb4a88521483db1612e494bd27164..4f5083171f67decff5021e0bb638fbb16a147adc 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java
-@@ -53,8 +53,16 @@ public abstract class CraftMob extends CraftLivingEntity implements Mob {
+@@ -54,8 +54,16 @@ public abstract class CraftMob extends CraftLivingEntity implements Mob {
          return (sound != null) ? CraftSound.minecraftToBukkit(sound) : null;
      }
  
@@ -1920,11 +1930,11 @@ index e155501fb3a88edf3ddac3aa0aae1b6a5a84962e..c17d5f6e60c4e2e0266e5c4288418d12
 +
      @Override
      public net.minecraft.world.entity.Mob getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Mob) this.entity;
      }
  
-@@ -62,7 +70,7 @@ public abstract class CraftMob extends CraftLivingEntity implements Mob {
+@@ -63,7 +71,7 @@ public abstract class CraftMob extends CraftLivingEntity implements Mob {
      @Override
      public void setHandle(net.minecraft.world.entity.Entity entity) {
          super.setHandle(entity);
@@ -1934,7 +1944,7 @@ index e155501fb3a88edf3ddac3aa0aae1b6a5a84962e..c17d5f6e60c4e2e0266e5c4288418d12
      // Paper end - Mob Pathfinding API
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMonster.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMonster.java
-index 706c74c832f6893df3797023f68add31139c7d57..80a612f16669e571e336dd6369a968b4664c98e4 100644
+index 706c74c832f6893df3797023f68add31139c7d57..1cf155fc23f13691f86673eac3084d7530d69ab5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMonster.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMonster.java
 @@ -9,8 +9,16 @@ public class CraftMonster extends CraftCreature implements Monster, CraftEnemy {
@@ -1950,12 +1960,12 @@ index 706c74c832f6893df3797023f68add31139c7d57..80a612f16669e571e336dd6369a968b4
 +
      @Override
      public net.minecraft.world.entity.monster.Monster getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Monster) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMushroomCow.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMushroomCow.java
-index 5c5b64bd058684520fa175bfd10622ff57856b7c..ab8d6052c7f11b0563ea49a4766aa1cac93a5c1b 100644
+index 5c5b64bd058684520fa175bfd10622ff57856b7c..8acaa5f8153d643e2558110bb7be512514a27532 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMushroomCow.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMushroomCow.java
 @@ -19,6 +19,13 @@ public class CraftMushroomCow extends CraftCow implements MushroomCow, io.paperm
@@ -1976,12 +1986,12 @@ index 5c5b64bd058684520fa175bfd10622ff57856b7c..ab8d6052c7f11b0563ea49a4766aa1ca
  
      @Override
      public net.minecraft.world.entity.animal.MushroomCow getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.MushroomCow) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftOcelot.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftOcelot.java
-index 5c60a30e80448fbf04b5fa4b1ef12fb2ee99bfd5..77eefdff4a5102fbc3abba7d7037fa7a5bcc61fa 100644
+index 5c60a30e80448fbf04b5fa4b1ef12fb2ee99bfd5..4ba52939450c0a89e5ba1fa57a84b3ceccb9fef0 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftOcelot.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftOcelot.java
 @@ -9,8 +9,16 @@ public class CraftOcelot extends CraftAnimals implements Ocelot {
@@ -1997,24 +2007,24 @@ index 5c60a30e80448fbf04b5fa4b1ef12fb2ee99bfd5..77eefdff4a5102fbc3abba7d7037fa7a
 +
      @Override
      public net.minecraft.world.entity.animal.Ocelot getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Ocelot) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftOminousItemSpawner.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftOminousItemSpawner.java
-index ecdac2cf74e99f0d69e053dece11ab891973dc2b..14a1c58aacf7e07ffc254b5f02b6eb6dfc1a6277 100644
+index ecdac2cf74e99f0d69e053dece11ab891973dc2b..fa365c38c9e0f671df1481c8b36bc993eee42afd 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftOminousItemSpawner.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftOminousItemSpawner.java
 @@ -13,6 +13,7 @@ public class CraftOminousItemSpawner extends CraftEntity implements OminousItemS
  
      @Override
      public net.minecraft.world.entity.OminousItemSpawner getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.OminousItemSpawner) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPainting.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPainting.java
-index bcac1359c667ef1ee46384f9c7a5adf4010d2b08..f131a80df94a9f0d42a64a86424451fb06755b12 100644
+index bcac1359c667ef1ee46384f9c7a5adf4010d2b08..e740abd53d99f549acb5048d748241560dfeddd1 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPainting.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPainting.java
 @@ -50,8 +50,16 @@ public class CraftPainting extends CraftHanging implements Painting {
@@ -2030,12 +2040,12 @@ index bcac1359c667ef1ee46384f9c7a5adf4010d2b08..f131a80df94a9f0d42a64a86424451fb
 +
      @Override
      public net.minecraft.world.entity.decoration.Painting getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.decoration.Painting) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPanda.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPanda.java
-index 01d104d91de9e1319d27e39d3f474318c7809486..a4d201e832d59c64d932f8b26564a783bd4bbdf4 100644
+index 01d104d91de9e1319d27e39d3f474318c7809486..c298b263175dc82097c0ad2c35194f3e326c6658 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPanda.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPanda.java
 @@ -11,8 +11,16 @@ public class CraftPanda extends CraftAnimals implements Panda {
@@ -2051,12 +2061,12 @@ index 01d104d91de9e1319d27e39d3f474318c7809486..a4d201e832d59c64d932f8b26564a783
 +
      @Override
      public net.minecraft.world.entity.animal.Panda getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Panda) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftParrot.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftParrot.java
-index 04d6cf6a1f3ae8316e3b2862c2d1b04e84a3b20a..b1cdcfee5e575b29d844f04140dd0b0486d1dc45 100644
+index 04d6cf6a1f3ae8316e3b2862c2d1b04e84a3b20a..4ed79610b50be635a7a7c8a8f7d7af8f91ce2d0d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftParrot.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftParrot.java
 @@ -11,8 +11,16 @@ public class CraftParrot extends CraftTameableAnimal implements Parrot {
@@ -2072,12 +2082,12 @@ index 04d6cf6a1f3ae8316e3b2862c2d1b04e84a3b20a..b1cdcfee5e575b29d844f04140dd0b04
 +
      @Override
      public net.minecraft.world.entity.animal.Parrot getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Parrot) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPhantom.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPhantom.java
-index 8338effd39b1709dbe578e247710a8e58d83e3aa..1d998942280db00ba7dab1c9d9a0f818490fe328 100644
+index 83e77c6d287d8e239d2f55f3e9f19ef74946be7c..10e385066d29834eb3d8c9d539bb8655407cabb5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPhantom.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPhantom.java
 @@ -9,8 +9,16 @@ public class CraftPhantom extends CraftFlying implements Phantom, CraftEnemy {
@@ -2093,12 +2103,12 @@ index 8338effd39b1709dbe578e247710a8e58d83e3aa..1d998942280db00ba7dab1c9d9a0f818
 +
      @Override
      public net.minecraft.world.entity.monster.Phantom getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Phantom) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPig.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPig.java
-index 8016c810aeaf6ee953bca549bc1e7f9a85f860fc..4566f5d84e70b0296aabb4bf0d2caf517809132a 100644
+index 8016c810aeaf6ee953bca549bc1e7f9a85f860fc..e96e58fa4fb2a73e3e44c5213c73f332df4daa97 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPig.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPig.java
 @@ -55,8 +55,16 @@ public class CraftPig extends CraftAnimals implements Pig {
@@ -2114,12 +2124,12 @@ index 8016c810aeaf6ee953bca549bc1e7f9a85f860fc..4566f5d84e70b0296aabb4bf0d2caf51
 +
      @Override
      public net.minecraft.world.entity.animal.Pig getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Pig) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPigZombie.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPigZombie.java
-index 49beb836d2801aadf869feefa602616daebe633f..0de7eadb1cac6979ce7cffd38a3b250812cae260 100644
+index 49beb836d2801aadf869feefa602616daebe633f..d220874f678649acfae549691262c370f0228908 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPigZombie.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPigZombie.java
 @@ -30,8 +30,16 @@ public class CraftPigZombie extends CraftZombie implements PigZombie {
@@ -2135,12 +2145,12 @@ index 49beb836d2801aadf869feefa602616daebe633f..0de7eadb1cac6979ce7cffd38a3b2508
 +
      @Override
      public ZombifiedPiglin getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ZombifiedPiglin) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglin.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglin.java
-index 5124a383b60b2c8de89fa992547d0c61db760c21..2ba9b61a164c6afed15a0919124c8241d2aebf78 100644
+index 5124a383b60b2c8de89fa992547d0c61db760c21..d75230de45102434660b3b7926a804d26e10ab2c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglin.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglin.java
 @@ -75,8 +75,16 @@ public class CraftPiglin extends CraftPiglinAbstract implements Piglin, com.dest
@@ -2156,12 +2166,12 @@ index 5124a383b60b2c8de89fa992547d0c61db760c21..2ba9b61a164c6afed15a0919124c8241
 +
      @Override
      public net.minecraft.world.entity.monster.piglin.Piglin getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.piglin.Piglin) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinAbstract.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinAbstract.java
-index e7957d6051244ba410f8633f9c16eeb8c5ac3ce0..ce763867f9c6c2d4773d76387afc0ecb479b6259 100644
+index e7957d6051244ba410f8633f9c16eeb8c5ac3ce0..f8465f75c15d96ccd82ee394c9e658966837ad07 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinAbstract.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinAbstract.java
 @@ -95,8 +95,16 @@ public class CraftPiglinAbstract extends CraftMonster implements PiglinAbstract
@@ -2177,12 +2187,12 @@ index e7957d6051244ba410f8633f9c16eeb8c5ac3ce0..ce763867f9c6c2d4773d76387afc0ecb
 +
      @Override
      public AbstractPiglin getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (AbstractPiglin) super.getHandle();
      }
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinBrute.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinBrute.java
-index be874dc973fe632e8ace86041392ca69beaefd16..6889b4599aac0bd03badeefd74c891857f566c30 100644
+index be874dc973fe632e8ace86041392ca69beaefd16..efb64160089eeb6be8faf7790989909145c22a4b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinBrute.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPiglinBrute.java
 @@ -9,8 +9,16 @@ public class CraftPiglinBrute extends CraftPiglinAbstract implements PiglinBrute
@@ -2198,12 +2208,12 @@ index be874dc973fe632e8ace86041392ca69beaefd16..6889b4599aac0bd03badeefd74c89185
 +
      @Override
      public net.minecraft.world.entity.monster.piglin.PiglinBrute getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.piglin.PiglinBrute) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPillager.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPillager.java
-index 2638c341bc02f201f7ab17fdebcdbdf3a7ec05bf..0f5c2d31a2dea13a46ba81e353393633d097dcc7 100644
+index 2638c341bc02f201f7ab17fdebcdbdf3a7ec05bf..074b2919be2b5544b0a46e6cd32f6c57dad6bfdc 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPillager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPillager.java
 @@ -11,8 +11,16 @@ public class CraftPillager extends CraftIllager implements Pillager, com.destroy
@@ -2219,15 +2229,15 @@ index 2638c341bc02f201f7ab17fdebcdbdf3a7ec05bf..0f5c2d31a2dea13a46ba81e353393633
 +
      @Override
      public net.minecraft.world.entity.monster.Pillager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Pillager) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 977aee03906ed28c388cc918fc4bade46933a4cd..639b8678ad7711582f2e912772a98233c5313f63 100644
+index 5f82de67496fafdeb5364e227fec0c49f3fe9d59..eb1e14be98b3731e0557726324593dee2eadd31b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -667,7 +667,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -669,7 +669,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
  
      @Override
      public void kick(net.kyori.adventure.text.Component message, org.bukkit.event.player.PlayerKickEvent.Cause cause) {
@@ -2236,7 +2246,7 @@ index 977aee03906ed28c388cc918fc4bade46933a4cd..639b8678ad7711582f2e912772a98233
          final ServerGamePacketListenerImpl connection = this.getHandle().connection;
          if (connection != null) {
              connection.disconnect(message == null ? net.kyori.adventure.text.Component.empty() : message, cause);
-@@ -2292,9 +2292,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -2311,9 +2311,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          return this;
      }
  
@@ -2254,17 +2264,8 @@ index 977aee03906ed28c388cc918fc4bade46933a4cd..639b8678ad7711582f2e912772a98233
      }
  
      public void setHandle(final ServerPlayer entity) {
-@@ -3339,7 +3346,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
-         {
-             if ( CraftPlayer.this.getHealth() <= 0 && CraftPlayer.this.isOnline() )
-             {
--                CraftPlayer.this.server.getServer().getPlayerList().respawn( CraftPlayer.this.getHandle(), false, org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.PLUGIN );
-+                CraftPlayer.this.getHandle().respawn(null); // Folia - region threading
-             }
-         }
- 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPolarBear.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPolarBear.java
-index fe075cfdf3097d6cb768e71b8cc360abb8eaf367..9147771e26d2dbd29754d3fc07c02596669cd602 100644
+index fe075cfdf3097d6cb768e71b8cc360abb8eaf367..657886dfb8e152ed4a64a64878da23526dad0160 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPolarBear.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPolarBear.java
 @@ -8,8 +8,17 @@ public class CraftPolarBear extends CraftAnimals implements PolarBear {
@@ -2281,12 +2282,12 @@ index fe075cfdf3097d6cb768e71b8cc360abb8eaf367..9147771e26d2dbd29754d3fc07c02596
 +
      @Override
      public net.minecraft.world.entity.animal.PolarBear getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.PolarBear) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftProjectile.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftProjectile.java
-index 4f1fa7dec78970bdfc184d3c1f1632dc9d75a574..d4889dbca359aab6e11fa6231b0ddcb6f33ef18b 100644
+index 4f1fa7dec78970bdfc184d3c1f1632dc9d75a574..99fd39c60d1b0a50bddf7b9b9f45f22c189a2f25 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftProjectile.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftProjectile.java
 @@ -12,8 +12,16 @@ public abstract class CraftProjectile extends AbstractProjectile implements Proj
@@ -2302,12 +2303,12 @@ index 4f1fa7dec78970bdfc184d3c1f1632dc9d75a574..d4889dbca359aab6e11fa6231b0ddcb6
 +
      @Override
      public net.minecraft.world.entity.projectile.Projectile getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.Projectile) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPufferFish.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPufferFish.java
-index 35a8219734633529325430810e88755b2dd23125..85ebd34ed143304c603078f2e949179a8e628ed2 100644
+index 35a8219734633529325430810e88755b2dd23125..7ba16121cb1828cf5c0ff8f027fa05e9c1814ffa 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPufferFish.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPufferFish.java
 @@ -10,8 +10,16 @@ public class CraftPufferFish extends CraftFish implements PufferFish {
@@ -2323,12 +2324,12 @@ index 35a8219734633529325430810e88755b2dd23125..85ebd34ed143304c603078f2e949179a
 +
      @Override
      public Pufferfish getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Pufferfish) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java
-index 519ef701a7d6534f7cb516f6296b95ee521f661d..effbc1a3ef8c6c9cd424f49b8bfce05d40e0772a 100644
+index 519ef701a7d6534f7cb516f6296b95ee521f661d..6407b4e6ca793a676e7d669920ae90b762207970 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftRabbit.java
 @@ -10,8 +10,16 @@ public class CraftRabbit extends CraftAnimals implements Rabbit {
@@ -2344,12 +2345,12 @@ index 519ef701a7d6534f7cb516f6296b95ee521f661d..effbc1a3ef8c6c9cd424f49b8bfce05d
 +
      @Override
      public net.minecraft.world.entity.animal.Rabbit getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Rabbit) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java
-index 763c368e299588f9a0e085a8a5e04e97e1f33428..58de24aeb98f19b2cf3fa9b0ad17e8b14bc1e475 100644
+index 763c368e299588f9a0e085a8a5e04e97e1f33428..3e85638f3941c2085a7ddb102d0ccc23446cc1d6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftRaider.java
 @@ -16,8 +16,16 @@ public abstract class CraftRaider extends CraftMonster implements Raider {
@@ -2365,12 +2366,12 @@ index 763c368e299588f9a0e085a8a5e04e97e1f33428..58de24aeb98f19b2cf3fa9b0ad17e8b1
 +
      @Override
      public net.minecraft.world.entity.raid.Raider getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.raid.Raider) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftRavager.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftRavager.java
-index 09796ce15658e3f7c223a265a547a51ee729ed40..824db5f9f0b5c5f79bc073acaeb4f46aade740af 100644
+index 09796ce15658e3f7c223a265a547a51ee729ed40..bfca2951d18f7451787877b5a6503b0572945447 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftRavager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftRavager.java
 @@ -9,8 +9,16 @@ public class CraftRavager extends CraftRaider implements Ravager {
@@ -2386,12 +2387,12 @@ index 09796ce15658e3f7c223a265a547a51ee729ed40..824db5f9f0b5c5f79bc073acaeb4f46a
 +
      @Override
      public net.minecraft.world.entity.monster.Ravager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Ravager) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSalmon.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSalmon.java
-index d4d8ce60098c74508e2de9541bf6534988779764..081d7f454b3556110f5a300602fbe9239d9b77c7 100644
+index d4d8ce60098c74508e2de9541bf6534988779764..bf4b61e56345b1f2ee83d8aceaf66c199590c258 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSalmon.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSalmon.java
 @@ -9,8 +9,16 @@ public class CraftSalmon extends io.papermc.paper.entity.PaperSchoolableFish imp
@@ -2407,12 +2408,12 @@ index d4d8ce60098c74508e2de9541bf6534988779764..081d7f454b3556110f5a300602fbe923
 +
      @Override
      public net.minecraft.world.entity.animal.Salmon getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Salmon) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSheep.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSheep.java
-index 37291d7ad9fdf0fe78894f82a418f40bb581f58b..1a0041a788f65ec30d329a86f65c04659a68ad7c 100644
+index 37291d7ad9fdf0fe78894f82a418f40bb581f58b..6c7e54a929b46fd160726e41bf63023a8622d044 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSheep.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSheep.java
 @@ -29,8 +29,16 @@ public class CraftSheep extends CraftAnimals implements Sheep, io.papermc.paper.
@@ -2428,12 +2429,12 @@ index 37291d7ad9fdf0fe78894f82a418f40bb581f58b..1a0041a788f65ec30d329a86f65c0465
 +
      @Override
      public net.minecraft.world.entity.animal.Sheep getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Sheep) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftShulker.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftShulker.java
-index 05ec06b71642ab1ef03829039f7ac1e4c527ee50..fd4168a8bcf1537ccc2496139f5c5b63c5e2f41a 100644
+index 05ec06b71642ab1ef03829039f7ac1e4c527ee50..1e1e908cbc08df06996128e3dd6d277a19f9a2df 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftShulker.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftShulker.java
 @@ -18,8 +18,16 @@ public class CraftShulker extends CraftGolem implements Shulker, CraftEnemy {
@@ -2449,15 +2450,15 @@ index 05ec06b71642ab1ef03829039f7ac1e4c527ee50..fd4168a8bcf1537ccc2496139f5c5b63
 +
      @Override
      public net.minecraft.world.entity.monster.Shulker getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Shulker) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftShulkerBullet.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftShulkerBullet.java
-index 636c4481e3afdf20197e502cf221f5d34d18f101..436a921106697916118cec8007ffd1cac1745fcd 100644
+index b3797a43eeee11cb7ae0774d61bd5f195d0aa3ad..d045d50d1cfccb696153b8c33e86e193194271fc 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftShulkerBullet.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftShulkerBullet.java
-@@ -65,8 +65,16 @@ public class CraftShulkerBullet extends AbstractProjectile implements ShulkerBul
+@@ -69,8 +69,16 @@ public class CraftShulkerBullet extends AbstractProjectile implements ShulkerBul
          return "CraftShulkerBullet";
      }
  
@@ -2470,12 +2471,12 @@ index 636c4481e3afdf20197e502cf221f5d34d18f101..436a921106697916118cec8007ffd1ca
 +
      @Override
      public net.minecraft.world.entity.projectile.ShulkerBullet getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.ShulkerBullet) this.entity;
      }
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSilverfish.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSilverfish.java
-index 7c75d78e5e28d7320c6dbe979bcd576658fb310b..83de93bd751b1c15ad763819e4fe87ecb13bf6e8 100644
+index 7c75d78e5e28d7320c6dbe979bcd576658fb310b..a25ca7fa49a3bb213f6af5804079b2efe43ef0e4 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSilverfish.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSilverfish.java
 @@ -8,8 +8,16 @@ public class CraftSilverfish extends CraftMonster implements Silverfish {
@@ -2491,12 +2492,12 @@ index 7c75d78e5e28d7320c6dbe979bcd576658fb310b..83de93bd751b1c15ad763819e4fe87ec
 +
      @Override
      public net.minecraft.world.entity.monster.Silverfish getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Silverfish) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSizedFireball.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSizedFireball.java
-index de3327812c08b3bb8f5907ae657f67962d1e4e8b..d2452b8efdd066df985e4a55f80f09275a589a9c 100644
+index de3327812c08b3bb8f5907ae657f67962d1e4e8b..c479f4adb945e8bb6ea2279ad23d679ca0dee606 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSizedFireball.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSizedFireball.java
 @@ -27,8 +27,16 @@ public class CraftSizedFireball extends CraftFireball implements SizedFireball {
@@ -2512,12 +2513,12 @@ index de3327812c08b3bb8f5907ae657f67962d1e4e8b..d2452b8efdd066df985e4a55f80f0927
 +
      @Override
      public Fireball getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Fireball) this.entity;
      }
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeleton.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeleton.java
-index 6f98da9be6aef35e3b5c940188b872459a383c8e..79465c30d59c50574b215e1f4ad75a2b426404a3 100644
+index 6f98da9be6aef35e3b5c940188b872459a383c8e..dc93b8aaf48671d66d3bb3fb413b83fc4b4b26cf 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeleton.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeleton.java
 @@ -31,8 +31,16 @@ public class CraftSkeleton extends CraftAbstractSkeleton implements Skeleton {
@@ -2533,12 +2534,12 @@ index 6f98da9be6aef35e3b5c940188b872459a383c8e..79465c30d59c50574b215e1f4ad75a2b
 +
      @Override
      public net.minecraft.world.entity.monster.Skeleton getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Skeleton) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeletonHorse.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeletonHorse.java
-index fbb47491dcc75f8247dee9f123f946f99ef1467f..9dfd108be5185eb897faa802411297183a960cee 100644
+index fbb47491dcc75f8247dee9f123f946f99ef1467f..6cc1ea31340298037c2a00d64d70928f31278a4a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeletonHorse.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSkeletonHorse.java
 @@ -20,8 +20,16 @@ public class CraftSkeletonHorse extends CraftAbstractHorse implements SkeletonHo
@@ -2554,12 +2555,12 @@ index fbb47491dcc75f8247dee9f123f946f99ef1467f..9dfd108be5185eb897faa80241129718
 +
      @Override
      public net.minecraft.world.entity.animal.horse.SkeletonHorse getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.horse.SkeletonHorse) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSlime.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSlime.java
-index e48f7d1cbec4a2319745ba48a5d44ab9925214e2..1ffb16e5e8e243f684c7c0b9fbdd2a7b885d412d 100644
+index e48f7d1cbec4a2319745ba48a5d44ab9925214e2..27b07865edfa659d9cdfcf2d84935ad313472e87 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSlime.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSlime.java
 @@ -19,8 +19,16 @@ public class CraftSlime extends CraftMob implements Slime, CraftEnemy {
@@ -2575,12 +2576,12 @@ index e48f7d1cbec4a2319745ba48a5d44ab9925214e2..1ffb16e5e8e243f684c7c0b9fbdd2a7b
 +
      @Override
      public net.minecraft.world.entity.monster.Slime getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Slime) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSmallFireball.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSmallFireball.java
-index 072df206858944ef78179b0a6d61ed990a844d2b..c022ca9c630cfe9a37583c65afc6d390c13f5886 100644
+index 072df206858944ef78179b0a6d61ed990a844d2b..71625cc4e4b2fd3773baf1b2c1ea7e463b854ffa 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSmallFireball.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSmallFireball.java
 @@ -8,8 +8,16 @@ public class CraftSmallFireball extends CraftSizedFireball implements SmallFireb
@@ -2596,12 +2597,12 @@ index 072df206858944ef78179b0a6d61ed990a844d2b..c022ca9c630cfe9a37583c65afc6d390
 +
      @Override
      public net.minecraft.world.entity.projectile.SmallFireball getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.SmallFireball) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSniffer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSniffer.java
-index 555337018fe218ac5a296a5e6a1d82720fee05e1..a6929f512a99eed376878ae11aa7bac0b5828e27 100644
+index 555337018fe218ac5a296a5e6a1d82720fee05e1..873b7e7a05b3465b79a82ed583ce16bb245ebcbf 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSniffer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSniffer.java
 @@ -16,8 +16,16 @@ public class CraftSniffer extends CraftAnimals implements Sniffer {
@@ -2617,12 +2618,12 @@ index 555337018fe218ac5a296a5e6a1d82720fee05e1..a6929f512a99eed376878ae11aa7bac0
 +
      @Override
      public net.minecraft.world.entity.animal.sniffer.Sniffer getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.sniffer.Sniffer) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowball.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowball.java
-index d959825fd11a94aba175934cd7739544a23958fc..e22be41875f2d772bcc1219e54f4f436813034a1 100644
+index d959825fd11a94aba175934cd7739544a23958fc..9f53ba11a2adabdebd70eee5a811fec7dccd7b10 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowball.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowball.java
 @@ -8,8 +8,16 @@ public class CraftSnowball extends CraftThrowableProjectile implements Snowball
@@ -2638,12 +2639,12 @@ index d959825fd11a94aba175934cd7739544a23958fc..e22be41875f2d772bcc1219e54f4f436
 +
      @Override
      public net.minecraft.world.entity.projectile.Snowball getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.Snowball) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowman.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowman.java
-index 4ce2373ff71c3c1b8951646e057587a3ab09e145..9041c121b9bc41152640c8e2ed983b9ec29df81a 100644
+index 4ce2373ff71c3c1b8951646e057587a3ab09e145..6f88f18fc23cb793d4394b80201e40b09a0a7f9d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowman.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSnowman.java
 @@ -19,8 +19,16 @@ public class CraftSnowman extends CraftGolem implements Snowman, com.destroystok
@@ -2659,12 +2660,12 @@ index 4ce2373ff71c3c1b8951646e057587a3ab09e145..9041c121b9bc41152640c8e2ed983b9e
 +
      @Override
      public SnowGolem getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (SnowGolem) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSpectralArrow.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSpectralArrow.java
-index 70f1f8740091d5a3d5983227ef2e6e166bb6ce7e..eed30dd92b9741718f7b9f2446ec0e45d21fead6 100644
+index 70f1f8740091d5a3d5983227ef2e6e166bb6ce7e..4886c9ba4bf952415ee4b1395adfeca8d928cdf5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSpectralArrow.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSpectralArrow.java
 @@ -9,8 +9,16 @@ public class CraftSpectralArrow extends CraftAbstractArrow implements SpectralAr
@@ -2680,12 +2681,12 @@ index 70f1f8740091d5a3d5983227ef2e6e166bb6ce7e..eed30dd92b9741718f7b9f2446ec0e45
 +
      @Override
      public net.minecraft.world.entity.projectile.SpectralArrow getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.SpectralArrow) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSpellcaster.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSpellcaster.java
-index 525827f1747631fa108be7e1b7395b47d33aa397..3dbb5f7f88979d616e185980d96cc2c377977000 100644
+index 525827f1747631fa108be7e1b7395b47d33aa397..3ec5d458a895300da462f63bae683980a741e477 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSpellcaster.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSpellcaster.java
 @@ -12,8 +12,16 @@ public class CraftSpellcaster extends CraftIllager implements Spellcaster {
@@ -2701,12 +2702,12 @@ index 525827f1747631fa108be7e1b7395b47d33aa397..3dbb5f7f88979d616e185980d96cc2c3
 +
      @Override
      public SpellcasterIllager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (SpellcasterIllager) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSpider.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSpider.java
-index b4afc37c21fc478df44fca7ec3fbc33d337dc6b7..911822f4e2e1eba6a9d3e9b781499314d7f9427f 100644
+index b4afc37c21fc478df44fca7ec3fbc33d337dc6b7..bf3236f673118539d7cfb883bcdf84de7ae5bd73 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSpider.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSpider.java
 @@ -9,8 +9,16 @@ public class CraftSpider extends CraftMonster implements Spider {
@@ -2722,12 +2723,12 @@ index b4afc37c21fc478df44fca7ec3fbc33d337dc6b7..911822f4e2e1eba6a9d3e9b781499314
 +
      @Override
      public net.minecraft.world.entity.monster.Spider getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Spider) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftSquid.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftSquid.java
-index a6e3b61c391a8b266d2b030d9ba600ac6be76952..f93b160ae82b7cae6b11d214531df4618fd79f74 100644
+index a6e3b61c391a8b266d2b030d9ba600ac6be76952..abc26a620552659fbcfbcbb90a3fd203f995c46f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftSquid.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftSquid.java
 @@ -9,8 +9,16 @@ public class CraftSquid extends CraftWaterMob implements Squid {
@@ -2743,12 +2744,12 @@ index a6e3b61c391a8b266d2b030d9ba600ac6be76952..f93b160ae82b7cae6b11d214531df461
 +
      @Override
      public net.minecraft.world.entity.animal.Squid getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Squid) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftStrider.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftStrider.java
-index 9472a6f9c9584048abf1f8d11ab6254b7c7a287d..f2daf0fc0f07d90040887b0cee8f1924d3c146bc 100644
+index 9472a6f9c9584048abf1f8d11ab6254b7c7a287d..de8f656818192f35cca228724db3d17ede40b556 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftStrider.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftStrider.java
 @@ -65,8 +65,16 @@ public class CraftStrider extends CraftAnimals implements Strider {
@@ -2764,12 +2765,12 @@ index 9472a6f9c9584048abf1f8d11ab6254b7c7a287d..f2daf0fc0f07d90040887b0cee8f1924
 +
      @Override
      public net.minecraft.world.entity.monster.Strider getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Strider) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTNTPrimed.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTNTPrimed.java
-index dac3d34677688ac560bc1be2087a08479ef71b87..b28221a616613698e6a627d461429cb1f91d738b 100644
+index dac3d34677688ac560bc1be2087a08479ef71b87..ec4ae01daa16139b4d2d42c3771eb51d00f55c0a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTNTPrimed.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTNTPrimed.java
 @@ -42,8 +42,16 @@ public class CraftTNTPrimed extends CraftEntity implements TNTPrimed {
@@ -2785,12 +2786,12 @@ index dac3d34677688ac560bc1be2087a08479ef71b87..b28221a616613698e6a627d461429cb1
 +
      @Override
      public PrimedTnt getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (PrimedTnt) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTadpole.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTadpole.java
-index d7c6a0bbc5671ea8f2488230c94df5146a1e98b9..71faf263dd5ac43ab9b89b5a152dd0d1ee93b91b 100644
+index d7c6a0bbc5671ea8f2488230c94df5146a1e98b9..ea001c3e91478cde59eb6b7663013d43554e5fb5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTadpole.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTadpole.java
 @@ -9,8 +9,16 @@ public class CraftTadpole extends CraftFish implements org.bukkit.entity.Tadpole
@@ -2806,12 +2807,12 @@ index d7c6a0bbc5671ea8f2488230c94df5146a1e98b9..71faf263dd5ac43ab9b89b5a152dd0d1
 +
      @Override
      public Tadpole getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Tadpole) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java
-index cedb8e67e208cdf954d052a4f0a100c1c07a962b..cb6bb7ce434dd72e5f23da0a257958dbffdc0547 100644
+index cedb8e67e208cdf954d052a4f0a100c1c07a962b..8bf3936ad7a42a98a14e82fcabd238712e8532c8 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTameableAnimal.java
 @@ -12,8 +12,16 @@ public class CraftTameableAnimal extends CraftAnimals implements Tameable, Creat
@@ -2827,12 +2828,12 @@ index cedb8e67e208cdf954d052a4f0a100c1c07a962b..cb6bb7ce434dd72e5f23da0a257958db
 +
      @Override
      public TamableAnimal getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (TamableAnimal) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTextDisplay.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTextDisplay.java
-index 9ef939b76d06874b856e0c850addb364146f5a00..d3975a461778d9815f68f323e616e25c24bf649c 100644
+index 9ef939b76d06874b856e0c850addb364146f5a00..7dfed8c0be93bc2083ea40def6e2a806d336094e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTextDisplay.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTextDisplay.java
 @@ -13,8 +13,16 @@ public class CraftTextDisplay extends CraftDisplay implements TextDisplay {
@@ -2848,12 +2849,12 @@ index 9ef939b76d06874b856e0c850addb364146f5a00..d3975a461778d9815f68f323e616e25c
 +
      @Override
      public net.minecraft.world.entity.Display.TextDisplay getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.Display.TextDisplay) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftThrowableProjectile.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftThrowableProjectile.java
-index bf7b111abdf42969218a3608d86a3313432bc0a0..51bfd27170e8aceb2274918d9c8ff71cbc2625a5 100644
+index bf7b111abdf42969218a3608d86a3313432bc0a0..b2b1b7ad56d0adc452b32a866fa0c6682fcd4882 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftThrowableProjectile.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftThrowableProjectile.java
 @@ -26,8 +26,16 @@ public abstract class CraftThrowableProjectile extends CraftProjectile implement
@@ -2869,12 +2870,12 @@ index bf7b111abdf42969218a3608d86a3313432bc0a0..51bfd27170e8aceb2274918d9c8ff71c
 +
      @Override
      public ThrowableItemProjectile getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ThrowableItemProjectile) this.entity;
      }
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownExpBottle.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownExpBottle.java
-index 5e7fef664c56d6087502e56a0eb4fc07d34ade9f..7538d449e24a8d680628f31b22924e7de9e8b503 100644
+index 5e7fef664c56d6087502e56a0eb4fc07d34ade9f..00d578700c09cab5b5ae99bcb27fa17048ac24b1 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownExpBottle.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownExpBottle.java
 @@ -9,8 +9,16 @@ public class CraftThrownExpBottle extends CraftThrowableProjectile implements Th
@@ -2890,12 +2891,12 @@ index 5e7fef664c56d6087502e56a0eb4fc07d34ade9f..7538d449e24a8d680628f31b22924e7d
 +
      @Override
      public ThrownExperienceBottle getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ThrownExperienceBottle) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownPotion.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownPotion.java
-index 42462fac097aeb1cfd367f8c240da63f513ec5a8..bee84fee81eb8fca431d982ea88df71b3136c182 100644
+index 65b6de9d21da6843d7c7087f0dea98d3b75f24cf..8988f2a1e3fe6a296c245e893ddb927da1d59167 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownPotion.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftThrownPotion.java
 @@ -61,8 +61,17 @@ public class CraftThrownPotion extends CraftThrowableProjectile implements Throw
@@ -2912,12 +2913,12 @@ index 42462fac097aeb1cfd367f8c240da63f513ec5a8..bee84fee81eb8fca431d982ea88df71b
 +
      @Override
      public net.minecraft.world.entity.projectile.ThrownPotion getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.ThrownPotion) this.entity;
      }
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTraderLlama.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTraderLlama.java
-index 4b3a764114c8372e1549dadeeced26dc7727f2d1..04cbe165b99d348a864da5d342225fc929b2bfd0 100644
+index 4b3a764114c8372e1549dadeeced26dc7727f2d1..b800efe68124c27f97114a69a096fca2d66e671e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTraderLlama.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTraderLlama.java
 @@ -9,8 +9,16 @@ public class CraftTraderLlama extends CraftLlama implements TraderLlama {
@@ -2933,12 +2934,12 @@ index 4b3a764114c8372e1549dadeeced26dc7727f2d1..04cbe165b99d348a864da5d342225fc9
 +
      @Override
      public net.minecraft.world.entity.animal.horse.TraderLlama getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.horse.TraderLlama) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTrident.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTrident.java
-index 4fc893378fb0568ddcffc7593d66df6bfe23f659..fe730d081e93ea6b2854b246389fde9ed8b40a94 100644
+index 4fc893378fb0568ddcffc7593d66df6bfe23f659..5ddc96b17ddbd152929b0548bfedc802bd6dd7ca 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTrident.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTrident.java
 @@ -12,8 +12,16 @@ public class CraftTrident extends CraftAbstractArrow implements Trident {
@@ -2954,12 +2955,12 @@ index 4fc893378fb0568ddcffc7593d66df6bfe23f659..fe730d081e93ea6b2854b246389fde9e
 +
      @Override
      public ThrownTrident getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (ThrownTrident) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTropicalFish.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTropicalFish.java
-index 9e53c30801c700719c78c0fd521fd615c94e02c8..201d4db7a455cde7c6feb4263a054a5cb66ea672 100644
+index 9e53c30801c700719c78c0fd521fd615c94e02c8..11884c20e73846ec95288edcb514d3ae638eb803 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTropicalFish.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTropicalFish.java
 @@ -13,8 +13,16 @@ public class CraftTropicalFish extends io.papermc.paper.entity.PaperSchoolableFi
@@ -2975,12 +2976,12 @@ index 9e53c30801c700719c78c0fd521fd615c94e02c8..201d4db7a455cde7c6feb4263a054a5c
 +
      @Override
      public net.minecraft.world.entity.animal.TropicalFish getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.TropicalFish) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftTurtle.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftTurtle.java
-index d44e6f4bb682d18c1497eee9fb2802f2bda6e840..f2d589721a335d1f92ab04ce70e7678a244314fd 100644
+index d44e6f4bb682d18c1497eee9fb2802f2bda6e840..a857258419c666a0fe38f54a6197d19c84891028 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftTurtle.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftTurtle.java
 @@ -9,8 +9,16 @@ public class CraftTurtle extends CraftAnimals implements Turtle {
@@ -2996,12 +2997,12 @@ index d44e6f4bb682d18c1497eee9fb2802f2bda6e840..f2d589721a335d1f92ab04ce70e7678a
 +
      @Override
      public net.minecraft.world.entity.animal.Turtle getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Turtle) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftVex.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftVex.java
-index e9ec3455eabc473e104b5342a615a38c1ac25a4f..2f0aac537bd71e6db8e3554ce8d615e521897e27 100644
+index e9ec3455eabc473e104b5342a615a38c1ac25a4f..3a65ae7e6ac1894855e4eafecc9c2bb87476298f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftVex.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftVex.java
 @@ -13,8 +13,16 @@ public class CraftVex extends CraftMonster implements Vex {
@@ -3017,15 +3018,15 @@ index e9ec3455eabc473e104b5342a615a38c1ac25a4f..2f0aac537bd71e6db8e3554ce8d615e5
 +
      @Override
      public net.minecraft.world.entity.monster.Vex getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Vex) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftVillager.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftVillager.java
-index 6c15d40979fd3e3d246a447c432b321fbf29ada3..771eb799b032fcf4fc33c5e445b7fa252baee72b 100644
+index bd2987fa1fb194a581567134ed980e8fc043f435..46c4a33c4cb82049aa60fc7fc47707dcbd8c733e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftVillager.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftVillager.java
-@@ -31,8 +31,16 @@ public class CraftVillager extends CraftAbstractVillager implements Villager {
+@@ -33,8 +33,16 @@ public class CraftVillager extends CraftAbstractVillager implements Villager {
          super(server, entity);
      }
  
@@ -3038,12 +3039,12 @@ index 6c15d40979fd3e3d246a447c432b321fbf29ada3..771eb799b032fcf4fc33c5e445b7fa25
 +
      @Override
      public net.minecraft.world.entity.npc.Villager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.npc.Villager) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java
-index 3aa23d9f22d5cd22231293fd7d1ca4cb79eb7cb3..f340cf90512a7097153d7fa1a2b38fe3e0f1e8d5 100644
+index 3aa23d9f22d5cd22231293fd7d1ca4cb79eb7cb3..e705d49eafcf1def6e849bfc0ded4b7269a40ffb 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java
 @@ -14,8 +14,16 @@ public class CraftVillagerZombie extends CraftZombie implements ZombieVillager {
@@ -3059,12 +3060,12 @@ index 3aa23d9f22d5cd22231293fd7d1ca4cb79eb7cb3..f340cf90512a7097153d7fa1a2b38fe3
 +
      @Override
      public net.minecraft.world.entity.monster.ZombieVillager getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.ZombieVillager) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftVindicator.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftVindicator.java
-index bcd3370bc48520ea4bb53af25b892131d6ca0b33..c89dfec6f61d4f487bd6292d509a33922127162f 100644
+index bcd3370bc48520ea4bb53af25b892131d6ca0b33..8be282b028bc30056afc8852e8f47b287b238e73 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftVindicator.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftVindicator.java
 @@ -9,8 +9,16 @@ public class CraftVindicator extends CraftIllager implements Vindicator {
@@ -3080,12 +3081,12 @@ index bcd3370bc48520ea4bb53af25b892131d6ca0b33..c89dfec6f61d4f487bd6292d509a3392
 +
      @Override
      public net.minecraft.world.entity.monster.Vindicator getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Vindicator) super.getHandle();
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWanderingTrader.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWanderingTrader.java
-index 3cceefa0d6278924a19641a49bdf16bcdacb2233..0664afee1d66c44318f12ff38ac8c8509491b9d6 100644
+index 3cceefa0d6278924a19641a49bdf16bcdacb2233..07d6b1296aeee0de3455380a8aeaedc8a9344735 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWanderingTrader.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWanderingTrader.java
 @@ -9,8 +9,16 @@ public class CraftWanderingTrader extends CraftAbstractVillager implements Wande
@@ -3101,12 +3102,12 @@ index 3cceefa0d6278924a19641a49bdf16bcdacb2233..0664afee1d66c44318f12ff38ac8c850
 +
      @Override
      public net.minecraft.world.entity.npc.WanderingTrader getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.npc.WanderingTrader) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWarden.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWarden.java
-index c284eb96a1e330078076cbe61f0f6e2ff4ed89bd..68094bea75635376665ef850ed01484a2b27f630 100644
+index c284eb96a1e330078076cbe61f0f6e2ff4ed89bd..a53dee61a4669ac9c1d051ad9f881230a186e92c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWarden.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWarden.java
 @@ -15,8 +15,16 @@ public class CraftWarden extends CraftMonster implements org.bukkit.entity.Warde
@@ -3122,12 +3123,12 @@ index c284eb96a1e330078076cbe61f0f6e2ff4ed89bd..68094bea75635376665ef850ed01484a
 +
      @Override
      public Warden getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (Warden) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWaterMob.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWaterMob.java
-index 1b347deb6eb0b39c4a23936f7cd387421f06350d..4e5d311e10736f84964c22cb01a9fafe38bc445c 100644
+index 1b347deb6eb0b39c4a23936f7cd387421f06350d..4f26f0caca8a97d7770a569a65c1addaf6e9512c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWaterMob.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWaterMob.java
 @@ -10,8 +10,16 @@ public class CraftWaterMob extends CraftCreature implements WaterMob {
@@ -3143,24 +3144,24 @@ index 1b347deb6eb0b39c4a23936f7cd387421f06350d..4e5d311e10736f84964c22cb01a9fafe
 +
      @Override
      public WaterAnimal getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (WaterAnimal) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWindCharge.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWindCharge.java
-index 46447b9651dc48181916ce1306ee5deec397be12..37d205c3186ea6fa8a6ca78812b4c310ce553992 100644
+index 46447b9651dc48181916ce1306ee5deec397be12..c26120711251a17b558a97ae0e20789d5c33b104 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWindCharge.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWindCharge.java
 @@ -10,6 +10,7 @@ public class CraftWindCharge extends CraftAbstractWindCharge implements WindChar
  
      @Override
      public net.minecraft.world.entity.projectile.windcharge.WindCharge getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.windcharge.WindCharge) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWitch.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWitch.java
-index 4b3d783cabcb2de1a67d7fbfb6f525bfb493aed1..b8d1fe35b9c0b00389b2aaca229f31a6d0de85c6 100644
+index 4b3d783cabcb2de1a67d7fbfb6f525bfb493aed1..216c97fb1d611b84322927c6eb97871dd05cf600 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWitch.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWitch.java
 @@ -15,8 +15,16 @@ public class CraftWitch extends CraftRaider implements Witch, com.destroystokyo.
@@ -3176,12 +3177,12 @@ index 4b3d783cabcb2de1a67d7fbfb6f525bfb493aed1..b8d1fe35b9c0b00389b2aaca229f31a6
 +
      @Override
      public net.minecraft.world.entity.monster.Witch getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Witch) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWither.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWither.java
-index 7a8ce6956db56061af93ba9761f5d1057a90bc49..97891857b2c942c7f6e95c94e3c00abc3da2feea 100644
+index 7881c6253c1d652c0c0d54a9a8accdf0a1ff0f3e..077b5685ccd1b5972ef92aa759ebabe5ec6d23c6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWither.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWither.java
 @@ -21,8 +21,16 @@ public class CraftWither extends CraftMonster implements Wither, com.destroystok
@@ -3197,12 +3198,12 @@ index 7a8ce6956db56061af93ba9761f5d1057a90bc49..97891857b2c942c7f6e95c94e3c00abc
 +
      @Override
      public WitherBoss getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (WitherBoss) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWitherSkull.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWitherSkull.java
-index bc978391255c9414e06ff393f2e6707d329d020a..5af2d0f7c496d49dcb66b888047836c05299ffc7 100644
+index bc978391255c9414e06ff393f2e6707d329d020a..8d436a1453c8a66422c2a735764273176a6a4545 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWitherSkull.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWitherSkull.java
 @@ -18,8 +18,16 @@ public class CraftWitherSkull extends CraftFireball implements WitherSkull {
@@ -3218,12 +3219,12 @@ index bc978391255c9414e06ff393f2e6707d329d020a..5af2d0f7c496d49dcb66b888047836c0
 +
      @Override
      public net.minecraft.world.entity.projectile.WitherSkull getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.projectile.WitherSkull) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftWolf.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftWolf.java
-index 86574da257731de7646a712ed73384955fe35aa3..0e81a82f92934ceb03dae6908b321c9b15caa15b 100644
+index 86574da257731de7646a712ed73384955fe35aa3..94b699c156884c28c017b528d07f21c041b4ceb1 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftWolf.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftWolf.java
 @@ -31,8 +31,16 @@ public class CraftWolf extends CraftTameableAnimal implements Wolf {
@@ -3239,12 +3240,12 @@ index 86574da257731de7646a712ed73384955fe35aa3..0e81a82f92934ceb03dae6908b321c9b
 +
      @Override
      public net.minecraft.world.entity.animal.Wolf getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.animal.Wolf) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftZoglin.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftZoglin.java
-index c134c4bb8c0377ceb7f8a5c40c94fd6312a9e448..e119b2d0f9b3264a6105d18c9c67b91ae3466540 100644
+index c134c4bb8c0377ceb7f8a5c40c94fd6312a9e448..d334e4a3ea075670e0aa7ea1429ffe4231eb0559 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftZoglin.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftZoglin.java
 @@ -19,8 +19,16 @@ public class CraftZoglin extends CraftMonster implements Zoglin {
@@ -3260,12 +3261,12 @@ index c134c4bb8c0377ceb7f8a5c40c94fd6312a9e448..e119b2d0f9b3264a6105d18c9c67b91a
 +
      @Override
      public net.minecraft.world.entity.monster.Zoglin getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Zoglin) this.entity;
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftZombie.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftZombie.java
-index 46336111dcf62a29390e724b1879c84c697076e9..ff6965694ffeee0e895a128351270361360c701d 100644
+index 46336111dcf62a29390e724b1879c84c697076e9..dbb43c825724c3f13171e8991d53e7d40899670d 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftZombie.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftZombie.java
 @@ -12,8 +12,16 @@ public class CraftZombie extends CraftMonster implements Zombie {
@@ -3281,7 +3282,7 @@ index 46336111dcf62a29390e724b1879c84c697076e9..ff6965694ffeee0e895a128351270361
 +
      @Override
      public net.minecraft.world.entity.monster.Zombie getHandle() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.entity, "Accessing entity state off owning region's thread"); // Folia - region threading
          return (net.minecraft.world.entity.monster.Zombie) this.entity;
      }
  
