@@ -917,10 +917,10 @@ index 8671a90e969d16c7a57ddc38fedb7cf01815f64c..085d035b5d127d14af6b8487bee5446b
      public boolean halt(final boolean sync, final long maxWaitNS) {
          this.radiusAwareGenExecutor.halt();
 diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java
-index 9fcd1b6eef82cd0bbcddab26cf5aaf880d236969..c467b2d2ef9e1e16b00fee20f6cfc757c30fb100 100644
+index 45eda96fd8a1acb87dbb69ce5495fec7e451416f..3210d4cb97301d6fa5ffe76fd7c263ab7aa0a8be 100644
 --- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java
 +++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java
-@@ -1393,7 +1393,7 @@ public final class NewChunkHolder {
+@@ -1378,7 +1378,7 @@ public final class NewChunkHolder {
          }
  
          // must be scheduled to main, we do not trust the callback to not do anything stupid
@@ -929,7 +929,7 @@ index 9fcd1b6eef82cd0bbcddab26cf5aaf880d236969..c467b2d2ef9e1e16b00fee20f6cfc757
              for (final Consumer<ChunkAccess> consumer : consumers) {
                  try {
                      consumer.accept(chunk);
-@@ -1421,7 +1421,7 @@ public final class NewChunkHolder {
+@@ -1406,7 +1406,7 @@ public final class NewChunkHolder {
          }
  
          // must be scheduled to main, we do not trust the callback to not do anything stupid
@@ -5533,10 +5533,10 @@ index 0000000000000000000000000000000000000000..29f9fed5f02530b3256e6b993e607d46
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..54539fecd96a8a4c4a15e147876f7e0985f566cd
+index 0000000000000000000000000000000000000000..4471285a4358e51da9912ed791a824527f1a2e8e
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
-@@ -0,0 +1,570 @@
+@@ -0,0 +1,564 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.scheduler.SchedulerThreadPool;
@@ -5853,9 +5853,6 @@ index 0000000000000000000000000000000000000000..54539fecd96a8a4c4a15e147876f7e09
 +                });
 +            } catch (final Throwable thr) {
 +                this.scheduler.regionFailed(this, true, thr);
-+                if (thr instanceof ThreadDeath) {
-+                    throw (ThreadDeath)thr;
-+                }
 +                // don't release region for another tick
 +                return null;
 +            } finally {
@@ -5929,9 +5926,6 @@ index 0000000000000000000000000000000000000000..54539fecd96a8a4c4a15e147876f7e09
 +                this.tickRegion(tickCount, tickStart, scheduledEnd);
 +            } catch (final Throwable thr) {
 +                this.scheduler.regionFailed(this, false, thr);
-+                if (thr instanceof ThreadDeath) {
-+                    throw (ThreadDeath)thr;
-+                }
 +                // regionFailed will schedule a shutdown, so we should avoid letting this region tick further
 +                return false;
 +            } finally {
@@ -16391,7 +16385,7 @@ index 647a4601deace52f8d855f512a73671f82b4762a..255f6e720ebe0f76954fdba03cd2aae0
              }
  
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index 2c312c0b741fb96a008881e9e01fa660a1fb63ab..0f77f1f0d5168c382c90b8bfe521eac801c9708d 100644
+index d1340691d508c21c15237ec4a4626e9219d7c4f7..d3267a783cfaeb54bbeba06964ea3009822420b5 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
 @@ -421,31 +421,32 @@ public final class ItemStack implements DataComponentHolder {
@@ -17860,7 +17854,7 @@ index 814e70f558d7a6186233da0ff86c94c95d390e09..412150d8f2c2604bc754ecbb04a10019
                          continue;
                      }
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
-index c0563260277f9f4bd9ff08993b2efb4bca9a0c60..4c2e8714c64a6fe49554a11471e37078267f1eea 100644
+index 9a5f68ef8609843bd70545294a9a634e7eb8d99f..3616d5f45309d806e1b8887ca7e9fbf0e24a5d86 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 @@ -38,7 +38,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -17885,7 +17879,7 @@ index c0563260277f9f4bd9ff08993b2efb4bca9a0c60..4c2e8714c64a6fe49554a11471e37078
      public BlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
          this.components = DataComponentMap.EMPTY;
          this.type = type;
-@@ -217,7 +223,7 @@ public abstract class BlockEntity {
+@@ -230,7 +236,7 @@ public abstract class BlockEntity {
  
      public void setChanged() {
          if (this.level != null) {
@@ -17962,7 +17956,7 @@ index 73e532dc998e5701c1a73da846da3d3a79871b81..5e4cb998554791cdfc2e32ae7115f87e
  
          if (i % 40L == 0L) {
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index 53f9d28bf3c6aafd4fdd6c12e0285500fe7350ce..09410e95ebb0fd0089c924f39914287465a453bd 100644
+index 7397a706ec58fca4f97db6cf722396680bd5bc4e..66d20e4b7f096f0755044a3946e98251385ed18c 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 @@ -49,7 +49,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
@@ -18085,7 +18079,7 @@ index 53f9d28bf3c6aafd4fdd6c12e0285500fe7350ce..09410e95ebb0fd0089c924f399142874
          }
          if (!result) {
              cooldownHopper(hopper);
-@@ -542,13 +554,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -546,13 +558,14 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
  
      public static boolean suckInItems(Level world, Hopper hopper) {
@@ -18101,7 +18095,7 @@ index 53f9d28bf3c6aafd4fdd6c12e0285500fe7350ce..09410e95ebb0fd0089c924f399142874
              int[] aint = HopperBlockEntity.getSlots(iinventory, enumdirection);
              int i = aint.length;
  
-@@ -735,9 +748,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -743,9 +756,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      stack = stack.split(to.getMaxStackSize());
                  }
                  // Spigot end
@@ -18569,7 +18563,7 @@ index 488938c32a48437721a71d294c77468f00c035b9..cead18e4f8ea278b999fa0e1aff58580
              return true;
          } else {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 5453b7051337908ac1c8201827c1b5eec9e1608b..2c39642298bf235565b92287efaf55373183c5a1 100644
+index 7c11853c5090fbc4fa5b3e73a69acf166158fdec..27e68ed3a508f16f53422c5aa1631b804c8eff9e 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -60,6 +60,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
@@ -18612,7 +18606,7 @@ index 5453b7051337908ac1c8201827c1b5eec9e1608b..2c39642298bf235565b92287efaf5537
                          iblockdata.onPlace(this.level, blockposition, iblockdata1, flag);
                      }
  
-@@ -448,7 +456,7 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+@@ -453,7 +461,7 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
      @Nullable
      public BlockEntity getBlockEntity(BlockPos pos, LevelChunk.EntityCreationType creationType) {
          // CraftBukkit start
@@ -18621,7 +18615,7 @@ index 5453b7051337908ac1c8201827c1b5eec9e1608b..2c39642298bf235565b92287efaf5537
          if (tileentity == null) {
              tileentity = (BlockEntity) this.blockEntities.get(pos);
          }
-@@ -671,13 +679,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+@@ -676,13 +684,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
  
                  org.bukkit.World world = this.level.getWorld();
                  if (world != null) {
@@ -18637,7 +18631,7 @@ index 5453b7051337908ac1c8201827c1b5eec9e1608b..2c39642298bf235565b92287efaf5537
                      }
                  }
                  server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(bukkitChunk));
-@@ -704,7 +712,7 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+@@ -709,7 +717,7 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
      @Override
      public boolean isUnsaved() {
          // Paper start - rewrite chunk system
@@ -18646,7 +18640,7 @@ index 5453b7051337908ac1c8201827c1b5eec9e1608b..2c39642298bf235565b92287efaf5537
          if (((ca.spottedleaf.moonrise.patches.chunk_system.ticks.ChunkSystemLevelChunkTicks)this.blockTicks).moonrise$isDirty(gameTime)
              || ((ca.spottedleaf.moonrise.patches.chunk_system.ticks.ChunkSystemLevelChunkTicks)this.fluidTicks).moonrise$isDirty(gameTime)) {
              return true;
-@@ -975,6 +983,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+@@ -980,6 +988,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
              this.ticker = wrapped;
          }
  
@@ -18660,7 +18654,7 @@ index 5453b7051337908ac1c8201827c1b5eec9e1608b..2c39642298bf235565b92287efaf5537
          @Override
          public void tick() {
              this.ticker.tick();
-@@ -1011,6 +1026,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+@@ -1016,6 +1031,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
              this.ticker = blockentityticker;
          }
  
@@ -19339,7 +19333,7 @@ index 7a69564572357a7acc043e35b9c113beeb738951..ea161048b68de3c8cdcba5f4cb66eb15
          LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
          if (levelChunkTicks == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index c8b82bc41f2042bb4b067f06265a3a22e51f7629..3d93d6f0c352b5540a8fc69c86a68f7584d8525c 100644
+index f6de1c6e8fd9086b7bd725f75ee2606583591d6a..1f3d3b59236f45d0e7040968c9c1017eebf362c2 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -312,7 +312,7 @@ public final class CraftServer implements Server {
@@ -20293,10 +20287,10 @@ index 992437a6e838f653f32d33b5b3f702c484640a97..5f82de67496fafdeb5364e227fec0c49
          }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 0ab53d46f0b8f3f3791dd01766738522c86932e8..db6937ce9a4c4a0a3aefc9df9909139b23b70afb 100644
+index 157a0eb8194c8fb6da4d0322b40c805918867e7f..9491e18b2721a1dc87d6691fcb23279381e45be4 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-@@ -947,7 +947,7 @@ public class CraftEventFactory {
+@@ -951,7 +951,7 @@ public class CraftEventFactory {
          return CraftEventFactory.handleBlockSpreadEvent(world, source, target, block, 2);
      }
  
@@ -20305,7 +20299,7 @@ index 0ab53d46f0b8f3f3791dd01766738522c86932e8..db6937ce9a4c4a0a3aefc9df9909139b
  
      public static boolean handleBlockSpreadEvent(LevelAccessor world, BlockPos source, BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag) {
          // Suppress during worldgen
-@@ -959,7 +959,7 @@ public class CraftEventFactory {
+@@ -963,7 +963,7 @@ public class CraftEventFactory {
          CraftBlockState state = CraftBlockStates.getBlockState(world, target, flag);
          state.setData(block);
  
@@ -20314,7 +20308,7 @@ index 0ab53d46f0b8f3f3791dd01766738522c86932e8..db6937ce9a4c4a0a3aefc9df9909139b
          Bukkit.getPluginManager().callEvent(event);
  
          if (!event.isCancelled()) {
-@@ -2196,7 +2196,7 @@ public class CraftEventFactory {
+@@ -2210,7 +2210,7 @@ public class CraftEventFactory {
          CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemStack.copyWithCount(1));
  
          org.bukkit.event.block.BlockDispenseEvent event = new org.bukkit.event.block.BlockDispenseEvent(bukkitBlock, craftItem.clone(), CraftVector.toBukkit(to));
@@ -20336,7 +20330,7 @@ index 2f4d6b56301195f8d39ed50dffe842464065bfe1..5a24902b735cbd64dd5cd5ad46b096c4
          if (!this.isAsyncScheduler && !task.isSync()) {
              this.asyncScheduler.handle(task, delay);
 diff --git a/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java b/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
-index 41c34ffdf9d95a04ed55a1e09ebc78e8cf946777..f89e08c22bc76dba5df730a83b37324e38d2956d 100644
+index 28dbe30a98a6730839949bc9a6a90b78619ff84d..c9e31dcdde9d96edfc12e694065f1f4643bb9db3 100644
 --- a/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
 +++ b/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
 @@ -369,6 +369,12 @@ public final class CraftMagicNumbers implements UnsafeValues {
