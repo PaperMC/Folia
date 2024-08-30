@@ -2832,10 +2832,10 @@ index 0000000000000000000000000000000000000000..a1e1782d87403ca8934d37361be7ba66
 +}
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5dc4c8a5b896f519be5414d4a53a71144c225324
+index 0000000000000000000000000000000000000000..cd89a11ff94dfbb9c9e259b85f931bd0d160c06e
 --- /dev/null
 +++ b/src/main/java/io/papermc/paper/threadedregions/RegionizedWorldData.java
-@@ -0,0 +1,772 @@
+@@ -0,0 +1,751 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet;
@@ -2924,9 +2924,6 @@ index 0000000000000000000000000000000000000000..5dc4c8a5b896f519be5414d4a53a7114
 +            }
 +            for (final Entity entity : from.loadedEntities) {
 +                into.loadedEntities.add(entity);
-+            }
-+            for (final Entity entity : from.toProcessTrackingUnloading) {
-+                into.toProcessTrackingUnloading.add(entity);
 +            }
 +            for (final Iterator<Entity> iterator = from.entityTickList.unsafeIterator(); iterator.hasNext();) {
 +                into.entityTickList.add(iterator.next());
@@ -3028,11 +3025,6 @@ index 0000000000000000000000000000000000000000..5dc4c8a5b896f519be5414d4a53a7114
 +                // Note: loadedEntities is a subset of allEntities
 +                if (from.loadedEntities.contains(entity)) {
 +                    into.loadedEntities.add(entity);
-+                }
-+                // Note: toProcessTrackingUnloading is not a subset of allEntities, but for the cases where it is not
-+                // do not matter as the tracker removal is handled
-+                if (from.toProcessTrackingUnloading.contains(entity)) {
-+                    into.toProcessTrackingUnloading.add(entity);
 +                }
 +                // Note: navigatingMobs is a subset of allEntities
 +                if (entity instanceof Mob mob && from.navigatingMobs.contains(mob)) {
@@ -3178,7 +3170,6 @@ index 0000000000000000000000000000000000000000..5dc4c8a5b896f519be5414d4a53a7114
 +    private final NearbyPlayers nearbyPlayers;
 +    private final ReferenceList<Entity> allEntities = new ReferenceList<>(EMPTY_ENTITY_ARRAY);
 +    private final ReferenceList<Entity> loadedEntities = new ReferenceList<>(EMPTY_ENTITY_ARRAY);
-+    private final ReferenceList<Entity> toProcessTrackingUnloading = new ReferenceList<>(EMPTY_ENTITY_ARRAY);
 +    private final IteratorSafeOrderedReferenceSet<Entity> entityTickList = new IteratorSafeOrderedReferenceSet<>();
 +    private final IteratorSafeOrderedReferenceSet<Mob> navigatingMobs = new IteratorSafeOrderedReferenceSet<>();
 +    public final ReferenceList<Entity> trackerEntities = new ReferenceList<>(EMPTY_ENTITY_ARRAY); // Moonrise - entity tracker
@@ -3386,9 +3377,7 @@ index 0000000000000000000000000000000000000000..5dc4c8a5b896f519be5414d4a53a7114
 +    }
 +
 +    public void addLoadedEntity(final Entity entity) {
-+        if (this.loadedEntities.add(entity)) {
-+            this.toProcessTrackingUnloading.remove(entity);
-+        }
++        this.loadedEntities.add(entity);
 +    }
 +
 +    public boolean hasLoadedEntity(final Entity entity) {
@@ -3396,21 +3385,11 @@ index 0000000000000000000000000000000000000000..5dc4c8a5b896f519be5414d4a53a7114
 +    }
 +
 +    public void removeLoadedEntity(final Entity entity) {
-+        if (this.loadedEntities.remove(entity)) {
-+            this.toProcessTrackingUnloading.add(entity);
-+        }
++        this.loadedEntities.remove(entity);
 +    }
 +
 +    public Iterable<Entity> getLoadedEntities() {
 +        return this.loadedEntities;
-+    }
-+
-+    public Entity[] takeTrackingUnloads() {
-+        final Entity[] ret = Arrays.copyOf(this.toProcessTrackingUnloading.getRawData(), this.toProcessTrackingUnloading.size(), Entity[].class);
-+
-+        this.toProcessTrackingUnloading.clear();
-+
-+        return ret;
 +    }
 +
 +    public void addEntityTickingEntity(final Entity entity) {
@@ -10327,7 +10306,7 @@ index dd56c8e041116ef3602a9f89c998c8208ab89b51..301d7fa29fce2997a5881b3852896eff
          if (waitableArray[0] != null) {
              //noinspection unchecked
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 1e0a6e5a3c907ab55ee6f2780a7d43bd455f2b7b..7f161864ee6a43de8d37c0e5c9cba9918f2fed89 100644
+index 1e0a6e5a3c907ab55ee6f2780a7d43bd455f2b7b..dff1f17a4c164e82ed4f5d9e9f48ee62c671e589 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -138,8 +138,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
@@ -10478,7 +10457,7 @@ index 1e0a6e5a3c907ab55ee6f2780a7d43bd455f2b7b..7f161864ee6a43de8d37c0e5c9cba991
 -                            if (playerchunkmap_entitytracker1.entity != entityplayer) {
 -                                playerchunkmap_entitytracker1.updatePlayer(entityplayer);
 +                        // Folia start - region threading
-+                        for (Entity possible : this.level.getCurrentWorldData().getLoadedEntities()) {
++                        for (Entity possible : this.level.getCurrentWorldData().trackerEntities) {
 +                            if (possible.moonrise$getTrackedEntity() != null) {
 +                                possible.moonrise$getTrackedEntity().updatePlayer(entityplayer);
                              }
