@@ -1,0 +1,199 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Fri, 30 Aug 2024 18:34:32 -0700
+Subject: [PATCH] Add watchdog thread
+
+When regions take too long, having the server print the stacktrace
+of the ticking region should help debug the cause.
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/FoliaWatchdogThread.java b/src/main/java/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..258d82ab2c78482e1561343e8e1f81fc33f1895e
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
+@@ -0,0 +1,104 @@
++package io.papermc.paper.threadedregions;
++
++import com.mojang.logging.LogUtils;
++import io.papermc.paper.threadedregions.TickRegionScheduler.RegionScheduleHandle;
++import net.minecraft.server.MinecraftServer;
++import org.bukkit.Bukkit;
++import org.slf4j.Logger;
++import org.spigotmc.WatchdogThread;
++import java.lang.management.ManagementFactory;
++import java.util.ArrayList;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.concurrent.TimeUnit;
++
++public final class FoliaWatchdogThread extends Thread {
++
++    private static final Logger LOGGER = LogUtils.getLogger();
++
++    public static final class RunningTick {
++
++        public final long start;
++        public final RegionScheduleHandle handle;
++        public final Thread thread;
++
++        private long lastPrint;
++
++        public RunningTick(final long start, final RegionScheduleHandle handle, final Thread thread) {
++            this.start = start;
++            this.handle = handle;
++            this.thread = thread;
++            this.lastPrint = start;
++        }
++    }
++
++    private final LinkedHashSet<RunningTick> ticks = new LinkedHashSet<>();
++
++    public FoliaWatchdogThread() {
++        super("Folia Watchdog Thread");
++        this.setDaemon(true);
++        this.setUncaughtExceptionHandler((final Thread thread, final Throwable throwable) -> {
++            LOGGER.error("Uncaught exception in thread '" + thread.getName() + "'", throwable);
++        });
++    }
++
++    @Override
++    public void run() {
++        for (;;) {
++            try {
++                Thread.sleep(1000L);
++            } catch (final InterruptedException ex) {}
++
++            if (MinecraftServer.getServer().hasStopped()) {
++                continue;
++            }
++
++            final List<RunningTick> ticks;
++            synchronized (this.ticks) {
++                if (this.ticks.isEmpty()) {
++                    continue;
++                }
++                ticks = new ArrayList<>(this.ticks);
++            }
++
++            final long now = System.nanoTime();
++
++            for (final RunningTick tick : ticks) {
++                final long elapsed = now - tick.lastPrint;
++                if (elapsed <= TimeUnit.SECONDS.toNanos(5L)) {
++                    continue;
++                }
++                tick.lastPrint = now;
++
++                final double totalElapsedS = (double)(now - tick.start) / 1.0E9;
++
++                if (tick.handle instanceof TickRegions.ConcreteRegionTickHandle region) {
++                    LOGGER.error(
++                        "Tick region located in world '" + region.region.world.getWorld().getName() + "' around chunk '"
++                            + region.region.region.getCenterChunk() + "' has not responded in " + totalElapsedS + "s:"
++                    );
++                } else {
++                    // assume global
++                    LOGGER.error("Global region has not responded in " + totalElapsedS + "s:");
++                }
++
++                WatchdogThread.dumpThread(
++                    ManagementFactory.getThreadMXBean().getThreadInfo(tick.thread.threadId(), Integer.MAX_VALUE),
++                    Bukkit.getServer().getLogger()
++                );
++            }
++        }
++    }
++
++    public void addTick(final RunningTick tick) {
++        synchronized (this.ticks) {
++            this.ticks.add(tick);
++        }
++    }
++
++    public void removeTick(final RunningTick tick) {
++        synchronized (this.ticks) {
++            this.ticks.remove(tick);
++        }
++    }
++}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
+index a18da3f3f245031f0547efe9b52a1f2a219ef04a..056fb1ca7b07d5e713dcbd951830b14fc9025f4c 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/TickRegionScheduler.java
+@@ -34,6 +34,13 @@ public final class TickRegionScheduler {
+     public static final int TICK_RATE = 20;
+     public static final long TIME_BETWEEN_TICKS = 1_000_000_000L / TICK_RATE; // ns
+ 
++    // Folia start - watchdog
++    public static final FoliaWatchdogThread WATCHDOG_THREAD = new FoliaWatchdogThread();
++    static {
++        WATCHDOG_THREAD.start();
++    }
++    // Folia end - watchdog
++
+     private final SchedulerThreadPool scheduler;
+ 
+     public TickRegionScheduler(final int threads) {
+@@ -327,6 +334,8 @@ public final class TickRegionScheduler {
+             }
+ 
+             final boolean ret;
++            final FoliaWatchdogThread.RunningTick runningTick = new FoliaWatchdogThread.RunningTick(tickStart, this, Thread.currentThread()); // Folia - watchdog
++            WATCHDOG_THREAD.addTick(runningTick); // Folia - watchdog
+             try {
+                 ret = this.runRegionTasks(() -> {
+                     return !RegionScheduleHandle.this.cancelled.get() && canContinue.getAsBoolean();
+@@ -336,6 +345,7 @@ public final class TickRegionScheduler {
+                 // don't release region for another tick
+                 return null;
+             } finally {
++                WATCHDOG_THREAD.removeTick(runningTick); // Folia - watchdog
+                 final long tickEnd = System.nanoTime();
+                 final long cpuEnd = MEASURE_CPU_TIME ? THREAD_MX_BEAN.getCurrentThreadCpuTime() : 0L;
+ 
+@@ -401,6 +411,8 @@ public final class TickRegionScheduler {
+                 this.currentTickingThread = Thread.currentThread();
+             }
+ 
++            final FoliaWatchdogThread.RunningTick runningTick = new FoliaWatchdogThread.RunningTick(tickStart, this, Thread.currentThread()); // Folia - region threading
++            WATCHDOG_THREAD.addTick(runningTick); // Folia - region threading
+             try {
+                 // next start isn't updated until the end of this tick
+                 this.tickRegion(tickCount, tickStart, scheduledEnd);
+@@ -409,6 +421,7 @@ public final class TickRegionScheduler {
+                 // regionFailed will schedule a shutdown, so we should avoid letting this region tick further
+                 return false;
+             } finally {
++                WATCHDOG_THREAD.removeTick(runningTick); // Folia - region threading
+                 final long tickEnd = System.nanoTime();
+                 final long cpuEnd = MEASURE_CPU_TIME ? THREAD_MX_BEAN.getCurrentThreadCpuTime() : 0L;
+ 
+diff --git a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
+index b1c07e582dbf0a203cf734fdbcd8387a422af3a6..988fe74578065c9464f5639e5cc6af79619edef5 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
++++ b/src/main/java/io/papermc/paper/threadedregions/TickRegions.java
+@@ -330,9 +330,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         }
+     }
+ 
+-    private static final class ConcreteRegionTickHandle extends TickRegionScheduler.RegionScheduleHandle {
++    public static final class ConcreteRegionTickHandle extends TickRegionScheduler.RegionScheduleHandle { // Folia - watchdog
+ 
+-        private final TickRegionData region;
++        public final TickRegionData region; // Folia - watchdog
+ 
+         private ConcreteRegionTickHandle(final TickRegionData region, final long start) {
+             super(region, start);
+diff --git a/src/main/java/org/spigotmc/WatchdogThread.java b/src/main/java/org/spigotmc/WatchdogThread.java
+index f7a4fee9bb25ff256dc2e5ea26bfbceca6a49167..64e0acf28fc241b16a7bc8d3807062fd7758ed7f 100644
+--- a/src/main/java/org/spigotmc/WatchdogThread.java
++++ b/src/main/java/org/spigotmc/WatchdogThread.java
+@@ -245,7 +245,7 @@ public class WatchdogThread extends ca.spottedleaf.moonrise.common.util.TickThre
+         }
+     }
+ 
+-    private static void dumpThread(ThreadInfo thread, Logger log)
++    public static void dumpThread(ThreadInfo thread, Logger log) // Folia - watchdog
+     {
+         log.log( Level.SEVERE, "------------------------------" );
+         //
