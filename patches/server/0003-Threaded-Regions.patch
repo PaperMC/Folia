@@ -1179,6 +1179,25 @@ index 3e82ea07ca4194844c5528446e2c4a46ff4acee5..adfd4c16809f6ddd9cc73e4bd845d7ae
  
          // Paper start - Folia schedulers
          try {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+index c03608fec96b51e1867f43d8f42e5aefb1520e46..127d96280cad2d4e5db574a089d67ad68977b34e 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+@@ -50,6 +50,14 @@ public final class EntityScheduler {
+         this.entity = Validate.notNull(entity);
+     }
+ 
++    // Folia start - region threading
++    public boolean isRetired() {
++        synchronized (this.stateLock) {
++            return this.tickCount == RETIRED_TICK_COUNT;
++        }
++    }
++    // Folia end - region threading
++
+     /**
+      * Retires the scheduler, preventing new tasks from being scheduled and invoking the retired callback
+      * on all currently scheduled tasks.
 diff --git a/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java b/src/main/java/io/papermc/paper/threadedregions/RegionShutdownThread.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d1cd3c1428de206d1d0b58e507d5d5a72f846acc
@@ -15972,10 +15991,35 @@ index 8575941fd238750c5d56843989a48bcbde2d8a88..185501a2daea0351281c578bff79dc50
          HitResult movingobjectposition = ProjectileUtil.getHitResultOnMoveVector(this, this::canHitEntity);
  
 diff --git a/src/main/java/net/minecraft/world/entity/projectile/Projectile.java b/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
-index de64de5d1328d3e0826c9990eb7c7eca5088cb9c..fa3ec592bdb6325eebd5a7d59810add67c4a9968 100644
+index de64de5d1328d3e0826c9990eb7c7eca5088cb9c..420531643a486da9d99f011a93461e54d0d9032b 100644
 --- a/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
 +++ b/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
-@@ -77,9 +77,20 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+@@ -38,7 +38,7 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+     @Nullable
+     public UUID ownerUUID;
+     @Nullable
+-    public Entity cachedOwner;
++    public org.bukkit.craftbukkit.entity.CraftEntity cachedOwner; // Folia - region threading - replace with CraftEntity
+     public boolean leftOwner;
+     public boolean hasBeenShot;
+     @Nullable
+@@ -55,7 +55,7 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+     public void setOwner(@Nullable Entity entity) {
+         if (entity != null) {
+             this.ownerUUID = entity.getUUID();
+-            this.cachedOwner = entity;
++            this.cachedOwner = entity.getBukkitEntity(); // Folia - region threading
+         }
+         // Paper start - Refresh ProjectileSource for projectiles
+         else {
+@@ -71,18 +71,29 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+         if (fillCache) {
+             this.getOwner();
+         }
+-        if (this.cachedOwner != null && !this.cachedOwner.isRemoved() && this.projectileSource == null && this.cachedOwner.getBukkitEntity() instanceof ProjectileSource projSource) {
++        if (this.cachedOwner != null && !this.cachedOwner.getHandleRaw().isRemoved() && this.projectileSource == null && this.cachedOwner instanceof ProjectileSource projSource) { // Folia - region threading
+             this.projectileSource = projSource;
+         }
      }
      // Paper end - Refresh ProjectileSource for projectiles
  
@@ -15985,18 +16029,40 @@ index de64de5d1328d3e0826c9990eb7c7eca5088cb9c..fa3ec592bdb6325eebd5a7d59810add6
      @Nullable
      @Override
      public Entity getOwner() {
+-        if (this.cachedOwner != null && !this.cachedOwner.isRemoved()) {
 +        Entity ret = this.getOwnerRaw();
-+        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(ret) ? ret : null;
++        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(ret) && (ret == null || !ret.isRemoved()) ? ret : null;
 +    }
 +    // Folia end - region threading
 +
 +    @Nullable
 +    public Entity getOwnerRaw() { // Folia - region threading
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot update owner state asynchronously"); // Folia - region threading
-         if (this.cachedOwner != null && !this.cachedOwner.isRemoved()) {
++        if (this.cachedOwner != null && !this.cachedOwner.isPurged()) { // Folia - region threading
              this.refreshProjectileSource(false); // Paper - Refresh ProjectileSource for projectiles
-             return this.cachedOwner;
-@@ -367,7 +378,7 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+-            return this.cachedOwner;
++            return this.cachedOwner.getHandleRaw(); // Folia - region threading
+         } else {
+             if (this.ownerUUID != null) {
+                 Level world = this.level();
+@@ -90,9 +101,14 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+                 if (world instanceof ServerLevel) {
+                     ServerLevel worldserver = (ServerLevel) world;
+ 
+-                    this.cachedOwner = worldserver.getEntity(this.ownerUUID);
++                    // Folia start - region threading
++                    Entity ret = worldserver.getEntity(this.ownerUUID);
++                    if (ret != null) {
++                        this.cachedOwner = ret.getBukkitEntity();
++                    }
++                    // Folia end - region threading
+                     this.refreshProjectileSource(false); // Paper - Refresh ProjectileSource for projectiles
+-                    return this.cachedOwner;
++                    return ret; // Folia - region threading
+                 }
+             }
+ 
+@@ -367,7 +383,7 @@ public abstract class Projectile extends Entity implements TraceableEntity {
      public boolean mayInteract(Level world, BlockPos pos) {
          Entity entity = this.getOwner();
  
@@ -20101,10 +20167,22 @@ index 3e93a6c489972ff2b4ecff3d83cc72b2d5c970f8..66dc7e20544c7000f4824b02cc3a31bc
              List<String> offers = waitable.get();
              if (offers == null) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index cd789c235acf740ec29c30b180e7fbe1a140caa9..fe6f31d7db873de64c0cfc5c8248d3e5e96f1500 100644
+index cd789c235acf740ec29c30b180e7fbe1a140caa9..f05e9a36cbb8476c355fc79da2c670c8a362cdb0 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-@@ -236,6 +236,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -79,6 +79,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+         return this.apiScheduler;
+     };
+     // Paper end - Folia schedulers
++    // Folia start - region threading
++    public boolean isPurged() {
++        return this.taskScheduler.isRetired();
++    }
++    // Folia end - region threading
+ 
+     public CraftEntity(final CraftServer server, final Entity entity) {
+         this.server = server;
+@@ -236,6 +241,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
  
      @Override
      public boolean teleport(Location location, TeleportCause cause, io.papermc.paper.entity.TeleportFlag... flags) {
@@ -20116,7 +20194,7 @@ index cd789c235acf740ec29c30b180e7fbe1a140caa9..fe6f31d7db873de64c0cfc5c8248d3e5
          // Paper end
          Preconditions.checkArgument(location != null, "location cannot be null");
          location.checkFinite();
-@@ -702,7 +707,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -702,7 +712,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          ImmutableSet.Builder<Player> players = ImmutableSet.builder();
  
          ServerLevel world = ((CraftWorld) this.getWorld()).getHandle();
@@ -20125,7 +20203,7 @@ index cd789c235acf740ec29c30b180e7fbe1a140caa9..fe6f31d7db873de64c0cfc5c8248d3e5
  
          if (entityTracker != null) {
              for (ServerPlayerConnection connection : entityTracker.seenBy) {
-@@ -1006,7 +1011,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1006,7 +1016,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          }
  
          ServerLevel world = ((CraftWorld) this.getWorld()).getHandle();
@@ -20134,7 +20212,7 @@ index cd789c235acf740ec29c30b180e7fbe1a140caa9..fe6f31d7db873de64c0cfc5c8248d3e5
  
          if (entityTracker == null) {
              return;
-@@ -1025,7 +1030,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1025,7 +1035,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          }
  
          ServerLevel world = ((CraftWorld) this.getWorld()).getHandle();
@@ -20143,7 +20221,7 @@ index cd789c235acf740ec29c30b180e7fbe1a140caa9..fe6f31d7db873de64c0cfc5c8248d3e5
  
          if (entityTracker == null) {
              return;
-@@ -1059,29 +1064,43 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1059,29 +1069,43 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
          location.checkFinite();
          Location locationClone = location.clone(); // clone so we don't need to worry about mutations after this call.
  
@@ -20206,7 +20284,7 @@ index cd789c235acf740ec29c30b180e7fbe1a140caa9..fe6f31d7db873de64c0cfc5c8248d3e5
      }
      // Paper end - more teleport API / async chunk API
  
-@@ -1194,8 +1213,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+@@ -1194,8 +1218,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
      // Paper start - tracked players API
      @Override
      public Set<org.bukkit.entity.Player> getTrackedPlayers() {
