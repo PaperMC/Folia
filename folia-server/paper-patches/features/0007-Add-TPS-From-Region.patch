@@ -5,10 +5,10 @@ Subject: [PATCH] Add TPS From Region
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 9b182315682b5795b2cb6438ea440591ddddc5a3..d2db175fd7bfc5ff38e3945c8744858265212b1d 100644
+index 53c8009cd4886ddcf1f2ea72b6e51b308c72719c..8a2b8fc033f08e5bc6aaa94ef263b88156345eae 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -3253,4 +3253,69 @@ public final class CraftServer implements Server {
+@@ -3253,4 +3253,132 @@ public final class CraftServer implements Server {
      public void allowPausing(final Plugin plugin, final boolean value) {
          this.console.addPluginAllowingSleep(plugin.getName(), value);
      }
@@ -73,6 +73,69 @@ index 9b182315682b5795b2cb6438ea440591ddddc5a3..d2db175fd7bfc5ff38e3945c87448582
 +                    regionScheduleHandle.getTickReport1m(currTime).tpsData().segmentAll().average(),
 +                    regionScheduleHandle.getTickReport5m(currTime).tpsData().segmentAll().average(),
 +                    regionScheduleHandle.getTickReport15m(currTime).tpsData().segmentAll().average(),
++            };
++        }
++    }
++
++    /**
++     * Gets the average tick time from the region which owns the specified location, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param location The location for which to get the TPS
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    @Override
++    public double[] getRegionAverageTickTimes(Location location) {
++        Preconditions.checkArgument(location != null, "Location cannot be null");
++
++        return this.getRegionAverageTickTimes(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
++    }
++
++    /**
++     * Gets the average tick time from the region which owns the specified chunk, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param chunk - The specified chunk
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    @Override
++    public double[] getRegionAverageTickTimes(org.bukkit.Chunk chunk) {
++        Preconditions.checkArgument(chunk != null, "Chunk cannot be null");
++
++        return this.getRegionAverageTickTimes(chunk.getWorld(), chunk.getX(), chunk.getZ());
++    }
++
++    /**
++     * Gets the average tick time from the region which owns the specified chunk, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param world - World containing the chunk
++     * @param chunkX - X-coordinate of the chunk
++     * @param chunkZ - Z-coordinate of the chunk
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    @Override
++    public double[] getRegionAverageTickTimes(World world, int chunkX, int chunkZ) {
++        Preconditions.checkArgument(world != null, "World cannot be null");
++
++        return getAverageTickTimesFromRegion(((CraftWorld)world).getHandle(), chunkX, chunkZ);
++    }
++
++    private static double[] getAverageTickTimesFromRegion(ServerLevel world, int chunkX, int chunkZ) {
++        io.papermc.paper.threadedregions.ThreadedRegionizer.ThreadedRegion<io.papermc.paper.threadedregions.TickRegions.TickRegionData, io.papermc.paper.threadedregions.TickRegions.TickRegionSectionData>
++                region = world.regioniser.getRegionAtSynchronised(chunkX, chunkZ);
++        if (region == null) {
++            return null;
++        } else {
++            io.papermc.paper.threadedregions.TickRegions.TickRegionData regionData = region.getData();
++            final long currTime = System.nanoTime();
++            final io.papermc.paper.threadedregions.TickRegionScheduler.RegionScheduleHandle regionScheduleHandle = regionData.getRegionSchedulingHandle();
++            return new double[] {
++                    regionScheduleHandle.getTickReport5s(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++                    regionScheduleHandle.getTickReport15s(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++                    regionScheduleHandle.getTickReport1m(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++                    regionScheduleHandle.getTickReport5m(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++                    regionScheduleHandle.getTickReport15m(currTime).timePerTickData().segmentAll().average() / 1.0E6
 +            };
 +        }
 +    }

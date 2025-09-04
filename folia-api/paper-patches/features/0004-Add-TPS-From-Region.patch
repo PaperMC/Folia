@@ -5,10 +5,10 @@ Subject: [PATCH] Add TPS From Region
 
 
 diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
-index 3bde4ad79ade5aae18e9073307f637717e8dd9e3..85b778980e762835ac278528087e91b2e3effb43 100644
+index 3bde4ad79ade5aae18e9073307f637717e8dd9e3..eb03ac7479bd4bb7fbb2204d35e6846d41fd5c21 100644
 --- a/src/main/java/org/bukkit/Bukkit.java
 +++ b/src/main/java/org/bukkit/Bukkit.java
-@@ -3000,6 +3000,42 @@ public final class Bukkit {
+@@ -3000,6 +3000,77 @@ public final class Bukkit {
          return server.isGlobalTickThread();
      }
      // Paper end - Folia region threading API
@@ -47,15 +47,50 @@ index 3bde4ad79ade5aae18e9073307f637717e8dd9e3..85b778980e762835ac278528087e91b2
 +    public static double @Nullable [] getRegionTPS(@NotNull World world, int chunkX, int chunkZ) {
 +        return server.getRegionTPS(world, chunkX, chunkZ);
 +    }
++ 
++    /**
++     * Gets the average tick time from the region which owns the specified location, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param location The location for which to get the TPS
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    public static double @Nullable [] getRegionAverageTickTimes(@NotNull Location location) {
++        return server.getRegionAverageTickTimes(location);
++    }
++
++    /**
++     * Gets the average tick time from the region which owns the specified chunk, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param chunk - The specified chunk
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    public static double @Nullable [] getRegionAverageTickTimes(@NotNull Chunk chunk) {
++        return server.getRegionAverageTickTimes(chunk);
++    }
++
++    /**
++     * Gets the average tick time from the region which owns the specified chunk, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param world - World containing the chunk
++     * @param chunkX - X-coordinate of the chunk
++     * @param chunkZ - Z-coordinate of the chunk
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    public static double @Nullable [] getRegionAverageTickTimes(@NotNull World world, int chunkX, int chunkZ) {
++        return server.getRegionAverageTickTimes(world, chunkX, chunkZ);
++    }
 +    // Folia end - region TPS API
  
      /**
       * @deprecated All methods on this class have been deprecated, see the individual methods for replacements.
 diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
-index 9bab00ab10c78908090c8a1a12d4c84e9324b08b..a0540d7de5c2536aed5231f9e67b73345817921d 100644
+index 9bab00ab10c78908090c8a1a12d4c84e9324b08b..75d66aa4c44ed87fbc5a771768007ddf017c8d8d 100644
 --- a/src/main/java/org/bukkit/Server.java
 +++ b/src/main/java/org/bukkit/Server.java
-@@ -2723,4 +2723,34 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+@@ -2723,4 +2723,63 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
       */
      void allowPausing(@NotNull org.bukkit.plugin.Plugin plugin, boolean value);
      // Paper end - API to check if the server is sleeping
@@ -88,5 +123,34 @@ index 9bab00ab10c78908090c8a1a12d4c84e9324b08b..a0540d7de5c2536aed5231f9e67b7334
 +     * @return TPS (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
 +     */
 +    double @Nullable [] getRegionTPS(@NotNull World world, int chunkX, int chunkZ);
++
++    /**
++     * Gets the average tick time from the region which owns the specified location, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param location The location for which to get the TPS
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    double @Nullable [] getRegionAverageTickTimes(@NotNull Location location);
++
++    /**
++     * Gets the average tick time from the region which owns the specified chunk, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param chunk - The specified chunk
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    double @Nullable [] getRegionAverageTickTimes(@NotNull Chunk chunk);
++
++    /**
++     * Gets the average tick time from the region which owns the specified chunk, or {@code null} if no region owns
++     * the specified location.
++     *
++     * @param world - World containing the chunk
++     * @param chunkX - X-coordinate of the chunk
++     * @param chunkZ - Z-coordinate of the chunk
++     * @return Average tick time (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
++     */
++    double @Nullable [] getRegionAverageTickTimes(@NotNull World world, int chunkX, int chunkZ);
 +    // Folia end - region TPS API
  }
