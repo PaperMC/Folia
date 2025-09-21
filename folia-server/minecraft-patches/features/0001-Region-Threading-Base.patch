@@ -3732,7 +3732,7 @@ index 0000000000000000000000000000000000000000..820b1c4dc1b19ee8602333295f203436
 \ No newline at end of file
 diff --git a/io/papermc/paper/threadedregions/TeleportUtils.java b/io/papermc/paper/threadedregions/TeleportUtils.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2a64a5b2cf049661fe3f5a22ddfa39979624f5ec
+index 0000000000000000000000000000000000000000..8f7c514693e0fe360b0a5a1ca93c1a9f161c8826
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/TeleportUtils.java
 @@ -0,0 +1,82 @@
@@ -3779,7 +3779,7 @@ index 0000000000000000000000000000000000000000..2a64a5b2cf049661fe3f5a22ddfa3997
 +                            return;
 +                        }
 +                        (useFromRootVehicle ? realFrom.getRootVehicle() : realFrom).teleportAsync(
-+                            ((CraftWorld)loc.getWorld()).getHandle(), pos, null, null, null,
++                            ((CraftWorld)loc.getWorld()).getHandle(), pos, yaw, pitch, null,
 +                            cause, teleportFlags, onComplete
 +                        );
 +                    },
@@ -10019,7 +10019,7 @@ index 3d3d766b376891bdfb2d47a26284f805d0b01b92..2289f7383d85de023e062fe5c5ae37e9
                  } else {
                      return entity;
 diff --git a/net/minecraft/server/commands/TeleportCommand.java b/net/minecraft/server/commands/TeleportCommand.java
-index 6d8ac5f80d5267a2159a464ec331e9b3c65313e2..178a67b24095af02e7f75e8d80abdfc7b462639a 100644
+index 6d8ac5f80d5267a2159a464ec331e9b3c65313e2..6fa4b9920fc470c9d4b9d22f103a543fae6ae13b 100644
 --- a/net/minecraft/server/commands/TeleportCommand.java
 +++ b/net/minecraft/server/commands/TeleportCommand.java
 @@ -154,18 +154,7 @@ public class TeleportCommand {
@@ -10042,16 +10042,16 @@ index 6d8ac5f80d5267a2159a464ec331e9b3c65313e2..178a67b24095af02e7f75e8d80abdfc7
          }
  
          if (targets.size() == 1) {
-@@ -290,6 +279,24 @@ public class TeleportCommand {
-             float f1 = relatives.contains(Relative.X_ROT) ? xRot - target.getXRot() : xRot;
-             float f2 = Mth.wrapDegrees(f);
-             float f3 = Mth.wrapDegrees(f1);
+@@ -283,6 +272,24 @@ public class TeleportCommand {
+         if (!Level.isInSpawnableBounds(blockPos)) {
+             throw INVALID_POSITION.create();
+         } else {
 +            // Folia start - region threading
 +            if (true) {
 +                ServerLevel worldFinal = level;
 +                Vec3 posFinal = new Vec3(x, y, z);
-+                Float yawFinal = Float.valueOf(f);
-+                Float pitchFinal = Float.valueOf(f1);
++                Float yawFinal = Float.valueOf(yRot);
++                Float pitchFinal = Float.valueOf(xRot);
 +                target.getBukkitEntity().taskScheduler.schedule((Entity nmsEntity) -> {
 +                    nmsEntity.unRide();
 +                    nmsEntity.teleportAsync(
@@ -10064,9 +10064,9 @@ index 6d8ac5f80d5267a2159a464ec331e9b3c65313e2..178a67b24095af02e7f75e8d80abdfc7
 +                return;
 +            }
 +            // Folia end - region threading
-             // CraftBukkit start - Teleport event
-             boolean result;
-             if (target instanceof final net.minecraft.server.level.ServerPlayer player) {
+             double d = relatives.contains(Relative.X) ? x - target.getX() : x;
+             double d1 = relatives.contains(Relative.Y) ? y - target.getY() : y;
+             double d2 = relatives.contains(Relative.Z) ? z - target.getZ() : z;
 diff --git a/net/minecraft/server/commands/TimeCommand.java b/net/minecraft/server/commands/TimeCommand.java
 index ba4dffb47b01e83748f7c4cd396f6d959b658d51..b11b1ad2b67340c2d07bf01531b8d459526f572b 100644
 --- a/net/minecraft/server/commands/TimeCommand.java
