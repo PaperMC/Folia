@@ -46,7 +46,7 @@ just take it as a starting point.
 The total number of cores on the machine available should be 
 taken into account. Then, allocate threads for: 
 - netty IO :~4 per 200-300 players
-- chunk system io threads: ~3 per 200-300 players
+- chunk system I/O threads: ~3 per 200-300 players
 - chunk system workers if pre-generated, ~2 per 200-300 players
 - There is no best guess for chunk system workers if not pre-generated, as
   on the test server we ran we gave 16 threads but chunk generation was still
@@ -57,7 +57,7 @@ taken into account. Then, allocate threads for:
   the application is paused by GC and as such should not be taken into account.
 
 After all of that allocation, the remaining cores on the system until 80%
-allocation (total threads allocated < 80% of cpus available) can be
+allocation (total threads allocated < 80% of CPUs available) can be
 allocated to tickthreads (under global config, threaded-regions.threads). 
 
 The reason you should not allocate more than 80% of the cores is due to the
