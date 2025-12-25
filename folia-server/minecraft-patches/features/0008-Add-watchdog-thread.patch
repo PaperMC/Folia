@@ -117,41 +117,40 @@ index 0000000000000000000000000000000000000000..e9ca1a15049b0211d10401cb78e953b9
 +    }
 +}
 diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
-index e392457ccc06d3c6ad794f3c480d301a46083054..fa6b8d756195c1b430cc11214a901bd42eebc98d 100644
+index 9772d0f7b003de2544210c5e11f7a8c8feaf0cdd..a121c71e953eff821cb1655045b60221deed46b1 100644
 --- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
 +++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
-@@ -34,6 +34,13 @@ public final class TickRegionScheduler {
+@@ -41,6 +41,12 @@ public final class TickRegionScheduler {
+ 
      public static final int TICK_RATE = 20;
      public static final long TIME_BETWEEN_TICKS = 1_000_000_000L / TICK_RATE; // ns
- 
 +    // Folia start - watchdog
 +    public static final FoliaWatchdogThread WATCHDOG_THREAD = new FoliaWatchdogThread();
 +    static {
 +        WATCHDOG_THREAD.start();
 +    }
 +    // Folia end - watchdog
-+
-     private final SchedulerThreadPool scheduler;
  
-     public TickRegionScheduler(final int threads) {
-@@ -327,6 +334,8 @@ public final class TickRegionScheduler {
+     private final Scheduler scheduler;
+ 
+@@ -382,6 +388,8 @@ public final class TickRegionScheduler {
+                 this.currentTickingThread = Thread.currentThread();
              }
  
-             final boolean ret;
 +            final FoliaWatchdogThread.RunningTick runningTick = new FoliaWatchdogThread.RunningTick(tickStart, this, Thread.currentThread()); // Folia - watchdog
 +            WATCHDOG_THREAD.addTick(runningTick); // Folia - watchdog
              try {
-                 ret = this.runRegionTasks(() -> {
+                 this.runRegionTasks(() -> {
                      return !RegionScheduleHandle.this.cancelled.get() && canContinue.getAsBoolean();
-@@ -336,6 +345,7 @@ public final class TickRegionScheduler {
+@@ -391,6 +399,7 @@ public final class TickRegionScheduler {
                  // don't release region for another tick
-                 return null;
+                 return false;
              } finally {
 +                WATCHDOG_THREAD.removeTick(runningTick); // Folia - watchdog
                  final long tickEnd = System.nanoTime();
                  final long cpuEnd = MEASURE_CPU_TIME ? THREAD_MX_BEAN.getCurrentThreadCpuTime() : 0L;
  
-@@ -401,6 +411,8 @@ public final class TickRegionScheduler {
+@@ -464,6 +473,8 @@ public final class TickRegionScheduler {
                  this.currentTickingThread = Thread.currentThread();
              }
  
@@ -160,7 +159,7 @@ index e392457ccc06d3c6ad794f3c480d301a46083054..fa6b8d756195c1b430cc11214a901bd4
              try {
                  // next start isn't updated until the end of this tick
                  this.tickRegion(tickCount, tickStart, scheduledEnd);
-@@ -409,6 +421,7 @@ public final class TickRegionScheduler {
+@@ -472,6 +483,7 @@ public final class TickRegionScheduler {
                  // regionFailed will schedule a shutdown, so we should avoid letting this region tick further
                  return false;
              } finally {
@@ -169,10 +168,10 @@ index e392457ccc06d3c6ad794f3c480d301a46083054..fa6b8d756195c1b430cc11214a901bd4
                  final long cpuEnd = MEASURE_CPU_TIME ? THREAD_MX_BEAN.getCurrentThreadCpuTime() : 0L;
  
 diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
-index b1c07e582dbf0a203cf734fdbcd8387a422af3a6..988fe74578065c9464f5639e5cc6af79619edef5 100644
+index 4cae0a644bc979c1efeb784adff0f49dab3c6bef..cf65aece53f7a1398b8e7dba527901444146a631 100644
 --- a/io/papermc/paper/threadedregions/TickRegions.java
 +++ b/io/papermc/paper/threadedregions/TickRegions.java
-@@ -330,9 +330,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+@@ -408,9 +408,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
          }
      }
  

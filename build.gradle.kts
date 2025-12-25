@@ -4,7 +4,7 @@ import io.papermc.paperweight.tasks.RebuildGitPatches
 
 plugins {
     java // TODO java launcher tasks
-    id("io.papermc.paperweight.patcher") version "2.0.0-beta.18"
+    id("io.papermc.paperweight.patcher") version "2.0.0-beta.19"
 }
 
 paperweight {
