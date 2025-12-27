@@ -7482,10 +7482,10 @@ index 566304106fd4f1c677a56e7c66282d1570e7b974..f046aca874eb3376696baaad3719a698
      }
  
 diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
-index 668eb52d71d77f75c24d4840be9a6c49d96dfc34..c859197d643fd96ea2a5ef51837abc457e27f002 100644
+index 668eb52d71d77f75c24d4840be9a6c49d96dfc34..6301c1fd2d514256a49ba3c9ef8b68665c8b18ca 100644
 --- a/net/minecraft/commands/Commands.java
 +++ b/net/minecraft/commands/Commands.java
-@@ -196,15 +196,15 @@ public class Commands {
+@@ -196,13 +196,13 @@ public class Commands {
          AdvancementCommands.register(this.dispatcher);
          AttributeCommand.register(this.dispatcher, context);
          ExecuteCommand.register(this.dispatcher, context);
@@ -7502,11 +7502,8 @@ index 668eb52d71d77f75c24d4840be9a6c49d96dfc34..c859197d643fd96ea2a5ef51837abc45
 +        //DataPackCommand.register(this.dispatcher, context); // Folia - region threading - TODO
 +        //DebugCommand.register(this.dispatcher); // Folia - region threading - TODO
          DefaultGameModeCommands.register(this.dispatcher);
--        DialogCommand.register(this.dispatcher, context);
-+        //DialogCommand.register(this.dispatcher, context); // Folia - region threading - TODO
+         DialogCommand.register(this.dispatcher, context);
          DifficultyCommand.register(this.dispatcher);
-         EffectCommands.register(this.dispatcher, context);
-         EmoteCommands.register(this.dispatcher);
 @@ -213,52 +213,52 @@ public class Commands {
          FillCommand.register(this.dispatcher, context);
          FillBiomeCommand.register(this.dispatcher, context);
@@ -9151,6 +9148,36 @@ index e55f374100734d548c1078119ddef37348d3f71c..87cb36c17afcdfd742cc3d7fc2ece9e9
 +        // Folia end - region threading
      }
  }
+diff --git a/net/minecraft/server/commands/DialogCommand.java b/net/minecraft/server/commands/DialogCommand.java
+index 15ff470c19c3bad50133bca3ef3dc0fa5c5b421d..7b14299049754ac786f212c8a746b79e49822869 100644
+--- a/net/minecraft/server/commands/DialogCommand.java
++++ b/net/minecraft/server/commands/DialogCommand.java
+@@ -46,7 +46,11 @@ public class DialogCommand {
+ 
+     private static int showDialog(CommandSourceStack source, Collection<ServerPlayer> targets, Holder<Dialog> dialog) {
+         for (ServerPlayer serverPlayer : targets) {
+-            serverPlayer.openDialog(dialog);
++            // Folia start - region threading
++            serverPlayer.getBukkitEntity().taskScheduler.schedule((ServerPlayer nmsPlayer) -> {
++                serverPlayer.openDialog(dialog);
++            }, null, 1L);
++            // Folia end - region threading
+         }
+ 
+         if (targets.size() == 1) {
+@@ -60,7 +64,11 @@ public class DialogCommand {
+ 
+     private static int clearDialog(CommandSourceStack source, Collection<ServerPlayer> targets) {
+         for (ServerPlayer serverPlayer : targets) {
+-            serverPlayer.connection.send(ClientboundClearDialogPacket.INSTANCE);
++            // Folia start - region threading
++            serverPlayer.getBukkitEntity().taskScheduler.schedule((ServerPlayer nmsPlayer) -> {
++                serverPlayer.connection.send(ClientboundClearDialogPacket.INSTANCE);
++            }, null, 1L);
++            // Folia end - region threading
+         }
+ 
+         if (targets.size() == 1) {
 diff --git a/net/minecraft/server/commands/EffectCommands.java b/net/minecraft/server/commands/EffectCommands.java
 index 8731c07d6d907f77cd175c06c8c9064048c6ffa9..0cf2c9fbaa7ca7bee048774f4d9fad0da8ea392f 100644
 --- a/net/minecraft/server/commands/EffectCommands.java
