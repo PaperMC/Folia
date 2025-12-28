@@ -7482,7 +7482,7 @@ index 566304106fd4f1c677a56e7c66282d1570e7b974..f046aca874eb3376696baaad3719a698
      }
  
 diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
-index 668eb52d71d77f75c24d4840be9a6c49d96dfc34..c859197d643fd96ea2a5ef51837abc457e27f002 100644
+index 668eb52d71d77f75c24d4840be9a6c49d96dfc34..11f1c3bfa123f8f7fb660fd24a8f3a5baab1ab33 100644
 --- a/net/minecraft/commands/Commands.java
 +++ b/net/minecraft/commands/Commands.java
 @@ -196,15 +196,15 @@ public class Commands {
@@ -7548,9 +7548,8 @@ index 668eb52d71d77f75c24d4840be9a6c49d96dfc34..c859197d643fd96ea2a5ef51837abc45
          SetBlockCommand.register(this.dispatcher, context);
          SetSpawnCommand.register(this.dispatcher);
          SetWorldSpawnCommand.register(this.dispatcher);
--        SpectateCommand.register(this.dispatcher);
+         SpectateCommand.register(this.dispatcher);
 -        SpreadPlayersCommand.register(this.dispatcher);
-+        //SpectateCommand.register(this.dispatcher); // Folia - region threading - TODO later
 +        //SpreadPlayersCommand.register(this.dispatcher); // Folia - region threading - TODO later
          StopSoundCommand.register(this.dispatcher);
          StopwatchCommand.register(this.dispatcher);
@@ -9967,6 +9966,45 @@ index 57dfdff52f2ab7a66a215317d6ed927d3a410881..6a9cb4313c0e42889e36ade57ea02bcc
                  actualTargets.add(serverPlayer);
              }
              // Paper end - Add PlayerSetSpawnEvent
+diff --git a/net/minecraft/server/commands/SpectateCommand.java b/net/minecraft/server/commands/SpectateCommand.java
+index bf3b0bb46d623afd538cf4bc675eb801aca40e38..3edbebcc3a4b8f235cea3b5cfc353df501fe4907 100644
+--- a/net/minecraft/server/commands/SpectateCommand.java
++++ b/net/minecraft/server/commands/SpectateCommand.java
+@@ -43,7 +43,17 @@ public class SpectateCommand {
+         );
+     }
+ 
+-    private static int spectate(CommandSourceStack source, @Nullable Entity target, ServerPlayer player) throws CommandSyntaxException {
++    // Folia start - region threading
++    private static void sendMessage(CommandSourceStack src, CommandSyntaxException ex) {
++        src.sendFailure((Component)ex.getRawMessage());
++    }
++    // Folia end - region threading
++
++    private static int spectate(CommandSourceStack source, @Nullable Entity target, ServerPlayer spectator) throws CommandSyntaxException { // Folia - region threading
++        // Folia start - region threading
++        spectator.getBukkitEntity().taskScheduler.schedule((ServerPlayer player) -> {
++            try {
++                // Folia end - region threading
+         if (player == target) {
+             throw ERROR_SELF.create();
+         } else if (!player.isSpectator()) {
+@@ -58,7 +68,14 @@ public class SpectateCommand {
+                 source.sendSuccess(() -> Component.translatable("commands.spectate.success.stopped"), false);
+             }
+ 
+-            return 1;
++            return; // Folia - region threading
+         }
++        // Folia start - region threading
++            } catch (CommandSyntaxException ex) {
++                sendMessage(source, ex);
++            }
++        }, null, 1L);
++        return 0;
++        // Folia end - region threading
+     }
+ }
 diff --git a/net/minecraft/server/commands/SummonCommand.java b/net/minecraft/server/commands/SummonCommand.java
 index 88927b0bab343ae46678537e25ad8b3a730ab8be..81baca2f0ec800fead23c6be47596a50aaae38a0 100644
 --- a/net/minecraft/server/commands/SummonCommand.java
