@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: beengoo <ndftua@gmail.com>
+Date: Mon, 29 Dec 2025 12:31:44 +0200
+Subject: [PATCH] Implementation of forEachEntityTrackedBy
+
+
+diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
+index 6292d9ae1e4b7b586f0806e01b86fc2092f1c153..5efa4a90308a7f7d6e8c9134603534b7e9e803f2 100644
+--- a/net/minecraft/server/level/ChunkMap.java
++++ b/net/minecraft/server/level/ChunkMap.java
+@@ -1114,7 +1114,23 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+     }
+ 
+     public void forEachEntityTrackedBy(ServerPlayer player, Consumer<Entity> action) {
+-        throw new UnsupportedOperationException(); // Folia - region threading
++        // Folia start - make forEachEntityTrackedBy region-safe
++        var chunkX = player.chunkPosition().x;
++        var chunkZ = player.chunkPosition().z;
++
++        // Get entities from the player's current region only
++        var region = this.level.regioniser.getRegionAtSynchronised(chunkX, chunkZ);
++        if (region == null) {
++            return;
++        }
++
++        // Iterate only entities owned by this region's tick thread
++        for (Entity entity : region.getData().world.getEntities().getAll()) {
++            if (entity != player && entity.isAlive()) {
++                action.accept(entity);
++            }
++        }
++        // Folia end
+     }
+ 
+     public void resendBiomesForChunks(List<ChunkAccess> chunks) {
