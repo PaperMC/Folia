@@ -15655,7 +15655,7 @@ index 4e69e32ad000b8c02e44c3ffce24ff5e3c090a2f..0a019024ff9a5c4ae8067f0e2cfd2c9c
          return this.portal.getLocalTransition();
      }
 diff --git a/net/minecraft/world/entity/TamableAnimal.java b/net/minecraft/world/entity/TamableAnimal.java
-index c40455773ada45a560462c22f429ad82c9f9e8f0..f6b921ce3674d3c2bf963b913045a3c83c6bbf08 100644
+index c40455773ada45a560462c22f429ad82c9f9e8f0..2a6fca390a7444e94352c0c040557452b1180a42 100644
 --- a/net/minecraft/world/entity/TamableAnimal.java
 +++ b/net/minecraft/world/entity/TamableAnimal.java
 @@ -242,6 +242,11 @@ public abstract class TamableAnimal extends Animal implements OwnableEntity {
@@ -15670,7 +15670,24 @@ index c40455773ada45a560462c22f429ad82c9f9e8f0..f6b921ce3674d3c2bf963b913045a3c8
              this.teleportToAroundBlockPos(owner.blockPosition());
          }
      }
-@@ -274,7 +279,22 @@ public abstract class TamableAnimal extends Animal implements OwnableEntity {
+@@ -265,6 +270,16 @@ public abstract class TamableAnimal extends Animal implements OwnableEntity {
+     }
+ 
+     private boolean maybeTeleportTo(int x, int y, int z) {
++        // Folia start - region threading
++        // the tamable entity can, when trying to see if it can teleport to the
++        // block position, try and load chunks that may or may not be outside the
++        // region boundaries. if it tries to load chunks outside the region,
++        // the server crashes. so we do a quick check here first to ensure
++        // that the chunk *is* loaded first, and if it is, then we attempt teleport
++        if (this.level().getChunkIfLoaded(x >> 4, z >> 4) == null) {
++            return false; // chunk not loaded, don't teleport
++        }
++        // Folia end - region threading
+         if (!this.canTeleportTo(new BlockPos(x, y, z))) {
+             return false;
+         } else {
+@@ -274,7 +289,22 @@ public abstract class TamableAnimal extends Animal implements OwnableEntity {
                  return false;
              }
              org.bukkit.Location to = event.getTo();
