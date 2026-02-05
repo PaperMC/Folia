@@ -16504,7 +16504,7 @@ index c7db74ccc3f8c46e97c24857f297fe5fb5f45e36..ffc93b24e2fee325bf79c648378f7adc
                          if (chicken instanceof Chicken realChicken) {
                              Optional.ofNullable(this.getItem().get(DataComponents.CHICKEN_VARIANT))
 diff --git a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
-index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..7d8c528a76e6a95d27368bc459d654c6ef66dd8f 100644
+index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..65b71e0f19bbec7f9dd5dcfaa1a112007e1a23ac 100644
 --- a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
 +++ b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
 @@ -52,15 +52,11 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
@@ -16525,13 +16525,14 @@ index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..7d8c528a76e6a95d27368bc459d654c6
      }
  
      @Override
-@@ -79,6 +75,81 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+@@ -79,6 +75,82 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
          result.getEntity().hurt(this.damageSources().thrown(this, this.getOwner()), 0.0F);
      }
  
 +    // Folia start - region threading
-+    private static void attemptTeleport(Entity source, ServerLevel checkWorld, net.minecraft.world.phys.Vec3 to) {
++    private static void attemptTeleport(Entity source, Entity enderPearl, ServerLevel checkWorld, net.minecraft.world.phys.Vec3 to) {
 +        final boolean onPortalCooldown = source.isOnPortalCooldown();
++        final Entity enderPearlFinal = enderPearl; // Folia - capture for lambda
 +        // ignore retired callback, in those cases we do not want to teleport
 +        source.getBukkitEntity().taskScheduler.schedule(
 +            (Entity entity) -> {
@@ -16589,7 +16590,7 @@ index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..7d8c528a76e6a95d27368bc459d654c6
 +                            // damage player
 +                            teleported.resetFallDistance();
 +                            player.resetCurrentImpulseContext();
-+                            player.hurtServer(player.level(), player.damageSources().enderPearl().eventEntityDamager(player), 5.0F); // CraftBukkit // Paper - fix DamageSource API
++                            player.hurtServer(player.level(), player.damageSources().enderPearl().eventEntityDamager(enderPearlFinal), 5.0F); // CraftBukkit // Paper - fix DamageSource API
 +                            playSound(teleported.level(), to);
 +                        } else {
 +                            // reset fall damage so that if the entity was falling they do not instantly die
@@ -16607,7 +16608,7 @@ index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..7d8c528a76e6a95d27368bc459d654c6
      @Override
      protected void onHit(HitResult result) {
          super.onHit(result);
-@@ -97,6 +168,20 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+@@ -97,6 +169,20 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
          }
  
          if (this.level() instanceof ServerLevel serverLevel && !this.isRemoved()) {
@@ -16619,7 +16620,7 @@ index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..7d8c528a76e6a95d27368bc459d654c6
 +                }
 +                Entity entity = this.getOwnerRaw();
 +                if (entity != null) {
-+                    attemptTeleport(entity, (ServerLevel)this.level(), this.position());
++                    attemptTeleport(entity, this, (ServerLevel)this.level(), this.position());
 +                }
 +                this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.HIT);
 +                return;
@@ -16628,7 +16629,7 @@ index 66df6c69a95c5ca6b07294fdb3b13eee6651d22d..7d8c528a76e6a95d27368bc459d654c6
              Entity owner = this.getOwner();
              if (owner != null && isAllowedToTeleportOwner(owner, serverLevel)) {
                  Vec3 vec3 = this.oldPosition();
-@@ -196,7 +281,15 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+@@ -196,7 +282,15 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
          }
      }
  
