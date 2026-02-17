@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Spottedleaf <Spottedleaf@users.noreply.github.com>
+Date: Mon, 6 Mar 2023 13:14:06 -0800
+Subject: [PATCH] Require plugins to be explicitly marked as Folia supported
+
+Plugins must add "folia-supported: true" to their plugin.yml
+otherwise the server will refuse to load them.
+
+Since Folia is a major breakage for plugins, the vast majority
+of plugins will not function correctly on Folia. To prevent
+user confusion from this, we will refuse to load the plugin
+and provide a log indicating why - which will be much
+more helpful than some random error log caused by
+a breakage.
+
+diff --git a/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java b/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java
+index a399f87e925a72aac91b3066317c3efb61c0421a..0100108fd87268d225a60e51eaf87071b359ef6f 100644
+--- a/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java
++++ b/src/main/java/io/papermc/paper/plugin/configuration/PluginMeta.java
+@@ -189,4 +189,12 @@ public interface PluginMeta extends Namespaced {
+     default String namespace() {
+         return this.getName().toLowerCase(Locale.ROOT);
+     }
++    
++    // Folia start - block plugins not marked as supported
++    /**
++     * Returns whether the plugin has been marked to be compatible with regionised threading as provided
++     * by Folia
++     */
++    public boolean isFoliaSupported();
++    // Folia end - block plugins not marked as supported
+ }
+diff --git a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
+index c14ce1e7d7a5e30cd29b406a412e47104b529511..4a5ac5193bee2107ddc65f37a39046f92e875350 100644
+--- a/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
++++ b/src/main/java/org/bukkit/plugin/PluginDescriptionFile.java
+@@ -267,6 +267,19 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+         return this.paperPluginLoader;
+     }
+     // Paper end - plugin loader api
++    // Folia start - block plugins not marked as supported
++    private String foliaSupported;
++    private static final String FOLIA_SUPPORTED_KEY = "folia-supported";
++
++    /**
++     * Returns whether the plugin has been marked to be compatible with regionised threading as provided
++     * by Folia
++     */
++    @Override
++    public boolean isFoliaSupported() {
++        return this.foliaSupported != null && this.foliaSupported.equalsIgnoreCase("true");
++    }
++    // Folia end - block plugins not marked as supported
+     // Paper start - oh my goddddd
+     /**
+      * @hidden
+@@ -1267,6 +1280,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+         if (map.get("prefix") != null) {
+             prefix = map.get("prefix").toString();
+         }
++        // Folia start - block plugins not marked as supported
++        if (map.get(FOLIA_SUPPORTED_KEY) != null) {
++            foliaSupported = map.get(FOLIA_SUPPORTED_KEY).toString();
++        }
++        // Folia end - block plugins not marked as supported
+     }
+ 
+     @NotNull
+@@ -1343,6 +1361,11 @@ public final class PluginDescriptionFile implements io.papermc.paper.plugin.conf
+         if (prefix != null) {
+             map.put("prefix", prefix);
+         }
++        // Folia start - block plugins not marked as supported
++        if (foliaSupported != null) {
++            map.put(FOLIA_SUPPORTED_KEY, foliaSupported);
++        }
++        // Folia end - block plugins not marked as supported
+ 
+         return map;
+     }
