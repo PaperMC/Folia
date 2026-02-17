@@ -13,6 +13,7 @@ import net.minecraft.tags.TimelineTags;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.valueproviders.UniformInt;
 import net.minecraft.world.attribute.*;
+import net.minecraft.world.level.dimension.DimensionDefaults;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.timeline.Timeline;
 import org.jspecify.annotations.NullMarked;
@@ -43,9 +44,9 @@ public final class AetheriaDimensionTypes {
                         true,
                         false,
                         1.0,
-                        -64,
-                        384,
-                        384,
+                        DimensionDefaults.OVERWORLD_MIN_Y - DimensionDefaults.NETHER_GENERATION_HEIGHT,
+                        DimensionDefaults.NETHER_GENERATION_HEIGHT + DimensionDefaults.OVERWORLD_GENERATION_HEIGHT + DimensionDefaults.END_GENERATION_HEIGHT,
+                        DimensionDefaults.NETHER_GENERATION_HEIGHT + DimensionDefaults.OVERWORLD_GENERATION_HEIGHT + DimensionDefaults.END_GENERATION_HEIGHT,
                         BlockTags.INFINIBURN_OVERWORLD,
                         0.0F,
                         new DimensionType.MonsterSettings(UniformInt.of(0, 7), 0),

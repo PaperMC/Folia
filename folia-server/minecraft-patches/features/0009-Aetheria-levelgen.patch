@@ -53,3 +53,112 @@ index 2211cd81bf986e0dda97841e39bed23bedb38914..6dd7b21710912b006e98a7da0e474d9c
          list.forEach(loader -> {
              Registry<?> registry = loader.registry();
  
+diff --git a/net/minecraft/world/level/biome/BiomeManager.java b/net/minecraft/world/level/biome/BiomeManager.java
+index 73962e79a0f3d892e3155443a1b84508b0f4042e..87af3d53161115ab29c6801be75db74d29a8ecb8 100644
+--- a/net/minecraft/world/level/biome/BiomeManager.java
++++ b/net/minecraft/world/level/biome/BiomeManager.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.biome;
+ 
+ import com.google.common.hash.Hashing;
++import net.azisaba.aetheria.world.AetheriaLayer;
++import net.azisaba.aetheria.world.AetheriaLayout;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.QuartPos;
+@@ -28,6 +30,16 @@ public class BiomeManager {
+         return new BiomeManager(newSource, this.biomeZoomSeed);
+     }
+ 
++    // Aetheria start - Remap biome sampling Y by layer
++    public BiomeManager withLayeredSource(final AetheriaLayout layout, final AetheriaLayer.Type type) {
++        return this.withDifferentSource((quartX, quartY, quartZ) -> {
++            final int layerY = QuartPos.toBlock(quartY);
++            final int blockY = layout.toBlockY(type, layerY);
++            return this.getNoiseBiomeAtQuart(quartX, QuartPos.fromBlock(blockY), quartZ);
++        });
++    }
++    // Aetheria end - Remap biome sampling Y by layer
++
+     public Holder<Biome> getBiome(BlockPos pos) {
+         int i = pos.getX() - 2;
+         int i1 = pos.getY() - 2;
+diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
+index 25c537496ccea6fe27111b21fe2e47b3f6a914a1..d88c703e0eb22af1d815d712f4499305497c1180 100644
+--- a/net/minecraft/world/level/levelgen/Heightmap.java
++++ b/net/minecraft/world/level/levelgen/Heightmap.java
+@@ -152,7 +152,45 @@ public class Heightmap {
+             "MOTION_BLOCKING_NO_LEAVES",
+             Heightmap.Usage.CLIENT,
+             state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
++        ),
++
++        // Aetheria start - Custom heightmap types by Aetheria layer
++        AETHERIA_OVERWORLD_WORLD_SURFACE_WG(6, "AETHERIA_OVERWORLD_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        AETHERIA_OVERWORLD_WORLD_SURFACE(7, "AETHERIA_OVERWORLD_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        AETHERIA_OVERWORLD_OCEAN_FLOOR_WG(8, "AETHERIA_OVERWORLD_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_OVERWORLD_OCEAN_FLOOR(9, "AETHERIA_OVERWORLD_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_OVERWORLD_MOTION_BLOCKING(10, "AETHERIA_OVERWORLD_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES(
++                11,
++                "AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES",
++                Heightmap.Usage.LIVE_WORLD,
++                state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
++        ),
++
++        AETHERIA_NETHER_WORLD_SURFACE_WG(12, "AETHERIA_NETHER_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        AETHERIA_NETHER_WORLD_SURFACE(13, "AETHERIA_NETHER_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        AETHERIA_NETHER_OCEAN_FLOOR_WG(14, "AETHERIA_NETHER_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_NETHER_OCEAN_FLOOR(15, "AETHERIA_NETHER_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_NETHER_MOTION_BLOCKING(16, "AETHERIA_NETHER_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES(
++                17,
++                "AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES",
++                Heightmap.Usage.LIVE_WORLD,
++                state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
++        ),
++
++        AETHERIA_END_WORLD_SURFACE_WG(18, "AETHERIA_END_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        AETHERIA_END_WORLD_SURFACE(19, "AETHERIA_END_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        AETHERIA_END_OCEAN_FLOOR_WG(20, "AETHERIA_END_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_END_OCEAN_FLOOR(21, "AETHERIA_END_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_END_MOTION_BLOCKING(22, "AETHERIA_END_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        AETHERIA_END_MOTION_BLOCKING_NO_LEAVES(
++                23,
++                "AETHERIA_END_MOTION_BLOCKING_NO_LEAVES",
++                Heightmap.Usage.LIVE_WORLD,
++                state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
+         );
++        // Aetheria end - Custom heightmap types by Aetheria layer
+ 
+         public static final Codec<Heightmap.Types> CODEC = StringRepresentable.fromEnum(Heightmap.Types::values);
+         private static final IntFunction<Heightmap.Types> BY_ID = ByIdMap.continuous(types -> types.id, values(), ByIdMap.OutOfBoundsStrategy.ZERO);
+diff --git a/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java b/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java
+index 6745fd379962713315ffc8c00e587884e7a5903a..8c5a0b1d34e18af4c2db34f0fe5fc5ea026ece32 100644
+--- a/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java
++++ b/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java
+@@ -74,6 +74,24 @@ public record NoiseGeneratorSettings(
+         return this.useLegacyRandomSource ? WorldgenRandom.Algorithm.LEGACY : WorldgenRandom.Algorithm.XOROSHIRO;
+     }
+ 
++    // Aetheria start - Create a new NoiseGeneratorSettings with different NoiseSettings
++    public NoiseGeneratorSettings withDifferentNoiseSettings(final NoiseSettings noiseSettings) {
++        return new NoiseGeneratorSettings(
++                noiseSettings,
++                this.defaultBlock,
++                this.defaultFluid,
++                this.noiseRouter,
++                this.surfaceRule,
++                this.spawnTarget,
++                this.seaLevel,
++                this.disableMobGeneration,
++                this.aquifersEnabled,
++                this.oreVeinsEnabled,
++                this.useLegacyRandomSource
++        );
++    }
++    // Aetheria end - Create a new NoiseGeneratorSettings with different NoiseSettings
++
+     public static void bootstrap(BootstrapContext<NoiseGeneratorSettings> context) {
+         context.register(OVERWORLD, overworld(context, false, false));
+         context.register(LARGE_BIOMES, overworld(context, false, true));
