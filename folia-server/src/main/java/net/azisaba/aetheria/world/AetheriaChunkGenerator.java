@@ -1,6 +1,7 @@
 package net.azisaba.aetheria.world;
 
 import com.mojang.serialization.MapCodec;
+import net.azisaba.aetheria.world.height.HeightContext;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
@@ -112,7 +113,7 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
     public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
         for (final AetheriaLayer.Type layerType : this.layout) {
             final ChunkGenerator layerGenerator = layerType.generator();
-            final HeightmapSet heightmapSet = layerType.heightmapSet();
+            final HeightContext heightmapSet = this.layout.createHeightContext(layerType);
             layerGenerator.applyBiomeDecoration(level, chunk, structureManager, true, heightmapSet);
         }
     }

@@ -1,12 +1,9 @@
-package net.azisaba.aetheria.world;
+package net.azisaba.aetheria.world.height;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
-
-import java.util.Objects;
 
 @NullMarked
 public record HeightmapSet(
@@ -16,7 +13,7 @@ public record HeightmapSet(
         Heightmap.Types oceanFloor,
         Heightmap.Types motionBlocking,
         Heightmap.Types motionBlockingNoLeaves
-) {
+) implements HeightmapContext {
     public static final Codec<HeightmapSet> CODEC = RecordCodecBuilder.create(
             instance -> instance.group(
                             Heightmap.Types.CODEC.fieldOf("worldSurfaceWg").forGetter(HeightmapSet::worldSurfaceWg),
@@ -61,20 +58,4 @@ public record HeightmapSet(
             Heightmap.Types.AETHERIA_END_MOTION_BLOCKING,
             Heightmap.Types.AETHERIA_END_MOTION_BLOCKING_NO_LEAVES
     );
-
-    public Heightmap.@Nullable Types get(final Heightmap.Types vanillaType) {
-        return switch (vanillaType) {
-            case Heightmap.Types.WORLD_SURFACE_WG -> this.worldSurfaceWg;
-            case Heightmap.Types.WORLD_SURFACE -> this.worldSurface;
-            case Heightmap.Types.OCEAN_FLOOR_WG -> this.oceanFloorWg;
-            case Heightmap.Types.OCEAN_FLOOR -> this.oceanFloor;
-            case Heightmap.Types.MOTION_BLOCKING -> this.motionBlocking;
-            case Heightmap.Types.MOTION_BLOCKING_NO_LEAVES -> this.motionBlockingNoLeaves;
-            default -> null;
-        };
-    }
-
-    public Heightmap.Types getOrElse(final Heightmap.Types vanillaType) {
-        return Objects.requireNonNullElse(this.get(vanillaType), vanillaType);
-    }
 }

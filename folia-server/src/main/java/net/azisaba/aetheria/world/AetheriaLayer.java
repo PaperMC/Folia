@@ -1,5 +1,6 @@
 package net.azisaba.aetheria.world;
 
+import net.azisaba.aetheria.world.height.HeightmapSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;

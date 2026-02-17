@@ -1,6 +1,6 @@
 package net.azisaba.aetheria.world;
 
-import net.minecraft.world.level.LevelHeightAccessor;
+import net.azisaba.aetheria.world.height.HeightContext;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -54,9 +54,8 @@ public record AetheriaLayout(
         return blockY - this.getMinYOf(type) + type.minY();
     }
 
-    public LevelHeightAccessor createHeightAccessor(final AetheriaLayer.Type type) {
-        final int minY = this.getMinYOf(type);
-        return LevelHeightAccessor.create(minY, type.height());
+    public HeightContext createHeightContext(final AetheriaLayer.Type type) {
+        return new HeightContext.Layered(this, type);
     }
 
     public Stream<AetheriaLayer.Type> stream() {
