@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tksimeji <tksimeji@outlook.com>
+Date: Tue, 17 Feb 2026 13:06:34 +0900
+Subject: [PATCH] Aetheria levelgen
+
+
+diff --git a/net/minecraft/resources/Identifier.java b/net/minecraft/resources/Identifier.java
+index ae6219185aa00a2753b0986ecf5f8456f4c2515d..b568d7ed2ce59f4fb5145ece5a0aa3b8ed1ea89c 100644
+--- a/net/minecraft/resources/Identifier.java
++++ b/net/minecraft/resources/Identifier.java
+@@ -56,6 +56,12 @@ public final class Identifier implements Comparable<Identifier> {
+         return new Identifier("minecraft", assertValidPath("minecraft", location));
+     }
+ 
++    // Aetheria start - Create an Identifier in the aetheria namespace
++    public static Identifier withAetheriaNamespace(String location) {
++        return new Identifier("aetheria", assertValidPath("aetheria", location));
++    }
++    // Aetheria start - Create an Identifier in the aetheria namespace
++
+     public static @Nullable Identifier tryParse(String location) {
+         return tryBySeparator(location, ':');
+     }
+diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
+index 2211cd81bf986e0dda97841e39bed23bedb38914..6dd7b21710912b006e98a7da0e474d9c02f1d370 100644
+--- a/net/minecraft/resources/RegistryDataLoader.java
++++ b/net/minecraft/resources/RegistryDataLoader.java
+@@ -21,6 +21,9 @@ import java.util.Map.Entry;
+ import java.util.function.BiConsumer;
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
++
++import net.azisaba.aetheria.AetheriaDimensionTypes;
++import net.azisaba.aetheria.AetheriaLevelStems;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+ import net.minecraft.ReportedException;
+@@ -186,6 +189,17 @@ public class RegistryDataLoader {
+             .collect(Collectors.toUnmodifiableList());
+         RegistryOps.RegistryInfoLookup registryInfoLookup = createContext(registryLookups, list);
+         list.forEach(loader -> loadingFunction.apply((RegistryDataLoader.Loader<?>)loader, registryInfoLookup));
++        // Aetheria start - Register Aetheria objects in data-driven registries
++        list.forEach(loader -> {
++            final WritableRegistry<?> registry = loader.registry();
++
++            if  (registry.key().equals(Registries.DIMENSION_TYPE)) {
++                AetheriaDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.LEVEL_STEM)) {
++                AetheriaLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
++            }
++        });
++        // Aetheria end - Register Aetheria objects in data-driven registries
+         list.forEach(loader -> {
+             Registry<?> registry = loader.registry();
+ 
