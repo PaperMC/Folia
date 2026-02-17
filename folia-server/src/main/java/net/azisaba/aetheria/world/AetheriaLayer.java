@@ -128,7 +128,7 @@ public class AetheriaLayer extends ProtoChunk {
                     .getOrThrow(NoiseGeneratorSettings.OVERWORLD);
             return new AetheriaLayer.Type(
                     DimensionDefaults.OVERWORLD_GENERATION_HEIGHT,
-                    HeightmapSet.OVERWORLD,
+                    HeightmapSet.AETHERIA_OVERWORLD,
                     new NoiseBasedChunkGenerator(MultiNoiseBiomeSource.createFromPreset(parameterList), noiseGeneratorSettings)
             );
         }
@@ -144,7 +144,7 @@ public class AetheriaLayer extends ProtoChunk {
                     .getOrThrow(NoiseGeneratorSettings.NETHER);
             return new AetheriaLayer.Type(
                     DimensionDefaults.NETHER_GENERATION_HEIGHT,
-                    HeightmapSet.NETHER,
+                    HeightmapSet.AETHERIA_NETHER,
                     new NoiseBasedChunkGenerator(MultiNoiseBiomeSource.createFromPreset(parameterList), noiseGeneratorSettings)
             );
         }
@@ -159,7 +159,7 @@ public class AetheriaLayer extends ProtoChunk {
                     .getOrThrow(NoiseGeneratorSettings.END);
             return new AetheriaLayer.Type(
                     DimensionDefaults.END_GENERATION_HEIGHT,
-                    HeightmapSet.END,
+                    HeightmapSet.AETHERIA_END,
                     new NoiseBasedChunkGenerator(TheEndBiomeSource.create(biomes), noiseGeneratorSettings)
             );
         }

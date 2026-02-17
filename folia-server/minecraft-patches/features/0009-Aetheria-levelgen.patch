@@ -83,6 +83,56 @@ index 73962e79a0f3d892e3155443a1b84508b0f4042e..87af3d53161115ab29c6801be75db74d
      public Holder<Biome> getBiome(BlockPos pos) {
          int i = pos.getX() - 2;
          int i1 = pos.getY() - 2;
+diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
+index d57b3ed1c53d2818caf420004296297f006f36d7..9c8b33d68eff365aa1d077983a45e9516c7d54f8 100644
+--- a/net/minecraft/world/level/chunk/ChunkGenerator.java
++++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
+@@ -22,6 +22,10 @@ import java.util.function.Function;
+ import java.util.function.Predicate;
+ import java.util.function.Supplier;
+ import java.util.stream.Collectors;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+ import net.minecraft.ReportedException;
+@@ -334,7 +338,7 @@ public abstract class ChunkGenerator {
+         }
+     }
+ 
+-    public void addVanillaDecorations(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) { // CraftBukkit - rename
++    public void addVanillaDecorations(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) { // CraftBukkit - rename
+         ChunkPos pos = chunk.getPos();
+         if (!SharedConstants.debugVoidTerrain(pos)) {
+             SectionPos sectionPos = SectionPos.of(pos, level.getMinSectionY());
+@@ -416,7 +420,7 @@ public abstract class ChunkGenerator {
+ 
+                             try {
+                                 level.setCurrentlyGenerating(supplier1);
+-                                placedFeature.placeWithBiomeCheck(level, this, worldgenRandom, blockPos);
++                                placedFeature.placeWithBiomeCheck(level, this, worldgenRandom, blockPos, heightmapSet);
+                             } catch (Exception var30) {
+                                 CrashReport crashReport1 = CrashReport.forThrowable(var30, "Feature placement");
+                                 crashReport1.addCategory("Feature").setDetail("Description", supplier1::get);
+@@ -442,9 +446,14 @@ public abstract class ChunkGenerator {
+         this.applyBiomeDecoration(level, chunk, structureManager, true);
+     }
+ 
+-    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager, boolean addVanillaDecorations) {
++    @Modified(Op.COMPAT)
++    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunkAccess, StructureManager structureManager, boolean addVanillaDecorations) {
++        this.applyBiomeDecoration(level, chunkAccess, structureManager, addVanillaDecorations, HeightmapSet.VANILLA);
++    }
++
++    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager, boolean addVanillaDecorations, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         if (addVanillaDecorations) {
+-            this.addVanillaDecorations(level, chunk, structureManager);
++            this.addVanillaDecorations(level, chunk, structureManager, heightmapSet);
+         }
+ 
+         org.bukkit.World world = level.getMinecraftWorld().getWorld();
 diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
 index 25c537496ccea6fe27111b21fe2e47b3f6a914a1..d88c703e0eb22af1d815d712f4499305497c1180 100644
 --- a/net/minecraft/world/level/levelgen/Heightmap.java
@@ -162,3 +212,763 @@ index 6745fd379962713315ffc8c00e587884e7a5903a..8c5a0b1d34e18af4c2db34f0fe5fc5ea
      public static void bootstrap(BootstrapContext<NoiseGeneratorSettings> context) {
          context.register(OVERWORLD, overworld(context, false, false));
          context.register(LARGE_BIOMES, overworld(context, false, true));
+diff --git a/net/minecraft/world/level/levelgen/feature/BambooFeature.java b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
+index 68bb87abc8a2831d75bdfe2b77f8ba1b1b4b61c1..57c4fdc77f2502bdcf91c7ad2257ffaba1f66908 100644
+--- a/net/minecraft/world/level/levelgen/feature/BambooFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+@@ -27,6 +29,7 @@ public class BambooFeature extends Feature<ProbabilityFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<ProbabilityFeatureConfiguration> context) {
+         int i = 0;
+@@ -47,7 +50,7 @@ public class BambooFeature extends Feature<ProbabilityFeatureConfiguration> {
+                             int i5 = i3 - blockPos.getX();
+                             int i6 = i4 - blockPos.getZ();
+                             if (i5 * i5 + i6 * i6 <= i2 * i2) {
+-                                mutableBlockPos1.set(i3, worldGenLevel.getHeight(Heightmap.Types.WORLD_SURFACE, i3, i4) - 1, i4);
++                                mutableBlockPos1.set(i3, worldGenLevel.getHeight(context.heightmapSet().worldSurface(), i3, i4) - 1, i4);
+                                 if (isDirt(worldGenLevel.getBlockState(mutableBlockPos1))) {
+                                     worldGenLevel.setBlock(mutableBlockPos1, Blocks.PODZOL.defaultBlockState(), Block.UPDATE_CLIENTS);
+                                 }
+diff --git a/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java b/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
+index 75f1949f3198baf8f7b1a2df833d5d432f5bcb77..f7b6dff946c24c8084ceaa20ec22fee6d6206900 100644
+--- a/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
+@@ -2,7 +2,8 @@ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+ import it.unimi.dsi.fastutil.ints.IntArrayList;
+-import java.util.stream.IntStream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+@@ -13,15 +14,17 @@ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+ import net.minecraft.world.level.storage.loot.BuiltInLootTables;
+ 
++import java.util.stream.IntStream;
++
+ public class BonusChestFeature extends Feature<NoneFeatureConfiguration> {
+     public BonusChestFeature(Codec<NoneFeatureConfiguration> codec) {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
+         RandomSource randomSource = context.random();
+@@ -34,7 +37,7 @@ public class BonusChestFeature extends Feature<NoneFeatureConfiguration> {
+         for (Integer integer : list) {
+             for (Integer integer1 : list1) {
+                 mutableBlockPos.set(integer, 0, integer1);
+-                BlockPos heightmapPos = worldGenLevel.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, mutableBlockPos);
++                BlockPos heightmapPos = worldGenLevel.getHeightmapPos(context.heightmapSet().motionBlockingNoLeaves(), mutableBlockPos);
+                 if (worldGenLevel.isEmptyBlock(heightmapPos)
+                     || worldGenLevel.getBlockState(heightmapPos).getCollisionShape(worldGenLevel, heightmapPos).isEmpty()) {
+                     worldGenLevel.setBlock(heightmapPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
+diff --git a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
+index 0a83dcf81aedbf77ad7d7ba8ede08d8149d93978..2cb2fa8a7ea702282add2beea2a7e3b42791a050 100644
+--- a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderSet;
+@@ -21,8 +25,14 @@ public record ConfiguredFeature<FC extends FeatureConfiguration, F extends Featu
+     public static final Codec<Holder<ConfiguredFeature<?, ?>>> CODEC = RegistryFileCodec.create(Registries.CONFIGURED_FEATURE, DIRECT_CODEC);
+     public static final Codec<HolderSet<ConfiguredFeature<?, ?>>> LIST_CODEC = RegistryCodecs.homogeneousList(Registries.CONFIGURED_FEATURE, DIRECT_CODEC);
+ 
++    @Deprecated
++    @Modified(Op.COMPAT)
+     public boolean place(WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos pos) {
+-        return this.feature.place(this.config, level, chunkGenerator, random, pos);
++        return this.place(level, chunkGenerator, random, pos,  HeightmapSet.VANILLA);
++    }
++
++    public boolean place(WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
++        return this.feature.place(this.config, level, chunkGenerator, random, pos, heightmapSet);
+     }
+ 
+     public Stream<ConfiguredFeature<?, ?>> getFeatures() {
+diff --git a/net/minecraft/world/level/levelgen/feature/Feature.java b/net/minecraft/world/level/levelgen/feature/Feature.java
+index c6d7a686bcc21d041444b647deeab2acf4859194..4bbccf00e0fd5dafb8fd3d0295d750378b71a09d 100644
+--- a/net/minecraft/world/level/levelgen/feature/Feature.java
++++ b/net/minecraft/world/level/levelgen/feature/Feature.java
+@@ -5,6 +5,10 @@ import com.mojang.serialization.MapCodec;
+ import java.util.Optional;
+ import java.util.function.Function;
+ import java.util.function.Predicate;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Registry;
+@@ -188,8 +192,14 @@ public abstract class Feature<FC extends FeatureConfiguration> {
+ 
+     public abstract boolean place(FeaturePlaceContext<FC> context);
+ 
++    @Deprecated
++    @Modified(Op.COMPAT)
+     public boolean place(FC config, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin) {
+-        return level.ensureCanWrite(origin) && this.place(new FeaturePlaceContext<>(Optional.empty(), level, chunkGenerator, random, origin, config));
++        return this.place(config, level, chunkGenerator, random, origin, HeightmapSet.VANILLA);
++    }
++
++    public boolean place(FC config, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
++        return level.ensureCanWrite(origin) && this.place(new FeaturePlaceContext<>(Optional.empty(), level, chunkGenerator, random, origin, config, heightmapSet));
+     }
+ 
+     protected static boolean isStone(BlockState state) {
+diff --git a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
+index 453fb645622d7b605dc84d9adeaa24d7141c55ad..386761084d1526a8f86974193cf56f5f7adea9e2 100644
+--- a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
++++ b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
+@@ -1,6 +1,10 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import java.util.Optional;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -15,8 +19,10 @@ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+     private final BlockPos origin;
+     private final FC config;
+ 
++    private final @Modified(Op.ADD_FIELD) HeightmapSet heightmapSet;
++
+     public FeaturePlaceContext(
+-        Optional<ConfiguredFeature<?, ?>> topFeature, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin, FC config
++        Optional<ConfiguredFeature<?, ?>> topFeature, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin, FC config, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet
+     ) {
+         this.topFeature = topFeature;
+         this.level = level;
+@@ -24,6 +30,7 @@ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+         this.random = random;
+         this.origin = origin;
+         this.config = config;
++        this.heightmapSet = heightmapSet;
+     }
+ 
+     public Optional<ConfiguredFeature<?, ?>> topFeature() {
+@@ -49,4 +56,9 @@ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+     public FC config() {
+         return this.config;
+     }
++
++    @Modified(Op.ADD_METHOD)
++    public HeightmapSet heightmapSet() {
++        return this.heightmapSet;
++    }
+ }
+diff --git a/net/minecraft/world/level/levelgen/feature/FossilFeature.java b/net/minecraft/world/level/levelgen/feature/FossilFeature.java
+index ada05d365b386ee6040575e92bf48b0adaa7c0c1..afe35e0eae38bb7aef39dbe84204f9c334135184 100644
+--- a/net/minecraft/world/level/levelgen/feature/FossilFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/FossilFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Vec3i;
+ import net.minecraft.util.RandomSource;
+@@ -11,7 +13,6 @@ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.Mirror;
+ import net.minecraft.world.level.block.Rotation;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.structure.BoundingBox;
+ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+@@ -23,6 +24,7 @@ public class FossilFeature extends Feature<FossilFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<FossilFeatureConfiguration> context) {
+         RandomSource randomSource = context.random();
+@@ -50,7 +52,7 @@ public class FossilFeature extends Feature<FossilFeatureConfiguration> {
+ 
+         for (int i = 0; i < size.getX(); i++) {
+             for (int i1 = 0; i1 < size.getZ(); i1++) {
+-                y = Math.min(y, worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, blockPos1.getX() + i, blockPos1.getZ() + i1));
++                y = Math.min(y, worldGenLevel.getHeight(context.heightmapSet().oceanFloorWg(), blockPos1.getX() + i, blockPos1.getZ() + i1));
+             }
+         }
+ 
+diff --git a/net/minecraft/world/level/levelgen/feature/KelpFeature.java b/net/minecraft/world/level/levelgen/feature/KelpFeature.java
+index ec8b423ce631129e98b50fdaf55ea8cdee02a11f..48dbea0f0fb436a520655eb54d839c0a8dff6300 100644
+--- a/net/minecraft/world/level/levelgen/feature/KelpFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/KelpFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -8,7 +10,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.KelpBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+ 
+ public class KelpFeature extends Feature<NoneFeatureConfiguration> {
+@@ -16,13 +17,14 @@ public class KelpFeature extends Feature<NoneFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
+         int i = 0;
+         WorldGenLevel worldGenLevel = context.level();
+         BlockPos blockPos = context.origin();
+         RandomSource randomSource = context.random();
+-        int height = worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR, blockPos.getX(), blockPos.getZ());
++        int height = worldGenLevel.getHeight(context.heightmapSet().oceanFloor(), blockPos.getX(), blockPos.getZ());
+         BlockPos blockPos1 = new BlockPos(blockPos.getX(), height, blockPos.getZ());
+         if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER)) {
+             BlockState blockState = Blocks.KELP.defaultBlockState();
+diff --git a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
+index dcae4d6f2f8bbc4c9898c35b49576a2e25e26efc..8579450b208f0df343c347a00d181023664ab66e 100644
+--- a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+ import java.util.Optional;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+@@ -23,6 +27,7 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<LargeDripstoneConfiguration> context) {
+         WorldGenLevel worldGenLevel = context.level();
+@@ -73,11 +78,11 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+                     boolean flag = largeDripstone.moveBackUntilBaseIsInsideStoneAndShrinkRadiusIfNecessary(worldGenLevel, windOffsetter);
+                     boolean flag1 = largeDripstone1.moveBackUntilBaseIsInsideStoneAndShrinkRadiusIfNecessary(worldGenLevel, windOffsetter);
+                     if (flag) {
+-                        largeDripstone.placeBlocks(worldGenLevel, randomSource, windOffsetter);
++                        largeDripstone.placeBlocks(worldGenLevel, randomSource, windOffsetter, context.heightmapSet());
+                     }
+ 
+                     if (flag1) {
+-                        largeDripstone1.placeBlocks(worldGenLevel, randomSource, windOffsetter);
++                        largeDripstone1.placeBlocks(worldGenLevel, randomSource, windOffsetter, context.heightmapSet());
+                     }
+ 
+                     if (SharedConstants.DEBUG_LARGE_DRIPSTONE) {
+@@ -168,7 +173,7 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+             return (int)DripstoneUtils.getDripstoneHeight(radius, this.radius, this.scale, this.bluntness);
+         }
+ 
+-        void placeBlocks(WorldGenLevel level, RandomSource random, LargeDripstoneFeature.WindOffsetter windOffsetter) {
++        void placeBlocks(WorldGenLevel level, RandomSource random, LargeDripstoneFeature.WindOffsetter windOffsetter, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+             for (int i = -this.radius; i <= this.radius; i++) {
+                 for (int i1 = -this.radius; i1 <= this.radius; i1++) {
+                     float squareRoot = Mth.sqrt(i * i + i1 * i1);
+@@ -182,7 +187,7 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+                             BlockPos.MutableBlockPos mutableBlockPos = this.root.offset(i, 0, i1).mutable();
+                             boolean flag = false;
+                             int i2 = this.pointingUp
+-                                ? level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, mutableBlockPos.getX(), mutableBlockPos.getZ())
++                                ? level.getHeight(heightmapSet.worldSurfaceWg(), mutableBlockPos.getX(), mutableBlockPos.getZ())
+                                 : Integer.MAX_VALUE;
+ 
+                             for (int i3 = 0; i3 < heightAtRadius && mutableBlockPos.getY() < i2; i3++) {
+diff --git a/net/minecraft/world/level/levelgen/feature/OreFeature.java b/net/minecraft/world/level/levelgen/feature/OreFeature.java
+index c7b46efd4f08067e2c9c5c8b0e8b71a94a79823d..4279d3dfe915fb455c23d1396eb68573b6c69569 100644
+--- a/net/minecraft/world/level/levelgen/feature/OreFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/OreFeature.java
+@@ -1,8 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+-import java.util.BitSet;
+-import java.util.function.Function;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.util.Mth;
+@@ -11,14 +11,17 @@ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.chunk.BulkSectionAccess;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
+ 
++import java.util.BitSet;
++import java.util.function.Function;
++
+ public class OreFeature extends Feature<OreConfiguration> {
+     public OreFeature(Codec<OreConfiguration> codec) {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<OreConfiguration> context) {
+         RandomSource randomSource = context.random();
+@@ -43,7 +46,7 @@ public class OreFeature extends Feature<OreConfiguration> {
+ 
+         for (int i6 = i1; i6 <= i1 + i4; i6++) {
+             for (int i7 = i3; i7 <= i3 + i4; i7++) {
+-                if (i2 <= worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, i6, i7)) {
++                if (i2 <= worldGenLevel.getHeight(context.heightmapSet().oceanFloorWg(), i6, i7)) {
+                     return this.doPlace(worldGenLevel, randomSource, oreConfiguration, d, d1, d2, d3, d4, d5, i1, i2, i3, i4, i5);
+                 }
+             }
+diff --git a/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java b/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java
+index f48994224bb944388751e9cadffd8f822ad4da4f..8055e992d4534d84863b79f119790d2ffaf552f5 100644
+--- a/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java
+@@ -8,7 +8,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.SeaPickleBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.CountConfiguration;
+ 
+ public class SeaPickleFeature extends Feature<CountConfiguration> {
+@@ -27,7 +26,7 @@ public class SeaPickleFeature extends Feature<CountConfiguration> {
+         for (int i2 = 0; i2 < i1; i2++) {
+             int i3 = randomSource.nextInt(8) - randomSource.nextInt(8);
+             int i4 = randomSource.nextInt(8) - randomSource.nextInt(8);
+-            int height = worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR, blockPos.getX() + i3, blockPos.getZ() + i4);
++            int height = worldGenLevel.getHeight(context.heightmapSet().oceanFloor(), blockPos.getX() + i3, blockPos.getZ() + i4);
+             BlockPos blockPos1 = new BlockPos(blockPos.getX() + i3, height, blockPos.getZ() + i4);
+             BlockState blockState = Blocks.SEA_PICKLE.defaultBlockState().setValue(SeaPickleBlock.PICKLES, randomSource.nextInt(4) + 1);
+             if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER) && blockState.canSurvive(worldGenLevel, blockPos1)) {
+diff --git a/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java b/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
+index 4c6382f25afbf025cc37c3a9d21faea36b357216..26a182f5be968ff9fdcc5ef8537045dc36dce669 100644
+--- a/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -9,7 +11,6 @@ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.TallSeagrassBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.ProbabilityFeatureConfiguration;
+ 
+ public class SeagrassFeature extends Feature<ProbabilityFeatureConfiguration> {
+@@ -17,6 +18,7 @@ public class SeagrassFeature extends Feature<ProbabilityFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<ProbabilityFeatureConfiguration> context) {
+         boolean flag = false;
+@@ -26,7 +28,7 @@ public class SeagrassFeature extends Feature<ProbabilityFeatureConfiguration> {
+         ProbabilityFeatureConfiguration probabilityFeatureConfiguration = context.config();
+         int i = randomSource.nextInt(8) - randomSource.nextInt(8);
+         int i1 = randomSource.nextInt(8) - randomSource.nextInt(8);
+-        int height = worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR, blockPos.getX() + i, blockPos.getZ() + i1);
++        int height = worldGenLevel.getHeight(context.heightmapSet().oceanFloor(), blockPos.getX() + i, blockPos.getZ() + i1);
+         BlockPos blockPos1 = new BlockPos(blockPos.getX() + i, height, blockPos.getZ() + i1);
+         if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER)) {
+             boolean flag1 = randomSource.nextDouble() < probabilityFeatureConfiguration.probability;
+diff --git a/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java b/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
+index 67f2ffa22e4b45cc295e544c5fc38828c638a896..c4ed81de83e7f69c68f60be20cd7ea3a0babf7f9 100644
+--- a/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -9,7 +11,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.SnowyDirtBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+ 
+ public class SnowAndFreezeFeature extends Feature<NoneFeatureConfiguration> {
+@@ -17,6 +18,7 @@ public class SnowAndFreezeFeature extends Feature<NoneFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE)
+     @Override
+     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
+         WorldGenLevel worldGenLevel = context.level();
+@@ -28,7 +30,7 @@ public class SnowAndFreezeFeature extends Feature<NoneFeatureConfiguration> {
+             for (int i1 = 0; i1 < 16; i1++) {
+                 int i2 = blockPos.getX() + i;
+                 int i3 = blockPos.getZ() + i1;
+-                int height = worldGenLevel.getHeight(Heightmap.Types.MOTION_BLOCKING, i2, i3);
++                int height = worldGenLevel.getHeight(context.heightmapSet().motionBlocking(), i2, i3);
+                 mutableBlockPos.set(i2, height, i3);
+                 mutableBlockPos1.set(mutableBlockPos).move(Direction.DOWN, 1);
+                 Biome biome = worldGenLevel.getBiome(mutableBlockPos).value();
+diff --git a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
+index 06721d146ad96fa95645b8fe5eef58171b2bef33..fa2c082ec48ee97126b48ac9c140e9f4eb4bc481 100644
+--- a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
+@@ -3,13 +3,16 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import java.util.stream.Stream;
+ import java.util.stream.Stream.Builder;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.valueproviders.ConstantInt;
+ import net.minecraft.util.valueproviders.IntProvider;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ 
+ @Deprecated
+ public class CountOnEveryLayerPlacement extends PlacementModifier {
+@@ -31,7 +34,7 @@ public class CountOnEveryLayerPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         Builder<BlockPos> builder = Stream.builder();
+         int i = 0;
+ 
+@@ -42,7 +45,7 @@ public class CountOnEveryLayerPlacement extends PlacementModifier {
+             for (int i1 = 0; i1 < this.count.sample(random); i1++) {
+                 int i2 = random.nextInt(16) + pos.getX();
+                 int i3 = random.nextInt(16) + pos.getZ();
+-                int height = context.getHeight(Heightmap.Types.MOTION_BLOCKING, i2, i3);
++                int height = context.getHeight(heightmapSet.motionBlocking(), i2, i3);
+                 int i4 = findOnGroundYPosition(context, i2, height, i3, i);
+                 if (i4 != Integer.MAX_VALUE) {
+                     builder.add(new BlockPos(i2, i4, i3));
+diff --git a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
+index 5d6053cbd6d07d2a1eaf2acc1d8d42607459b9f0..4627327adb204d0bf1f9eac15cd11b868512235c 100644
+--- a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
+@@ -4,6 +4,10 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+@@ -45,7 +49,7 @@ public class EnvironmentScanPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         BlockPos.MutableBlockPos mutableBlockPos = pos.mutable();
+         WorldGenLevel level = context.getLevel();
+         if (!this.allowedSearchCondition.test(level, mutableBlockPos)) {
+diff --git a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
+index 0d8730c75c7c037ab5b48fa198c4dc51b2c33d2c..b4f2f23bf25a73c576867d4e2aa930704512ad36 100644
+--- a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
+@@ -4,6 +4,10 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.List;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.util.RandomSource;
+@@ -24,7 +28,7 @@ public class FixedPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         int sectionPosX = SectionPos.blockToSectionCoord(pos.getX());
+         int sectionPosZ = SectionPos.blockToSectionCoord(pos.getZ());
+         boolean flag = false;
+diff --git a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
+index cfc010a3904218ec1cb1652097b0024852a02b54..a78f8ff7f0d2b0eaddcf992bcfd266350b8d2be9 100644
+--- a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
+@@ -3,6 +3,10 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.VerticalAnchor;
+@@ -33,7 +37,7 @@ public class HeightRangePlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         return Stream.of(pos.atY(this.height.sample(random, context)));
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
+index 437b650fdc21faa1b76c41e94d3d98c00d0a2881..db494fcbfdbd2dc7f4aa73bc6b55033ee37b16c9 100644
+--- a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
+@@ -3,6 +3,10 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.Heightmap;
+@@ -23,10 +27,10 @@ public class HeightmapPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         int x = pos.getX();
+         int z = pos.getZ();
+-        int height = context.getHeight(this.heightmap, x, z);
++        int height = context.getHeight(heightmapSet.getOrElse(this.heightmap), x, z);
+         return height > context.getMinY() ? Stream.of(new BlockPos(x, height, z)) : Stream.of();
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
+index cd4bae645f4ee20f8d58e707784ca027b35ddae2..27b8f1902171f6fee119607b167415922198ae44 100644
+--- a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
+@@ -14,7 +18,7 @@ public class InSquarePlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         int i = random.nextInt(16) + pos.getX();
+         int i1 = random.nextInt(16) + pos.getZ();
+         return Stream.of(new BlockPos(i, pos.getY(), i1));
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
+index a58d0245899fdb95a91c402f291311a30c40faf2..a8d26487df04a37b12bc2d936c2f9d50e273569b 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
+@@ -5,6 +5,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.List;
+ import java.util.Optional;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+@@ -34,25 +38,31 @@ public record PlacedFeature(Holder<ConfiguredFeature<?, ?>> feature, List<Placem
+         )
+         .listOf();
+ 
++    @Deprecated
++    @Modified(Op.COMPAT)
+     public boolean place(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos) {
+-        return this.placeWithContext(new PlacementContext(level, generator, Optional.empty()), random, pos);
++        return this.place(level, generator, random, pos, HeightmapSet.VANILLA);
++    }
++
++    public boolean place(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
++        return this.placeWithContext(new PlacementContext(level, generator, Optional.empty()), random, pos, heightmapSet);
+     }
+ 
+-    public boolean placeWithBiomeCheck(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos) {
+-        return this.placeWithContext(new PlacementContext(level, generator, Optional.of(this)), random, pos);
++    public boolean placeWithBiomeCheck(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
++        return this.placeWithContext(new PlacementContext(level, generator, Optional.of(this)), random, pos, heightmapSet);
+     }
+ 
+-    private boolean placeWithContext(PlacementContext context, RandomSource source, BlockPos pos) {
++    private boolean placeWithContext(PlacementContext context, RandomSource source, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         Stream<BlockPos> stream = Stream.of(pos);
+ 
+         for (PlacementModifier placementModifier : this.placement) {
+-            stream = stream.flatMap(blockPos -> placementModifier.getPositions(context, source, blockPos));
++            stream = stream.flatMap(blockPos -> placementModifier.getPositions(context, source, blockPos, heightmapSet));
+         }
+ 
+         ConfiguredFeature<?, ?> configuredFeature = this.feature.value();
+         MutableBoolean mutableBoolean = new MutableBoolean();
+         stream.forEach(blockPos -> {
+-            if (configuredFeature.place(context.getLevel(), context.generator(), source, blockPos)) {
++            if (configuredFeature.place(context.getLevel(), context.generator(), source, blockPos, heightmapSet)) {
+                 mutableBoolean.setTrue();
+                 if (SharedConstants.DEBUG_FEATURE_COUNT) {
+                     FeatureCountTracker.featurePlaced(context.getLevel().getLevel(), configuredFeature, context.topFeature());
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
+index c894f0f63c0c6f55f0c4ac1d84336138b0505109..6f96d374ed1bf2bb74315ebf7fb9d29bfa9720b4 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
+@@ -1,12 +1,16 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
+ public abstract class PlacementFilter extends PlacementModifier {
+     @Override
+-    public final Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public final Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         return this.shouldPlace(context, random, pos) ? Stream.of(pos) : Stream.of();
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
+index 39154c291bc3a4ec7a163f210aa6d4e53230d297..8bd747a9274bec5de3c6f9278cc1e35b0711a481 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.Codec;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.util.RandomSource;
+@@ -11,7 +15,7 @@ public abstract class PlacementModifier {
+         .byNameCodec()
+         .dispatch(PlacementModifier::type, PlacementModifierType::codec);
+ 
+-    public abstract Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos);
++    public abstract Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet);
+ 
+     public abstract PlacementModifierType<?> type();
+ }
+diff --git a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
+index 0cb949acf53802cf64923e6ce56977a861a6892b..66ed3d602c568f4fc19fc49ec4cec614fe2c6b68 100644
+--- a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
+@@ -3,6 +3,10 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.valueproviders.ConstantInt;
+@@ -37,7 +41,7 @@ public class RandomOffsetPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         int i = pos.getX() + this.xzSpread.sample(random);
+         int i1 = pos.getY() + this.ySpread.sample(random);
+         int i2 = pos.getZ() + this.xzSpread.sample(random);
+diff --git a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
+index 0098f5951611ebb8d518d1832cb4a8e69e98c2d8..c4bd11625340f7cb0f84403af6bf14f7d7e31c2c 100644
+--- a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import java.util.stream.IntStream;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.HeightmapSet;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
+@@ -9,7 +13,7 @@ public abstract class RepeatingPlacement extends PlacementModifier {
+     protected abstract int count(RandomSource random, BlockPos pos);
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightmapSet heightmapSet) {
+         return IntStream.range(0, this.count(random, pos)).mapToObj(i -> pos);
+     }
+ }

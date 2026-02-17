@@ -1,15 +1,11 @@
 package net.azisaba.aetheria.world;
 
 import com.mojang.serialization.MapCodec;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderGetter;
-import net.minecraft.core.Registry;
+import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.world.level.LevelHeightAccessor;
-import net.minecraft.world.level.NoiseColumn;
-import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.*;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.block.Blocks;
@@ -113,6 +109,15 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
     }
 
     @Override
+    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
+        for (final AetheriaLayer.Type layerType : this.layout) {
+            final ChunkGenerator layerGenerator = layerType.generator();
+            final HeightmapSet heightmapSet = layerType.heightmapSet();
+            layerGenerator.applyBiomeDecoration(level, chunk, structureManager, true, heightmapSet);
+        }
+    }
+
+    @Override
     public void buildSurface(final WorldGenRegion region, final StructureManager structureManager, final RandomState random, final ChunkAccess chunk) {
         final Registry<Biome> biomes = region.registryAccess().lookupOrThrow(Registries.BIOME);
         final Registry<NormalNoise.NoiseParameters> noiseParameters = region.registryAccess().lookupOrThrow(Registries.NOISE);
@@ -170,6 +175,44 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
             }
             return chunk;
         });
+    }
+
+    @Override
+    public CompletableFuture<ChunkAccess> createBiomes(RandomState randomState, Blender blender, StructureManager structureManager, ChunkAccess chunk) {
+        return CompletableFuture.supplyAsync(() -> {
+            final ChunkPos pos = chunk.getPos();
+            final int quartMinX = QuartPos.fromBlock(pos.getMinBlockX());
+            final int quartMinY = QuartPos.fromBlock(chunk.getMinY());
+            final int quartMinZ = QuartPos.fromBlock(pos.getMinBlockZ());
+            final int quartHeight = QuartPos.fromBlock(chunk.getHeight());
+
+            for (int qx = 0; qx < 4; qx++) {
+                for (int qz = 0; qz < 4; qz++) {
+                    final int quartX = quartMinX + qx;
+                    final int quartZ = quartMinZ + qz;
+                    for (int qyOffset = 0; qyOffset < quartHeight; qyOffset++) {
+                        final int quartY = quartMinY + qyOffset;
+                        final int blockY = QuartPos.toBlock(quartY);
+
+                        final AetheriaLayer.Type layerType = this.layout.getLayerTypeAt(blockY);
+                        if (layerType == null) {
+                            continue;
+                        }
+
+                        final int layerY = this.layout.toLayerY(layerType, blockY);
+                        final int layerQuartY = QuartPos.fromBlock(layerY);
+                        final RandomState layerRandomState = Objects.requireNonNullElse(
+                                this.randomStateSource.getOrCreate(structureManager.level.getMinecraftWorld().getSeed(), layerType, structureManager.registryAccess().lookupOrThrow(Registries.NOISE)),
+                                randomState
+                        );
+                        final Holder<Biome> biome = layerType.generator().getBiomeSource().getNoiseBiome(quartX, layerQuartY, quartZ, layerRandomState.sampler());
+                        chunk.setBiome(quartX, quartY, quartZ, biome);
+                    }
+                }
+            }
+
+            return chunk;
+        }, Runnable::run);
     }
 
     @Override
