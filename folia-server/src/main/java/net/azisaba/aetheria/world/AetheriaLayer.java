@@ -1,6 +1,8 @@
 package net.azisaba.aetheria.world;
 
+import net.azisaba.aetheria.AetheriaBiomes;
 import net.azisaba.aetheria.world.height.HeightmapSet;
+import net.azisaba.aetheria.world.noise.AetheriaNoiseGeneratorSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -119,14 +121,11 @@ public class AetheriaLayer extends ProtoChunk {
             ChunkGenerator generator
     ) {
         public static AetheriaLayer.Type overworld(final RegistryOps.RegistryInfoLookup lookup) {
-            final Holder.Reference<MultiNoiseBiomeSourceParameterList> parameterList = lookup.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
+            final Holder<MultiNoiseBiomeSourceParameterList> parameterList = lookup.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                     .orElseThrow()
                     .getter()
                     .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD);
-            final Holder.Reference<NoiseGeneratorSettings> noiseGeneratorSettings = lookup.lookup(Registries.NOISE_SETTINGS)
-                    .orElseThrow()
-                    .getter()
-                    .getOrThrow(NoiseGeneratorSettings.OVERWORLD);
+            final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(AetheriaNoiseGeneratorSettings.overworld(lookup));
             return new AetheriaLayer.Type(
                     DimensionDefaults.OVERWORLD_GENERATION_HEIGHT,
                     HeightmapSet.AETHERIA_OVERWORLD,
@@ -135,14 +134,11 @@ public class AetheriaLayer extends ProtoChunk {
         }
 
         public static AetheriaLayer.Type nether(final RegistryOps.RegistryInfoLookup lookup) {
-            final Holder.Reference<MultiNoiseBiomeSourceParameterList> parameterList = lookup.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
+            final Holder<MultiNoiseBiomeSourceParameterList> parameterList = lookup.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                     .orElseThrow()
                     .getter()
                     .getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER);
-            final Holder.Reference<NoiseGeneratorSettings> noiseGeneratorSettings = lookup.lookup(Registries.NOISE_SETTINGS)
-                    .orElseThrow()
-                    .getter()
-                    .getOrThrow(NoiseGeneratorSettings.NETHER);
+            final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(AetheriaNoiseGeneratorSettings.nether(lookup));
             return new AetheriaLayer.Type(
                     DimensionDefaults.NETHER_GENERATION_HEIGHT,
                     HeightmapSet.AETHERIA_NETHER,
@@ -161,7 +157,16 @@ public class AetheriaLayer extends ProtoChunk {
             return new AetheriaLayer.Type(
                     DimensionDefaults.END_GENERATION_HEIGHT,
                     HeightmapSet.AETHERIA_END,
-                    new NoiseBasedChunkGenerator(TheEndBiomeSource.create(biomes), noiseGeneratorSettings)
+                    new NoiseBasedChunkGenerator(
+                            new TheEndBiomeSource(
+                                    biomes.getOrThrow(AetheriaBiomes.THE_END),
+                                    biomes.getOrThrow(AetheriaBiomes.END_HIGHLANDS),
+                                    biomes.getOrThrow(AetheriaBiomes.END_MIDLANDS),
+                                    biomes.getOrThrow(AetheriaBiomes.SMALL_END_ISLANDS),
+                                    biomes.getOrThrow(AetheriaBiomes.END_BARRENS)
+                            ),
+                            noiseGeneratorSettings
+                    )
             );
         }
 

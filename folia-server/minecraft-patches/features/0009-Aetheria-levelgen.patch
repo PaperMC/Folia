@@ -4,6 +4,71 @@ Date: Tue, 17 Feb 2026 13:06:34 +0900
 Subject: [PATCH] Aetheria levelgen
 
 
+diff --git a/net/minecraft/data/worldgen/SurfaceRuleData.java b/net/minecraft/data/worldgen/SurfaceRuleData.java
+index 250db80854d0725097d2e709e58f67f36f53a462..a0eb01f7da92523e11d29eb8c64721207da44549 100644
+--- a/net/minecraft/data/worldgen/SurfaceRuleData.java
++++ b/net/minecraft/data/worldgen/SurfaceRuleData.java
+@@ -2,6 +2,8 @@ package net.minecraft.data.worldgen;
+ 
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableList.Builder;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.world.level.biome.Biomes;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+@@ -9,6 +11,9 @@ import net.minecraft.world.level.levelgen.Noises;
+ import net.minecraft.world.level.levelgen.SurfaceRules;
+ import net.minecraft.world.level.levelgen.VerticalAnchor;
+ 
++import java.util.ArrayList;
++import java.util.List;
++
+ public class SurfaceRuleData {
+     private static final SurfaceRules.RuleSource AIR = makeStateRule(Blocks.AIR);
+     private static final SurfaceRules.RuleSource BEDROCK = makeStateRule(Blocks.BEDROCK);
+@@ -283,7 +288,12 @@ public class SurfaceRuleData {
+         return SurfaceRules.sequence(builder.build().toArray(SurfaceRules.RuleSource[]::new));
+     }
+ 
++    @Modified(Op.COMPAT)
+     public static SurfaceRules.RuleSource nether() {
++        return SurfaceRuleData.nether(true, true);
++    }
++
++    public static SurfaceRules.RuleSource nether(@Modified(Op.ADD_ARGUMENT) boolean bedrockRoof, @Modified(Op.ADD_ARGUMENT) boolean bedrockFloor) {
+         SurfaceRules.ConditionSource conditionSource = SurfaceRules.yBlockCheck(VerticalAnchor.absolute(31), 0);
+         SurfaceRules.ConditionSource conditionSource1 = SurfaceRules.yBlockCheck(VerticalAnchor.absolute(32), 0);
+         SurfaceRules.ConditionSource conditionSource2 = SurfaceRules.yStartCheck(VerticalAnchor.absolute(30), 0);
+@@ -299,9 +309,7 @@ public class SurfaceRuleData {
+         SurfaceRules.RuleSource ruleSource = SurfaceRules.ifTrue(
+             conditionSource8, SurfaceRules.ifTrue(conditionSource2, SurfaceRules.ifTrue(conditionSource3, GRAVEL))
+         );
+-        return SurfaceRules.sequence(
+-            SurfaceRules.ifTrue(SurfaceRules.verticalGradient("bedrock_floor", VerticalAnchor.bottom(), VerticalAnchor.aboveBottom(5)), BEDROCK),
+-            SurfaceRules.ifTrue(SurfaceRules.not(SurfaceRules.verticalGradient("bedrock_roof", VerticalAnchor.belowTop(5), VerticalAnchor.top())), BEDROCK),
++        List<SurfaceRules.RuleSource> rules = new ArrayList<>(List.of(
+             SurfaceRules.ifTrue(conditionSource4, NETHERRACK),
+             SurfaceRules.ifTrue(
+                 SurfaceRules.isBiome(Biomes.BASALT_DELTAS),
+@@ -376,7 +384,16 @@ public class SurfaceRuleData {
+                 )
+             ),
+             NETHERRACK
+-        );
++        ));
++
++        if (bedrockFloor) {
++            rules.add(SurfaceRules.ifTrue(SurfaceRules.verticalGradient("bedrock_floor", VerticalAnchor.bottom(), VerticalAnchor.aboveBottom(5)), BEDROCK));
++        }
++        if (bedrockRoof) {
++            rules.add(SurfaceRules.ifTrue(SurfaceRules.not(SurfaceRules.verticalGradient("bedrock_roof", VerticalAnchor.belowTop(5), VerticalAnchor.top())), BEDROCK));
++        }
++
++        return SurfaceRules.sequence(rules.toArray(new SurfaceRules.RuleSource[0]));
+     }
+ 
+     public static SurfaceRules.RuleSource end() {
 diff --git a/net/minecraft/resources/Identifier.java b/net/minecraft/resources/Identifier.java
 index ae6219185aa00a2753b0986ecf5f8456f4c2515d..b568d7ed2ce59f4fb5145ece5a0aa3b8ed1ea89c 100644
 --- a/net/minecraft/resources/Identifier.java
@@ -22,20 +87,31 @@ index ae6219185aa00a2753b0986ecf5f8456f4c2515d..b568d7ed2ce59f4fb5145ece5a0aa3b8
          return tryBySeparator(location, ':');
      }
 diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
-index 2211cd81bf986e0dda97841e39bed23bedb38914..6dd7b21710912b006e98a7da0e474d9c02f1d370 100644
+index 2211cd81bf986e0dda97841e39bed23bedb38914..e322780582c752dabd92ac0a057b90f4b0439c75 100644
 --- a/net/minecraft/resources/RegistryDataLoader.java
 +++ b/net/minecraft/resources/RegistryDataLoader.java
-@@ -21,6 +21,9 @@ import java.util.Map.Entry;
+@@ -21,6 +21,12 @@ import java.util.Map.Entry;
  import java.util.function.BiConsumer;
  import java.util.function.Function;
  import java.util.stream.Collectors;
 +
++import net.azisaba.aetheria.AetheriaBiomes;
 +import net.azisaba.aetheria.AetheriaDimensionTypes;
 +import net.azisaba.aetheria.AetheriaLevelStems;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
-@@ -186,6 +189,17 @@ public class RegistryDataLoader {
+@@ -175,6 +181,7 @@ public class RegistryDataLoader {
+         return load((loader, infoLookup) -> loader.loadFromNetwork(elements, resourceProvider, infoLookup), registryLookups, registryData);
+     }
+ 
++    @Modified(Op.CHANGE)
+     private static RegistryAccess.Frozen load(
+         RegistryDataLoader.LoadingFunction loadingFunction,
+         List<HolderLookup.RegistryLookup<?>> registryLookups,
+@@ -186,6 +193,19 @@ public class RegistryDataLoader {
              .collect(Collectors.toUnmodifiableList());
          RegistryOps.RegistryInfoLookup registryInfoLookup = createContext(registryLookups, list);
          list.forEach(loader -> loadingFunction.apply((RegistryDataLoader.Loader<?>)loader, registryInfoLookup));
@@ -43,7 +119,9 @@ index 2211cd81bf986e0dda97841e39bed23bedb38914..6dd7b21710912b006e98a7da0e474d9c
 +        list.forEach(loader -> {
 +            final WritableRegistry<?> registry = loader.registry();
 +
-+            if  (registry.key().equals(Registries.DIMENSION_TYPE)) {
++            if (registry.key().equals(Registries.BIOME)) {
++                AetheriaBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
 +                AetheriaDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
 +            } else if (registry.key().equals(Registries.LEVEL_STEM)) {
 +                AetheriaLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
@@ -83,6 +161,30 @@ index 73962e79a0f3d892e3155443a1b84508b0f4042e..87af3d53161115ab29c6801be75db74d
      public Holder<Biome> getBiome(BlockPos pos) {
          int i = pos.getX() - 2;
          int i1 = pos.getY() - 2;
+diff --git a/net/minecraft/world/level/biome/TheEndBiomeSource.java b/net/minecraft/world/level/biome/TheEndBiomeSource.java
+index cf3172be76fa4c7987ed569138439ff42f92fa7f..b65ad4d9937a24e5a3c1cf9b7a8a28dfa9575c15 100644
+--- a/net/minecraft/world/level/biome/TheEndBiomeSource.java
++++ b/net/minecraft/world/level/biome/TheEndBiomeSource.java
+@@ -3,6 +3,9 @@ package net.minecraft.world.level.biome;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderGetter;
+ import net.minecraft.core.QuartPos;
+@@ -37,7 +40,8 @@ public class TheEndBiomeSource extends BiomeSource {
+         );
+     }
+ 
+-    private TheEndBiomeSource(Holder<Biome> end, Holder<Biome> highlands, Holder<Biome> midlands, Holder<Biome> islands, Holder<Biome> barrens) {
++    @Modified(Op.MAKE_PUBLIC)
++    public TheEndBiomeSource(Holder<Biome> end, Holder<Biome> highlands, Holder<Biome> midlands, Holder<Biome> islands, Holder<Biome> barrens) {
+         this.end = end;
+         this.highlands = highlands;
+         this.midlands = midlands;
 diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
 index d57b3ed1c53d2818caf420004296297f006f36d7..0c7664d3903d2e2d7637618f8e33a1c685951152 100644
 --- a/net/minecraft/world/level/chunk/ChunkGenerator.java
@@ -293,6 +395,67 @@ index 6745fd379962713315ffc8c00e587884e7a5903a..8c5a0b1d34e18af4c2db34f0fe5fc5ea
      public static void bootstrap(BootstrapContext<NoiseGeneratorSettings> context) {
          context.register(OVERWORLD, overworld(context, false, false));
          context.register(LARGE_BIOMES, overworld(context, false, true));
+diff --git a/net/minecraft/world/level/levelgen/NoiseRouterData.java b/net/minecraft/world/level/levelgen/NoiseRouterData.java
+index f1c6baf935d53775fa26e6083323983674c2c3b5..9e7e42402ea035881961b792073abaa8f20312b8 100644
+--- a/net/minecraft/world/level/levelgen/NoiseRouterData.java
++++ b/net/minecraft/world/level/levelgen/NoiseRouterData.java
+@@ -1,6 +1,9 @@
+ package net.minecraft.world.level.levelgen;
+ 
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderGetter;
+ import net.minecraft.core.registries.Registries;
+@@ -324,7 +327,8 @@ public class NoiseRouterData {
+         return DensityFunctions.add(DensityFunctions.mul(function, DensityFunctions.constant(d)), DensityFunctions.constant(d1));
+     }
+ 
+-    protected static NoiseRouter overworld(
++    @Modified(Op.MAKE_PUBLIC)
++    public static NoiseRouter overworld(
+         HolderGetter<DensityFunction> densityFunctionRegistry, HolderGetter<NormalNoise.NoiseParameters> noiseParameters, boolean large, boolean amplified
+     ) {
+         DensityFunction densityFunction = DensityFunctions.noise(noiseParameters.getOrThrow(Noises.AQUIFER_BARRIER), 0.5);
+@@ -428,7 +432,8 @@ public class NoiseRouterData {
+         return slide(densityFunction, minY, height, 72, -184, -23.4375, 4, 32, -0.234375);
+     }
+ 
+-    protected static NoiseRouter nether(HolderGetter<DensityFunction> densityFunctions, HolderGetter<NormalNoise.NoiseParameters> noiseParameters) {
++    @Modified(Op.MAKE_PUBLIC)
++    public static NoiseRouter nether(HolderGetter<DensityFunction> densityFunctions, HolderGetter<NormalNoise.NoiseParameters> noiseParameters) {
+         return noNewCaves(densityFunctions, noiseParameters, slideNetherLike(densityFunctions, 0, 128));
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/NoiseSettings.java b/net/minecraft/world/level/levelgen/NoiseSettings.java
+index 4cf3a364595ba5f81f741295695cb9a449bdf672..69712479cfe3ae262bbaf75b84792b8ee189cca9 100644
+--- a/net/minecraft/world/level/levelgen/NoiseSettings.java
++++ b/net/minecraft/world/level/levelgen/NoiseSettings.java
+@@ -4,6 +4,9 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.DataResult;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.function.Function;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.QuartPos;
+ import net.minecraft.world.level.LevelHeightAccessor;
+ import net.minecraft.world.level.dimension.DimensionType;
+@@ -19,8 +22,10 @@ public record NoiseSettings(int minY, int height, int noiseSizeHorizontal, int n
+                 .apply(instance, NoiseSettings::new)
+         )
+         .comapFlatMap(NoiseSettings::guardY, Function.identity());
+-    protected static final NoiseSettings OVERWORLD_NOISE_SETTINGS = create(-64, 384, 1, 2);
+-    protected static final NoiseSettings NETHER_NOISE_SETTINGS = create(0, 128, 1, 2);
++    @Modified(Op.MAKE_PUBLIC)
++    public static final NoiseSettings OVERWORLD_NOISE_SETTINGS = create(-64, 384, 1, 2);
++    @Modified(Op.MAKE_PUBLIC)
++    public static final NoiseSettings NETHER_NOISE_SETTINGS = create(0, 128, 1, 2);
+     protected static final NoiseSettings END_NOISE_SETTINGS = create(0, 128, 2, 1);
+     protected static final NoiseSettings CAVES_NOISE_SETTINGS = create(-64, 192, 1, 2);
+     protected static final NoiseSettings FLOATING_ISLANDS_NOISE_SETTINGS = create(0, 256, 2, 1);
 diff --git a/net/minecraft/world/level/levelgen/feature/BambooFeature.java b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
 index 68bb87abc8a2831d75bdfe2b77f8ba1b1b4b61c1..47e539bca47dac5e3b6863d4926f5815005660f0 100644
 --- a/net/minecraft/world/level/levelgen/feature/BambooFeature.java

@@ -23,14 +23,14 @@ public final class AetheriaDimensionTypes {
     public static final ResourceKey<DimensionType> AETHERIA = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.withAetheriaNamespace("aetheria"));
 
     public static void bootstrap(final WritableRegistry<DimensionType> writable, final RegistryOps.RegistryInfoLookup lookup) {
-        final HolderGetter<Timeline> holderGetter = lookup.lookup(Registries.TIMELINE)
+        final HolderGetter<Timeline> timelines = lookup.lookup(Registries.TIMELINE)
                 .orElseThrow()
                 .getter();
         final EnvironmentAttributeMap environmentAttributeMap = EnvironmentAttributeMap.builder()
                 .set(EnvironmentAttributes.FOG_COLOR, -4138753)
                 .set(EnvironmentAttributes.SKY_COLOR, OverworldBiomes.calculateSkyColor(0.8F))
-                .set(EnvironmentAttributes.CLOUD_COLOR, ARGB.white(0.2F))
-                .set(EnvironmentAttributes.CLOUD_HEIGHT, 192.33F)
+                .set(EnvironmentAttributes.CLOUD_COLOR, ARGB.white(0.8F))
+                .set(EnvironmentAttributes.CLOUD_HEIGHT, 122.33F)
                 .set(EnvironmentAttributes.BACKGROUND_MUSIC, BackgroundMusic.OVERWORLD)
                 .set(EnvironmentAttributes.BED_RULE, BedRule.CAN_SLEEP_WHEN_DARK)
                 .set(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, false)
@@ -53,7 +53,7 @@ public final class AetheriaDimensionTypes {
                         DimensionType.Skybox.OVERWORLD,
                         DimensionType.CardinalLightType.DEFAULT,
                         environmentAttributeMap,
-                        holderGetter.getOrThrow(TimelineTags.IN_OVERWORLD)
+                        timelines.getOrThrow(TimelineTags.IN_OVERWORLD)
                 ),
                 RegistrationInfo.BUILT_IN
         );
