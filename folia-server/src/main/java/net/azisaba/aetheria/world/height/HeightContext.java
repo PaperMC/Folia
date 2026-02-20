@@ -2,12 +2,35 @@ package net.azisaba.aetheria.world.height;
 
 import net.azisaba.aetheria.world.AetheriaLayer;
 import net.azisaba.aetheria.world.AetheriaLayout;
+import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public abstract class HeightContext implements HeightmapContext {
+    public static HeightContext vanilla(final WorldGenLevel level) {
+        return new WorldGenLevelBased(level);
+    }
+
+    public static HeightContext vanilla(final StructureManager structureManager) {
+        return new WorldGenLevelBased(structureManager.level.getMinecraftWorld());
+    }
+
+    public static HeightContext vanilla(final ChunkGenerator chunkGenerator) {
+        return new ChunkGeneratorBased(chunkGenerator);
+    }
+
+    public static HeightContext vanilla(final Structure.GenerationContext generationContext) {
+        return new ChunkGeneratorBased(generationContext.chunkGenerator());
+    }
+
+    public static HeightContext aetheria(final AetheriaLayout layout, final AetheriaLayer.Type layerType) {
+        return new LayerBased(layout, layerType);
+    }
+
     private final HeightmapSet heightmap;
 
     public HeightContext(HeightmapSet heightmapSet) {
@@ -48,10 +71,11 @@ public abstract class HeightContext implements HeightmapContext {
         return this.heightmap.motionBlockingNoLeaves();
     }
 
-    public static class Vanilla extends HeightContext {
+    @NullMarked
+    static class WorldGenLevelBased extends HeightContext {
         private final WorldGenLevel worldGenRegion;
 
-        public Vanilla(final WorldGenLevel level) {
+        public WorldGenLevelBased(final WorldGenLevel level) {
             super(HeightmapSet.VANILLA);
             this.worldGenRegion = level;
         }
@@ -67,11 +91,32 @@ public abstract class HeightContext implements HeightmapContext {
         }
     }
 
-    public static class Layered extends HeightContext {
+    @NullMarked
+    static class ChunkGeneratorBased extends HeightContext {
+        private final ChunkGenerator chunkGenerator;
+
+        public ChunkGeneratorBased(final ChunkGenerator chunkGenerator) {
+            super(HeightmapSet.VANILLA);
+            this.chunkGenerator = chunkGenerator;
+        }
+
+        @Override
+        public int seaLevel() {
+            return this.chunkGenerator.getSeaLevel();
+        }
+
+        @Override
+        public int y(final int y1) {
+            return y1;
+        }
+    }
+
+    @NullMarked
+    static class LayerBased extends HeightContext {
         private final AetheriaLayout layout;
         private final AetheriaLayer.Type layerType;
 
-        public Layered(final AetheriaLayout layout, final AetheriaLayer.Type layerType) {
+        public LayerBased(final AetheriaLayout layout, final AetheriaLayer.Type layerType) {
             super(layerType.heightmapSet());
             this.layout = layout;
             this.layerType = layerType;

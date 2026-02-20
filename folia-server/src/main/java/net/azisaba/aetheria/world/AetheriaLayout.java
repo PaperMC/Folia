@@ -1,11 +1,11 @@
 package net.azisaba.aetheria.world;
 
-import net.azisaba.aetheria.world.height.HeightContext;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -46,16 +46,16 @@ public record AetheriaLayout(
                 .orElse(null);
     }
 
+    public AetheriaLayer.Type getLayerTypeAtOrThrow(final int y) {
+        return Optional.ofNullable(this.getLayerTypeAt(y)).orElseThrow();
+    }
+
     public int toBlockY(final AetheriaLayer.Type type, final int layerY) {
         return this.getMinYOf(type) + layerY - type.minY();
     }
 
     public int toLayerY(final AetheriaLayer.Type type, final int blockY) {
         return blockY - this.getMinYOf(type) + type.minY();
-    }
-
-    public HeightContext createHeightContext(final AetheriaLayer.Type type) {
-        return new HeightContext.Layered(this, type);
     }
 
     public Stream<AetheriaLayer.Type> stream() {
