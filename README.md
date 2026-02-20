@@ -4,6 +4,31 @@
     <p>Fork of <a href="https://github.com/PaperMC/Paper">Paper</a> which adds regionised multithreading to the dedicated server.</p>
 </div>
 
+## Additions in this fork (Foliaphotographer)
+
+This fork adds a **Photographer API** on top of upstream Folia, so the server can record gameplay as **.mcpr** replays (playable with ReplayMod) and plugins like **ISeeYou** can use it for recording.
+
+### What was added / changed
+
+| Area | Description |
+|------|-------------|
+| **Photographer API** | New interfaces in folia-api: `PhotographerManager`, `Photographer`, `BukkitRecorderOption`. Plugins use `Server#getPhotographerManager()` to create and manage “photographer” entities that record .mcpr. Conceptually aligned with Leaves’ photographer API. |
+| **Server implementation** | In folia-server: `ServerPhotographer`, `Recorder`, `ReplayFile`, `CraftPhotographerManager`. A photographer is a fake player that follows a real player, captures network packets, writes them to a temp dir, and packs them into a .mcpr file when recording stops. |
+| **PlayerList extensions** | `PlayerList` gains `realPlayers`, `placeNewPhotographer()`, and `removePhotographer()`. Photographers do not consume real player slots; online count and list logic are separated from real players. |
+| **CraftServer / events** | CraftServer exposes `getPhotographerManager()`. CraftEntity maps `ServerPhotographer` to `CraftPhotographer`. Player events skip photographers so they do not trigger player-related logic. |
+| **Folia threading** | `ServerPhotographer#tick()` no longer calls `MinecraftServer.getTickCount()` (which throws on Folia). A local tick counter is used for throttling instead, avoiding `UnsupportedOperationException` and broken/corrupt recordings. |
+| **Patches & build** | Changes are applied via folia-api/folia-server paper-patches and minecraft-patches (e.g. 0005, 0008, 0009). Use `createMojmapPaperclipJar` to build a runnable server JAR with Photographer support. |
+
+### Usage and compatibility
+
+- **Recording .mcpr**: Plugins call `Bukkit.getServer().getPhotographerManager()` to create photographers, set the output path, and start/stop recording. Save path and “player join/leave” behaviour are plugin-defined (e.g. ISeeYou).
+- **ISeeYou**: ISeeYou is adapted to this fork: it detects `getPhotographerManager()` and `dev.folia.replay.BukkitRecorderOption` via reflection. Without CommandAPI only commands are disabled; the plugin still enables.
+- **Runnable JAR**: Start the server with the JAR produced by `createMojmapPaperclipJar` (e.g. `folia-paperclip-*-mojmap.jar`). The plain `jar` task output is not runnable (missing dependencies).
+
+The sections below are the upstream Folia overview and documentation, unchanged.
+
+---
+
 ## Overview
 
 Folia groups nearby loaded chunks to form an "independent region."

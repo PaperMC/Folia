@@ -1,0 +1,353 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Folia Photographer <noreply@example.com>
+Date: Fri, 20 Feb 2025 00:00:00 +0000
+Subject: [PATCH] Photographer API (Replay Mod)
+
+This patch adds the Photographer API for recording gameplay in .mcpr format.
+Powered by ReplayMod (https://github.com/ReplayMod)
+
+diff --git a/net/minecraft/commands/CommandSourceStack.java b/net/minecraft/commands/CommandSourceStack.java
+index d5eefed0912c728ded360ddac4d9bcd1813730b2..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/commands/CommandSourceStack.java
++++ b/net/minecraft/commands/CommandSourceStack.java
+@@ -589,7 +589,7 @@ public class CommandSourceStack implements ExecutionCommandSource<CommandSourceS
+ 
+     @Override
+     public Collection<String> getOnlinePlayerNames() {
+-        return this.entity instanceof ServerPlayer sourcePlayer && !sourcePlayer.getBukkitEntity().hasPermission("paper.bypass-visibility.tab-completion") ? this.getServer().getPlayerList().getPlayers().stream().filter(serverPlayer -> sourcePlayer.getBukkitEntity().canSee(serverPlayer.getBukkitEntity())).map(serverPlayer -> serverPlayer.getGameProfile().getName()).toList() : Lists.newArrayList(this.server.getPlayerNames()); // Paper - Make CommandSourceStack respect hidden players
++        return this.entity instanceof ServerPlayer sourcePlayer && !(sourcePlayer instanceof dev.folia.replay.ServerPhotographer) && !sourcePlayer.getBukkitEntity().hasPermission("paper.bypass-visibility.tab-completion") ? this.getServer().getPlayerList().getPlayers().stream().filter(serverPlayer -> sourcePlayer.getBukkitEntity().canSee(serverPlayer.getBukkitEntity())).map(serverPlayer -> serverPlayer.getGameProfile().getName()).toList() : Lists.newArrayList(this.server.getPlayerNames()); // Paper - Make CommandSourceStack respect hidden players // Folia - exclude photographer
+     }
+ 
+     @Override
+diff --git a/net/minecraft/commands/arguments/selector/EntitySelector.java b/net/minecraft/commands/arguments/selector/EntitySelector.java
+index 514f8fbdeb776087608665c35de95294aadf5cf0..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/commands/arguments/selector/EntitySelector.java
++++ b/net/minecraft/commands/arguments/selector/EntitySelector.java
+@@ -128,11 +128,12 @@ public class EntitySelector {
+             return this.findPlayers(source);
+         } else if (this.playerName != null) {
+             ServerPlayer playerByName = source.getServer().getPlayerList().getPlayerByName(this.playerName);
++            playerByName = playerByName instanceof dev.folia.replay.ServerPhotographer ? null : playerByName; // Folia - skip photographer
+             return playerByName == null ? List.of() : List.of(playerByName);
+         } else if (this.entityUUID != null) {
+             for (ServerLevel serverLevel : source.getServer().getAllLevels()) {
+                 Entity entity = serverLevel.getEntity(this.entityUUID);
+-                if (entity != null) {
++                if (entity != null && !(entity instanceof dev.folia.replay.ServerPhotographer)) {
+                     if (entity.getType().isEnabled(source.enabledFeatures())) {
+                         return List.of(entity);
+                     }
+@@ -146,7 +147,7 @@ public class EntitySelector {
+             AABB absoluteAabb = this.getAbsoluteAabb(vec3);
+             if (this.currentEntity) {
+                 Predicate<Entity> predicate = this.getPredicate(vec3, absoluteAabb, null);
+-                return source.getEntity() != null && predicate.test(source.getEntity()) ? List.of(source.getEntity()) : List.of();
++                return source.getEntity() != null && !(source.getEntity() instanceof dev.folia.replay.ServerPhotographer) && predicate.test(source.getEntity()) ? List.of(source.getEntity()) : List.of(); // Folia - skip photographer
+             } else {
+                 Predicate<Entity> predicate = this.getPredicate(vec3, absoluteAabb, source.enabledFeatures());
+                 List<Entity> list = new ObjectArrayList<>();
+@@ -157,6 +158,7 @@ public class EntitySelector {
+                         this.addEntities(list, serverLevel1, absoluteAabb, predicate);
+                     }
+                 }
++                list.removeIf(entity -> entity instanceof dev.folia.replay.ServerPhotographer); // Folia - skip photographer
+ 
+                 return this.sortAndLimit(vec3, list);
+             }
+@@ -192,9 +194,11 @@ public class EntitySelector {
+         this.checkPermissions(source);
+         if (this.playerName != null) {
+             ServerPlayer playerByName = source.getServer().getPlayerList().getPlayerByName(this.playerName);
++            playerByName = playerByName instanceof dev.folia.replay.ServerPhotographer ? null : playerByName; // Folia - skip photographer
+             return playerByName == null ? List.of() : List.of(playerByName);
+         } else if (this.entityUUID != null) {
+             ServerPlayer playerByName = source.getServer().getPlayerList().getPlayer(this.entityUUID);
++            playerByName = playerByName instanceof dev.folia.replay.ServerPhotographer ? null : playerByName; // Folia - skip photographer
+             return playerByName == null ? List.of() : List.of(playerByName);
+         } else {
+             Vec3 vec3 = this.position.apply(source.getPosition());
+@@ -206,12 +210,12 @@ public class EntitySelector {
+                 int resultLimit = this.getResultLimit();
+                 List<ServerPlayer> players;
+                 if (this.isWorldLimited()) {
+-                    players = source.getLevel().getPlayers(predicate, resultLimit);
++                    players = source.getLevel().getPlayers((player -> !(player instanceof dev.folia.replay.ServerPhotographer) && predicate.test(player)), resultLimit); // Folia - skip photographer
+                 } else {
+                     players = new ObjectArrayList<>();
+ 
+                     for (ServerPlayer serverPlayer1 : source.getServer().getPlayerList().getPlayers()) {
+-                        if (predicate.test(serverPlayer1)) {
++                        if (predicate.test(serverPlayer1) && !(serverPlayer1 instanceof dev.folia.replay.ServerPhotographer)) { // Folia - skip photographer
+                             players.add(serverPlayer1);
+                             if (players.size() >= resultLimit) {
+                                 return players;
+diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
+index faf72dd6dff74296c73cb058aaabd1f9f475a072..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/server/MinecraftServer.java
++++ b/net/minecraft/server/MinecraftServer.java
+@@ -1738,7 +1738,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     }
+ 
+     private ServerStatus.Players buildPlayerStatus() {
+-        List<ServerPlayer> players = new java.util.ArrayList<>(this.playerList.getPlayers()); // Folia - region threading
++        List<ServerPlayer> players = new java.util.ArrayList<>(this.playerList.realPlayers); // Folia - Photographer API
+         int maxPlayers = this.getMaxPlayers();
+         if (this.hidesOnlinePlayers()) {
+             return new ServerStatus.Players(maxPlayers, players.size(), List.of());
+diff --git a/net/minecraft/server/PlayerAdvancements.java b/net/minecraft/server/PlayerAdvancements.java
+index 2a60512bcf922e1356d7de0e4fce337c46d1315b..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/server/PlayerAdvancements.java
++++ b/net/minecraft/server/PlayerAdvancements.java
+@@ -171,6 +171,11 @@ public class PlayerAdvancements {
+     }
+ 
+     public boolean award(AdvancementHolder advancement, String criterionKey) {
++        // Folia start - photographer can't get advancement
++        if (player instanceof dev.folia.replay.ServerPhotographer) {
++            return false;
++        }
++        // Folia end - photographer can't get advancement
+         boolean flag = false;
+         AdvancementProgress orStartProgress = this.getOrStartProgress(advancement);
+         boolean isDone = orStartProgress.isDone();
+diff --git a/net/minecraft/server/commands/OpCommand.java b/net/minecraft/server/commands/OpCommand.java
+index 5c0a04db38821dbb0cba2bb6f0787f113d167efd..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/server/commands/OpCommand.java
++++ b/net/minecraft/server/commands/OpCommand.java
+@@ -25,7 +25,7 @@ public class OpCommand {
+                             (context, builder) -> {
+                                 PlayerList playerList = context.getSource().getServer().getPlayerList();
+                                 return SharedSuggestionProvider.suggest(
+-                                    playerList.getPlayers()
++                                    playerList.realPlayers // Folia - Photographer API
+                                         .stream()
+                                         .filter(player -> !playerList.isOp(player.getGameProfile()))
+                                         .map(player -> player.getGameProfile().getName()),
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index f884c707d4c1f36801018e15efb9adf91f5d6b33..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -179,6 +179,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+     private static final int EMPTY_TIME_NO_TICK = 300;
+     private static final int MAX_SCHEDULED_TICKS_PER_TICK = 65536;
+     final List<ServerPlayer> players = new java.util.concurrent.CopyOnWriteArrayList<>(); // Folia - region threading
++    final List<ServerPlayer> realPlayers = new java.util.concurrent.CopyOnWriteArrayList<>(); // Folia - Photographer API
+     public final ServerChunkCache chunkSource;
+     private final MinecraftServer server;
+     public final net.minecraft.world.level.storage.PrimaryLevelData serverLevelData; // CraftBukkit - type
+@@ -2622,6 +2623,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+             if (entity instanceof ServerPlayer serverPlayer) {
+                 ServerLevel.this.players.add(serverPlayer);
++                if (!(serverPlayer instanceof dev.folia.replay.ServerPhotographer)) {
++                    ServerLevel.this.realPlayers.add(serverPlayer);
++                }
+                 ServerLevel.this.updateSleepStatus();
+                 if (ServerLevel.this.isDebug()) {
+                     ServerLevel.this.logger.info("{} joined the level", serverPlayer.getName().getString());
+@@ -2695,6 +2697,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+             if (entity instanceof ServerPlayer serverPlayer) {
+                 ServerLevel.this.players.remove(serverPlayer);
++                if (!(serverPlayer instanceof dev.folia.replay.ServerPhotographer)) {
++                    ServerLevel.this.realPlayers.remove(serverPlayer);
++                }
+                 ServerLevel.this.updateSleepStatus();
+                 ServerLevel.this.logger.debug("{} left the level", serverPlayer.getName().getString());
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+index 751b011701d6ae373099226ea63ffbafcd24ce6a..0000000000000000000000000000000000000001 100644
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -131,6 +131,7 @@ public abstract class PlayerList {
+     private boolean allowCommandsForAllPlayers;
+     private static final boolean ALLOW_LOGOUTIVATOR = false;
+     private int sendAllPlayerInfoIn;
++    public final List<ServerPlayer> realPlayers = new java.util.concurrent.CopyOnWriteArrayList<>(); // Folia - Photographer API
+ 
+     // CraftBukkit start
+     private org.bukkit.craftbukkit.CraftServer cserver;
+@@ -139,6 +140,119 @@ public abstract class PlayerList {
+ 
+     abstract public void loadAndSaveFiles(); // Paper - fix converting txt to json file; moved from DedicatedPlayerList constructor
+ 
++    // Folia start - Photographer API
++    public void placeNewPhotographer(net.minecraft.network.Connection connection, dev.folia.replay.ServerPhotographer player, ServerLevel worldserver) {
++        player.isRealPlayer = true; // Paper
++        player.loginTime = System.currentTimeMillis(); // Paper
++
++        ServerLevel worldserver1 = worldserver;
++
++        player.setServerLevel(worldserver1);
++        player.spawnIn(worldserver1);
++        player.gameMode.setLevel((ServerLevel) player.level());
++
++        LevelData worlddata = worldserver1.getLevelData();
++
++        player.loadGameTypes(null);
++        ServerGamePacketListenerImpl playerconnection = new ServerGamePacketListenerImpl(this.server, connection, player, CommonListenerCookie.createInitial(player.gameProfile, false));
++        GameRules gamerules = worldserver1.getGameRules();
++        boolean flag = gamerules.getBoolean(GameRules.RULE_DO_IMMEDIATE_RESPAWN);
++        boolean flag1 = gamerules.getBoolean(GameRules.RULE_REDUCEDDEBUGINFO);
++        boolean flag2 = gamerules.getBoolean(GameRules.RULE_LIMITED_CRAFTING);
++
++        playerconnection.send(new ClientboundLoginPacket(player.getId(), worlddata.isHardcore(), this.server.levelKeys(), this.getMaxPlayers(), worldserver1.getWorld().getSendViewDistance(), worldserver1.getWorld().getSimulationDistance(), flag1, !flag, flag2, player.createCommonSpawnInfo(worldserver1), this.server.enforceSecureProfile())); // Paper - replace old player chunk management
++        player.getBukkitEntity().sendSupportedChannels(); // CraftBukkit
++        playerconnection.send(new ClientboundChangeDifficultyPacket(worlddata.getDifficulty(), worlddata.isDifficultyLocked()));
++        playerconnection.send(new ClientboundPlayerAbilitiesPacket(player.getAbilities()));
++        playerconnection.send(new ClientboundSetHeldSlotPacket(player.getInventory().selected));
++        RecipeManager craftingmanager = this.server.getRecipeManager();
++        playerconnection.send(new ClientboundUpdateRecipesPacket(craftingmanager.getSynchronizedItemProperties(), craftingmanager.getSynchronizedStonecutterRecipes()));
++
++        this.sendPlayerPermissionLevel(player);
++        player.getStats().markAllDirty();
++        player.getRecipeBook().sendInitialRecipeBook(player);
++        this.updateEntireScoreboard(worldserver1.getScoreboard(), player);
++        this.server.invalidateStatus();
++
++        playerconnection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
++        ServerStatus serverping = this.server.getStatus();
++
++        if (serverping != null) {
++            player.sendServerStatus(serverping);
++        }
++
++        this.players.add(player);
++        this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
++        this.playersByUUID.put(player.getUUID(), player);
++
++        player.supressTrackerForLogin = true;
++        worldserver1.addNewPlayer(player);
++        this.server.getCustomBossEvents().onPlayerConnect(player);
++        org.bukkit.craftbukkit.entity.CraftPlayer bukkitPlayer = player.getBukkitEntity();
++
++        player.containerMenu.transferTo(player.containerMenu, bukkitPlayer);
++        if (!player.connection.isAcceptingMessages()) {
++            return;
++        }
++
++        final List<ServerPlayer> onlinePlayers = Lists.newArrayListWithExpectedSize(this.players.size() - 1);
++        for (int i = 0; i < this.players.size(); ++i) {
++            ServerPlayer entityplayer1 = this.players.get(i);
++
++            if (entityplayer1 == player || !bukkitPlayer.canSee(entityplayer1.getBukkitEntity())) {
++                continue;
++            }
++
++            onlinePlayers.add(entityplayer1);
++        }
++        if (!onlinePlayers.isEmpty()) {
++            player.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(onlinePlayers, player));
++        }
++
++        player.sentListPacket = true;
++        player.supressTrackerForLogin = false;
++        ((ServerLevel)player.level()).getChunkSource().chunkMap.addEntity(player);
++
++        this.sendLevelInfo(player, worldserver1);
++
++        if (player.level() == worldserver1 && !worldserver1.players().contains(player)) {
++            worldserver1.addNewPlayer(player);
++            this.server.getCustomBossEvents().onPlayerConnect(player);
++        }
++
++        worldserver1 = player.serverLevel();
++        java.util.Iterator<net.minecraft.world.effect.MobEffectInstance> iterator = player.getActiveEffects().iterator();
++        while (iterator.hasNext()) {
++            MobEffectInstance mobeffect = iterator.next();
++            playerconnection.send(new ClientboundUpdateMobEffectPacket(player.getId(), mobeffect, false));
++        }
++
++        if (player.isDeadOrDying()) {
++            net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> plains = worldserver1.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.BIOME)
++                    .getOrThrow(net.minecraft.world.level.biome.Biomes.PLAINS);
++            player.connection.send(new net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket(
++                    new net.minecraft.world.level.chunk.EmptyLevelChunk(worldserver1, player.chunkPosition(), plains),
++                    worldserver1.getLightEngine(), null, null, false)
++            );
++        }
++    }
++    // Folia end - Photographer API
++
+     public void placeNewPlayer(Connection connection, ServerPlayer player, CommonListenerCookie cookie) {
+         player.isRealPlayer = true; // Paper
+         player.loginTime = System.currentTimeMillis(); // Paper - Replace OfflinePlayer#getLastPlayed
+@@ -304,6 +418,7 @@ public abstract class PlayerList {
+ 
+         // player.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(this.players)); // CraftBukkit - replaced with loop below
+         this.players.add(player);
++        this.realPlayers.add(player); // Folia - Photographer API
+         this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
+         this.playersByUUID.put(player.getUUID(), player);
+         // this.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player))); // CraftBukkit - replaced with loop below
+@@ -373,6 +488,12 @@ public abstract class PlayerList {
+                 continue;
+             }
+ 
++            // Folia start - skip photographer
++            if (entityplayer1 instanceof dev.folia.replay.ServerPhotographer) {
++                continue;
++            }
++            // Folia end - skip photographer
++
+             onlinePlayers.add(entityplayer1); // Paper - Use single player info update packet on join
+         }
+         // Paper start - Use single player info update packet on join
+@@ -507,6 +628,43 @@ public abstract class PlayerList {
+         }
+     }
+ 
++    // Folia start - Photographer API
++    public void removePhotographer(dev.folia.replay.ServerPhotographer entityplayer) {
++        ServerLevel worldserver = entityplayer.serverLevel();
++
++        entityplayer.awardStat(Stats.LEAVE_GAME);
++
++        if (entityplayer.containerMenu != entityplayer.inventoryMenu) {
++            entityplayer.closeContainer(org.bukkit.event.inventory.InventoryCloseEvent.Reason.DISCONNECT);
++        }
++
++        if (server.isSameThread()) entityplayer.doTick();
++
++        if (this.collideRuleTeamName != null) {
++            final net.minecraft.world.scores.Scoreboard scoreBoard = this.server.getLevel(Level.OVERWORLD).getScoreboard();
++            final PlayerTeam team = scoreBoard.getPlayersTeam(this.collideRuleTeamName);
++            if (entityplayer.getTeam() == team && team != null) {
++                scoreBoard.removePlayerFromTeam(entityplayer.getScoreboardName(), team);
++            }
++        }
++
++        worldserver.removePlayerImmediately(entityplayer, Entity.RemovalReason.UNLOADED_WITH_PLAYER);
++        entityplayer.retireScheduler();
++        entityplayer.getAdvancements().stopListening();
++        this.players.remove(entityplayer);
++        this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT));
++        this.server.getCustomBossEvents().onPlayerDisconnect(entityplayer);
++        UUID uuid = entityplayer.getUUID();
++        ServerPlayer entityplayer1 = this.playersByUUID.get(uuid);
++
++        if (entityplayer1 == entityplayer) {
++            this.playersByUUID.remove(uuid);
++        }
++
++        this.cserver.getScoreboardManager().removePlayer(entityplayer.getBukkitEntity());
++    }
++    // Folia end - Photographer API
++
+     public net.kyori.adventure.text.Component remove(ServerPlayer player) { // CraftBukkit - return string // Paper - return Component
+         // Paper start - Fix kick event leave message not be sent
+         return this.remove(player, net.kyori.adventure.text.Component.translatable("multiplayer.player.left", net.kyori.adventure.text.format.NamedTextColor.YELLOW, io.papermc.paper.configuration.GlobalConfiguration.get().messages.useDisplayNameInQuitMessage ? player.getBukkitEntity().displayName() : io.papermc.paper.adventure.PaperAdventure.asAdventure(player.getDisplayName())));
+@@ -582,6 +740,7 @@ public abstract class PlayerList {
+         player.retireScheduler(); // Paper - Folia schedulers
+         player.getAdvancements().stopListening();
+         this.players.remove(player);
++        this.realPlayers.remove(player); // Folia - Photographer API
+         this.playersByName.remove(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
+         this.server.getCustomBossEvents().onPlayerDisconnect(player);
+         UUID uuid = player.getUUID();
+@@ -678,7 +837,7 @@ public abstract class PlayerList {
+             // return this.players.size() >= this.maxPlayers && !this.canBypassPlayerLimit(gameProfile)
+             //     ? Component.translatable("multiplayer.disconnect.server_full")
+             //     : null;
+-            if (this.players.size() >= this.maxPlayers && !this.canBypassPlayerLimit(gameProfile)) {
++            if (this.realPlayers.size() >= this.maxPlayers && !this.canBypassPlayerLimit(gameProfile)) { // Folia - Photographer API
+                 event.disallow(org.bukkit.event.player.PlayerLoginEvent.Result.KICK_FULL, net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().deserialize(org.spigotmc.SpigotConfig.serverFullMessage)); // Spigot // Paper - Adventure
+             }
+         }

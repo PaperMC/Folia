@@ -1,5 +1,14 @@
 --- a/paper-api/build.gradle.kts
 +++ b/paper-api/build.gradle.kts
+@@ -39,6 +_,8 @@
+ }
+ 
+ dependencies {
++    // Paper API (Bukkit/Spigot/Paper) for compilation when paper-api source tree is not present
++    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+ 
+     // api dependencies are listed transitively to API consumers
+     api("com.google.guava:guava:33.3.1-jre")
 @@ -93,7 +_,7 @@
      testRuntimeOnly("org.junit.platform:junit-platform-launcher")
  }
@@ -28,26 +37,43 @@
          }
      }
  }
-@@ -169,7 +_,7 @@
+@@ -167,9 +_,12 @@
+ }
+ val services = objects.newInstance<Services>()
  
++val paperApiJavadocDir = rootProject.layout.projectDirectory.dir("paper-api/src/main/javadoc").asFile
  tasks.withType<Javadoc> {
      val options = options as StandardJavadocDocletOptions
 -    options.overview = "src/main/javadoc/overview.html"
-+    options.overview = "../paper-api/src/main/javadoc/overview.html"
++    if (paperApiJavadocDir.exists()) {
++        options.overview = paperApiJavadocDir.resolve("overview.html").absolutePath
++    }
      options.use()
      options.isDocFilesSubDirs = true
      options.links(
-@@ -202,11 +_,11 @@
+@@ -201,15 +_,17 @@
+         )
      }
  
-     // workaround for https://github.com/gradle/gradle/issues/4046
+-    // workaround for https://github.com/gradle/gradle/issues/4046
 -    inputs.dir("src/main/javadoc").withPropertyName("javadoc-sourceset")
-+    inputs.dir("../paper-api/src/main/javadoc").withPropertyName("javadoc-sourceset")
-     val fsOps = services.fileSystemOperations
-     doLast {
-         fsOps.copy {
+-    val fsOps = services.fileSystemOperations
+-    doLast {
+-        fsOps.copy {
 -            from("src/main/javadoc") {
-+            from("../paper-api/src/main/javadoc") {
-                 include("**/doc-files/**")
+-                include("**/doc-files/**")
++    // workaround for https://github.com/gradle/gradle/issues/4046 (only when paper-api is present)
++    if (paperApiJavadocDir.exists()) {
++        inputs.dir(paperApiJavadocDir).withPropertyName("javadoc-sourceset")
++        val fsOps = services.fileSystemOperations
++        doLast {
++            fsOps.copy {
++                from(paperApiJavadocDir) {
++                    include("**/doc-files/**")
++                }
++                into("build/docs/javadoc")
              }
-             into("build/docs/javadoc")
+-            into("build/docs/javadoc")
+         }
+     }
+ }
