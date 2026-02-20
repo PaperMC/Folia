@@ -101,3 +101,45 @@ tasks.register("printPaperVersion") {
         println(project.version)
     }
 }
+
+val preparePlugins = tasks.register<Copy>("preparePlugins") {
+    group = "runs"
+    description = "Build and install plugins into 'run/plugins' (prefixed with module-)"
+
+    dependsOn(gradle.includedBuild("plugins").task(":buildAllPluginJars"))
+
+    val runDir = providers.gradleProperty("paper.runWorkDir").orElse("run")
+    val pluginsDirProvider = runDir.map { layout.projectDirectory.dir("plugins/$it").asFile }
+
+    doFirst {
+        val pluginsDir = pluginsDirProvider.get()
+        if (!pluginsDir.exists()) pluginsDir.mkdir()
+
+        pluginsDir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("module-") && it.extension == "jar" }
+            ?.forEach { it.delete() }
+    }
+
+    from(fileTree("plugins") {
+        include("**/build/libs/*.jar")
+        exclude("**/*-sources.jar", "**/*-javadoc.jar")
+    }) {
+        eachFile {
+            relativePath = RelativePath(true, name)
+        }
+        includeEmptyDirs = false
+    }
+
+    into(layout.projectDirectory.dir("run/plugins"))
+}
+
+
+gradle.projectsEvaluated {
+    project(":folia-server").tasks.named("runServer") {
+        dependsOn(preparePlugins)
+    }
+
+    project(":folia-server").tasks.named("runDevServer") {
+        dependsOn(preparePlugins)
+    }
+}

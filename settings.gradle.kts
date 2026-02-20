@@ -14,3 +14,4 @@ rootProject.name = "folia"
 
 include("folia-api")
 include("folia-server")
+includeBuild("plugins")
