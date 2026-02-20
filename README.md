@@ -6,7 +6,7 @@
 
 ## Additions in this fork (Foliaphotographer)
 
-This fork adds a **Photographer API** on top of upstream Folia, so the server can record gameplay as **.mcpr** replays (playable with ReplayMod) and plugins like **ISeeYou** can use it for recording.
+This fork adds a **Photographer API** on top of upstream Folia, so the server can record gameplay as **.mcpr** replays (playable with ReplayMod). A Folia-adapted plugin that uses this API: **[ISeeYou (Folia)](https://github.com/xiaofanforfabric/FoliaISEEYOU)**.
 
 ### What was added / changed
 
@@ -21,8 +21,8 @@ This fork adds a **Photographer API** on top of upstream Folia, so the server ca
 
 ### Usage and compatibility
 
-- **Recording .mcpr**: Plugins call `Bukkit.getServer().getPhotographerManager()` to create photographers, set the output path, and start/stop recording. Save path and “player join/leave” behaviour are plugin-defined (e.g. ISeeYou).
-- **ISeeYou**: ISeeYou is adapted to this fork: it detects `getPhotographerManager()` and `dev.folia.replay.BukkitRecorderOption` via reflection. Without CommandAPI only commands are disabled; the plugin still enables.
+- **Recording .mcpr**: Plugins call `Bukkit.getServer().getPhotographerManager()` to create photographers, set the output path, and start/stop recording. Save path and “player join/leave” behaviour are plugin-defined.
+- **ISeeYou (Folia)**: [**FoliaISEEYOU**](https://github.com/xiaofanforfabric/FoliaISEEYOU) — Folia-only build of ISeeYou for this fork. It detects `getPhotographerManager()` and `dev.folia.replay.BukkitRecorderOption` via reflection. Without CommandAPI only commands are disabled; the plugin still enables.
 - **Runnable JAR**: Start the server with the JAR produced by `createMojmapPaperclipJar` (e.g. `folia-paperclip-*-mojmap.jar`). The plain `jar` task output is not runnable (missing dependencies).
 
 The sections below are the upstream Folia overview and documentation, unchanged.
