@@ -1,0 +1,2393 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tksimeji <tksimeji@outlook.com>
+Date: Tue, 17 Feb 2026 13:06:34 +0900
+Subject: [PATCH] Aetheria levelgen
+
+
+diff --git a/net/minecraft/commands/CommandSourceStack.java b/net/minecraft/commands/CommandSourceStack.java
+index f046aca874eb3376696baaad3719a6987afbfe22..c0acf981e64baaa6350885b1dd409d1a6ead35ed 100644
+--- a/net/minecraft/commands/CommandSourceStack.java
++++ b/net/minecraft/commands/CommandSourceStack.java
+@@ -17,6 +17,12 @@ import java.util.concurrent.CompletableFuture;
+ import java.util.function.BinaryOperator;
+ import java.util.function.Supplier;
+ import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.AetheriaChunkGenerator;
++import net.azisaba.aetheria.world.AetheriaLayer;
++import net.azisaba.aetheria.world.AetheriaLayout;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.ChatFormatting;
+ import net.minecraft.advancements.AdvancementHolder;
+ import net.minecraft.commands.arguments.EntityAnchorArgument;
+@@ -42,6 +48,7 @@ import net.minecraft.util.TaskChainer;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.flag.FeatureFlagSet;
+ import net.minecraft.world.level.Level;
++import net.minecraft.world.level.chunk.ChunkGenerator;
+ import net.minecraft.world.level.dimension.DimensionType;
+ import net.minecraft.world.level.gamerules.GameRules;
+ import net.minecraft.world.phys.Vec2;
+@@ -438,6 +445,17 @@ public class CommandSourceStack implements ExecutionCommandSource<CommandSourceS
+         return this.level;
+     }
+ 
++    @Modified(Op.ADD_METHOD)
++    public HeightContext getHeightContext() {
++        final ChunkGenerator chunkGenerator = this.level.getChunkSource().getGenerator();
++        if (chunkGenerator instanceof AetheriaChunkGenerator aetheriaGenerator) {
++            final AetheriaLayout layout = aetheriaGenerator.getLayout();
++            final AetheriaLayer.Type layerType = layout.getLayerTypeAtOrThrow(Mth.floor(this.worldPosition.y));
++            return HeightContext.aetheria(layout, layerType);
++        }
++        return HeightContext.vanilla(chunkGenerator);
++    }
++
+     public @Nullable Entity getEntity() {
+         return this.entity;
+     }
+diff --git a/net/minecraft/data/worldgen/SurfaceRuleData.java b/net/minecraft/data/worldgen/SurfaceRuleData.java
+index 250db80854d0725097d2e709e58f67f36f53a462..f195971365a09bfa73f0a52cfd5c950786ab63ad 100644
+--- a/net/minecraft/data/worldgen/SurfaceRuleData.java
++++ b/net/minecraft/data/worldgen/SurfaceRuleData.java
+@@ -2,6 +2,8 @@ package net.minecraft.data.worldgen;
+ 
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableList.Builder;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.world.level.biome.Biomes;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+@@ -9,6 +11,9 @@ import net.minecraft.world.level.levelgen.Noises;
+ import net.minecraft.world.level.levelgen.SurfaceRules;
+ import net.minecraft.world.level.levelgen.VerticalAnchor;
+ 
++import java.util.ArrayList;
++import java.util.List;
++
+ public class SurfaceRuleData {
+     private static final SurfaceRules.RuleSource AIR = makeStateRule(Blocks.AIR);
+     private static final SurfaceRules.RuleSource BEDROCK = makeStateRule(Blocks.BEDROCK);
+@@ -283,7 +288,12 @@ public class SurfaceRuleData {
+         return SurfaceRules.sequence(builder.build().toArray(SurfaceRules.RuleSource[]::new));
+     }
+ 
++    @Modified(Op.ADD_COMPAT)
+     public static SurfaceRules.RuleSource nether() {
++        return SurfaceRuleData.nether(true, true);
++    }
++
++    public static SurfaceRules.RuleSource nether(@Modified(Op.ADD_PARAM) boolean bedrockRoof, @Modified(Op.ADD_PARAM) boolean bedrockFloor) {
+         SurfaceRules.ConditionSource conditionSource = SurfaceRules.yBlockCheck(VerticalAnchor.absolute(31), 0);
+         SurfaceRules.ConditionSource conditionSource1 = SurfaceRules.yBlockCheck(VerticalAnchor.absolute(32), 0);
+         SurfaceRules.ConditionSource conditionSource2 = SurfaceRules.yStartCheck(VerticalAnchor.absolute(30), 0);
+@@ -299,9 +309,7 @@ public class SurfaceRuleData {
+         SurfaceRules.RuleSource ruleSource = SurfaceRules.ifTrue(
+             conditionSource8, SurfaceRules.ifTrue(conditionSource2, SurfaceRules.ifTrue(conditionSource3, GRAVEL))
+         );
+-        return SurfaceRules.sequence(
+-            SurfaceRules.ifTrue(SurfaceRules.verticalGradient("bedrock_floor", VerticalAnchor.bottom(), VerticalAnchor.aboveBottom(5)), BEDROCK),
+-            SurfaceRules.ifTrue(SurfaceRules.not(SurfaceRules.verticalGradient("bedrock_roof", VerticalAnchor.belowTop(5), VerticalAnchor.top())), BEDROCK),
++        List<SurfaceRules.RuleSource> rules = new ArrayList<>(List.of(
+             SurfaceRules.ifTrue(conditionSource4, NETHERRACK),
+             SurfaceRules.ifTrue(
+                 SurfaceRules.isBiome(Biomes.BASALT_DELTAS),
+@@ -376,7 +384,16 @@ public class SurfaceRuleData {
+                 )
+             ),
+             NETHERRACK
+-        );
++        ));
++
++        if (bedrockFloor) {
++            rules.add(SurfaceRules.ifTrue(SurfaceRules.verticalGradient("bedrock_floor", VerticalAnchor.bottom(), VerticalAnchor.aboveBottom(5)), BEDROCK));
++        }
++        if (bedrockRoof) {
++            rules.add(SurfaceRules.ifTrue(SurfaceRules.not(SurfaceRules.verticalGradient("bedrock_roof", VerticalAnchor.belowTop(5), VerticalAnchor.top())), BEDROCK));
++        }
++
++        return SurfaceRules.sequence(rules.toArray(new SurfaceRules.RuleSource[0]));
+     }
+ 
+     public static SurfaceRules.RuleSource end() {
+diff --git a/net/minecraft/resources/Identifier.java b/net/minecraft/resources/Identifier.java
+index ae6219185aa00a2753b0986ecf5f8456f4c2515d..b568d7ed2ce59f4fb5145ece5a0aa3b8ed1ea89c 100644
+--- a/net/minecraft/resources/Identifier.java
++++ b/net/minecraft/resources/Identifier.java
+@@ -56,6 +56,12 @@ public final class Identifier implements Comparable<Identifier> {
+         return new Identifier("minecraft", assertValidPath("minecraft", location));
+     }
+ 
++    // Aetheria start - Create an Identifier in the aetheria namespace
++    public static Identifier withAetheriaNamespace(String location) {
++        return new Identifier("aetheria", assertValidPath("aetheria", location));
++    }
++    // Aetheria start - Create an Identifier in the aetheria namespace
++
+     public static @Nullable Identifier tryParse(String location) {
+         return tryBySeparator(location, ':');
+     }
+diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
+index 2211cd81bf986e0dda97841e39bed23bedb38914..8ada621e9106f5c0f86458b88cfe1783ab1ce3b4 100644
+--- a/net/minecraft/resources/RegistryDataLoader.java
++++ b/net/minecraft/resources/RegistryDataLoader.java
+@@ -21,6 +21,12 @@ import java.util.Map.Entry;
+ import java.util.function.BiConsumer;
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
++
++import net.azisaba.aetheria.AetheriaBiomes;
++import net.azisaba.aetheria.AetheriaDimensionTypes;
++import net.azisaba.aetheria.AetheriaLevelStems;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+ import net.minecraft.ReportedException;
+@@ -175,6 +181,7 @@ public class RegistryDataLoader {
+         return load((loader, infoLookup) -> loader.loadFromNetwork(elements, resourceProvider, infoLookup), registryLookups, registryData);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     private static RegistryAccess.Frozen load(
+         RegistryDataLoader.LoadingFunction loadingFunction,
+         List<HolderLookup.RegistryLookup<?>> registryLookups,
+@@ -186,6 +193,19 @@ public class RegistryDataLoader {
+             .collect(Collectors.toUnmodifiableList());
+         RegistryOps.RegistryInfoLookup registryInfoLookup = createContext(registryLookups, list);
+         list.forEach(loader -> loadingFunction.apply((RegistryDataLoader.Loader<?>)loader, registryInfoLookup));
++        // Aetheria start - Register Aetheria objects in data-driven registries
++        list.forEach(loader -> {
++            final WritableRegistry<?> registry = loader.registry();
++
++            if (registry.key().equals(Registries.BIOME)) {
++                AetheriaBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
++                AetheriaDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.LEVEL_STEM)) {
++                AetheriaLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
++            }
++        });
++        // Aetheria end - Register Aetheria objects in data-driven registries
+         list.forEach(loader -> {
+             Registry<?> registry = loader.registry();
+ 
+diff --git a/net/minecraft/server/commands/PlaceCommand.java b/net/minecraft/server/commands/PlaceCommand.java
+index c7d374738cb2d702fbb40cc6c419313c2c858686..89906867a4c23b335c5fafae7f99cf953bacea27 100644
+--- a/net/minecraft/server/commands/PlaceCommand.java
++++ b/net/minecraft/server/commands/PlaceCommand.java
+@@ -8,6 +8,9 @@ import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
+ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+ import com.mojang.brigadier.suggestion.SuggestionProvider;
+ import java.util.Optional;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.IdentifierException;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.Commands;
+@@ -290,6 +293,7 @@ public class PlaceCommand {
+         // Folia end - region threading
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     public static int placeJigsaw(CommandSourceStack source, Holder<StructureTemplatePool> templatePool, Identifier target, int maxDepth, BlockPos pos) throws CommandSyntaxException {
+         ServerLevel level = source.getLevel();
+         ChunkPos chunkPos = new ChunkPos(pos);
+@@ -301,7 +305,7 @@ public class PlaceCommand {
+                 (chunks) -> {
+                     try {
+                         // Folia end - region threading
+-        if (!JigsawPlacement.generateJigsaw(level, templatePool, target, maxDepth, pos, false)) {
++        if (!JigsawPlacement.generateJigsaw(level, templatePool, target, maxDepth, pos, false, source.getHeightContext())) {
+             throw ERROR_JIGSAW_FAILED.create();
+         } else {
+             source.sendSuccess(() -> Component.translatable("commands.place.jigsaw.success", pos.getX(), pos.getY(), pos.getZ()), true);
+@@ -317,6 +321,7 @@ public class PlaceCommand {
+         // Folia end - region threading
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     public static int placeStructure(CommandSourceStack source, Holder.Reference<Structure> structure, BlockPos pos) throws CommandSyntaxException {
+         ServerLevel level = source.getLevel();
+         Structure structure1 = structure.value();
+@@ -340,7 +345,8 @@ public class PlaceCommand {
+             new ChunkPos(pos),
+             0,
+             level,
+-            biome -> true
++            biome -> true,
++            source.getHeightContext()
+         );
+         if (!structureStart.isValid()) {
+             throw ERROR_STRUCTURE_FAILED.create();
+diff --git a/net/minecraft/world/level/biome/BiomeManager.java b/net/minecraft/world/level/biome/BiomeManager.java
+index 73962e79a0f3d892e3155443a1b84508b0f4042e..87af3d53161115ab29c6801be75db74d29a8ecb8 100644
+--- a/net/minecraft/world/level/biome/BiomeManager.java
++++ b/net/minecraft/world/level/biome/BiomeManager.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.biome;
+ 
+ import com.google.common.hash.Hashing;
++import net.azisaba.aetheria.world.AetheriaLayer;
++import net.azisaba.aetheria.world.AetheriaLayout;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.QuartPos;
+@@ -28,6 +30,16 @@ public class BiomeManager {
+         return new BiomeManager(newSource, this.biomeZoomSeed);
+     }
+ 
++    // Aetheria start - Remap biome sampling Y by layer
++    public BiomeManager withLayeredSource(final AetheriaLayout layout, final AetheriaLayer.Type type) {
++        return this.withDifferentSource((quartX, quartY, quartZ) -> {
++            final int layerY = QuartPos.toBlock(quartY);
++            final int blockY = layout.toBlockY(type, layerY);
++            return this.getNoiseBiomeAtQuart(quartX, QuartPos.fromBlock(blockY), quartZ);
++        });
++    }
++    // Aetheria end - Remap biome sampling Y by layer
++
+     public Holder<Biome> getBiome(BlockPos pos) {
+         int i = pos.getX() - 2;
+         int i1 = pos.getY() - 2;
+diff --git a/net/minecraft/world/level/biome/TheEndBiomeSource.java b/net/minecraft/world/level/biome/TheEndBiomeSource.java
+index cf3172be76fa4c7987ed569138439ff42f92fa7f..b65ad4d9937a24e5a3c1cf9b7a8a28dfa9575c15 100644
+--- a/net/minecraft/world/level/biome/TheEndBiomeSource.java
++++ b/net/minecraft/world/level/biome/TheEndBiomeSource.java
+@@ -3,6 +3,9 @@ package net.minecraft.world.level.biome;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderGetter;
+ import net.minecraft.core.QuartPos;
+@@ -37,7 +40,8 @@ public class TheEndBiomeSource extends BiomeSource {
+         );
+     }
+ 
+-    private TheEndBiomeSource(Holder<Biome> end, Holder<Biome> highlands, Holder<Biome> midlands, Holder<Biome> islands, Holder<Biome> barrens) {
++    @Modified(Op.MAKE_PUBLIC)
++    public TheEndBiomeSource(Holder<Biome> end, Holder<Biome> highlands, Holder<Biome> midlands, Holder<Biome> islands, Holder<Biome> barrens) {
+         this.end = end;
+         this.highlands = highlands;
+         this.midlands = midlands;
+diff --git a/net/minecraft/world/level/block/entity/JigsawBlockEntity.java b/net/minecraft/world/level/block/entity/JigsawBlockEntity.java
+index de87c6b64e4b7723f70c2c77f473deb42ab757bc..681167c8fefbf91ea8ae885f1d74989ad09026e3 100644
+--- a/net/minecraft/world/level/block/entity/JigsawBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/JigsawBlockEntity.java
+@@ -1,6 +1,9 @@
+ package net.minecraft.world.level.block.entity;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderLookup;
+@@ -137,6 +140,7 @@ public class JigsawBlockEntity extends BlockEntity {
+         return this.saveCustomOnly(registries);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     public void generate(ServerLevel level, int maxDepth, boolean keepJigsaws) {
+         BlockPos blockPos = this.getBlockPos().relative(this.getBlockState().getValue(JigsawBlock.ORIENTATION).front());
+         Registry<StructureTemplatePool> registry = level.registryAccess().lookupOrThrow(Registries.TEMPLATE_POOL);
+@@ -146,7 +150,7 @@ public class JigsawBlockEntity extends BlockEntity {
+             return;
+         }
+         // Paper end - Replace getHolderOrThrow with a null check
+-        JigsawPlacement.generateJigsaw(level, orThrow, this.target, maxDepth, blockPos, keepJigsaws);
++        JigsawPlacement.generateJigsaw(level, orThrow, this.target, maxDepth, blockPos, keepJigsaws, HeightContext.vanilla(level));
+     }
+ 
+     public static enum JointType implements StringRepresentable {
+diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
+index d57b3ed1c53d2818caf420004296297f006f36d7..3d91d9360d40ce4eb457e18ff03f96aa8ab256fb 100644
+--- a/net/minecraft/world/level/chunk/ChunkGenerator.java
++++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
+@@ -9,68 +9,29 @@ import it.unimi.dsi.fastutil.ints.IntSet;
+ import it.unimi.dsi.fastutil.longs.LongSet;
+ import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
+ import it.unimi.dsi.fastutil.objects.ObjectArraySet;
+-import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.Collections;
+-import java.util.List;
+-import java.util.Map;
+-import java.util.Optional;
+-import java.util.Set;
+-import java.util.Map.Entry;
+-import java.util.concurrent.CompletableFuture;
+-import java.util.function.Function;
+-import java.util.function.Predicate;
+-import java.util.function.Supplier;
+-import java.util.stream.Collectors;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+ import net.minecraft.ReportedException;
+ import net.minecraft.SharedConstants;
+-import net.minecraft.core.BlockPos;
+-import net.minecraft.core.Holder;
+-import net.minecraft.core.HolderLookup;
+-import net.minecraft.core.HolderSet;
+-import net.minecraft.core.Registry;
+-import net.minecraft.core.RegistryAccess;
+-import net.minecraft.core.SectionPos;
++import net.minecraft.core.*;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.core.registries.Registries;
+ import net.minecraft.resources.ResourceKey;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.WorldGenRegion;
+-import net.minecraft.util.Util;
+ import net.minecraft.util.random.WeightedList;
+ import net.minecraft.world.entity.MobCategory;
+-import net.minecraft.world.level.ChunkPos;
+-import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.LevelHeightAccessor;
+-import net.minecraft.world.level.LevelReader;
+-import net.minecraft.world.level.NoiseColumn;
+-import net.minecraft.world.level.StructureManager;
+-import net.minecraft.world.level.WorldGenLevel;
+-import net.minecraft.world.level.biome.Biome;
+-import net.minecraft.world.level.biome.BiomeGenerationSettings;
+-import net.minecraft.world.level.biome.BiomeManager;
+-import net.minecraft.world.level.biome.BiomeSource;
+-import net.minecraft.world.level.biome.FeatureSorter;
+-import net.minecraft.world.level.biome.MobSpawnSettings;
++import net.minecraft.world.level.*;
++import net.minecraft.world.level.biome.*;
+ import net.minecraft.world.level.chunk.status.ChunkStatus;
+-import net.minecraft.world.level.levelgen.GenerationStep;
+-import net.minecraft.world.level.levelgen.Heightmap;
+-import net.minecraft.world.level.levelgen.LegacyRandomSource;
+-import net.minecraft.world.level.levelgen.RandomState;
+-import net.minecraft.world.level.levelgen.RandomSupport;
+-import net.minecraft.world.level.levelgen.WorldgenRandom;
+-import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
++import net.minecraft.world.level.levelgen.*;
+ import net.minecraft.world.level.levelgen.blending.Blender;
+ import net.minecraft.world.level.levelgen.feature.FeatureCountTracker;
+ import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+-import net.minecraft.world.level.levelgen.structure.BoundingBox;
+-import net.minecraft.world.level.levelgen.structure.Structure;
+-import net.minecraft.world.level.levelgen.structure.StructureCheckResult;
+-import net.minecraft.world.level.levelgen.structure.StructureSet;
+-import net.minecraft.world.level.levelgen.structure.StructureSpawnOverride;
+-import net.minecraft.world.level.levelgen.structure.StructureStart;
++import net.minecraft.world.level.levelgen.structure.*;
+ import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
+ import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
+ import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
+@@ -78,6 +39,14 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
+ import org.apache.commons.lang3.mutable.MutableBoolean;
+ import org.jspecify.annotations.Nullable;
+ 
++import java.util.*;
++import java.util.Map.Entry;
++import java.util.concurrent.CompletableFuture;
++import java.util.function.Function;
++import java.util.function.Predicate;
++import java.util.function.Supplier;
++import java.util.stream.Collectors;
++
+ public abstract class ChunkGenerator {
+     public static final Codec<ChunkGenerator> CODEC = BuiltInRegistries.CHUNK_GENERATOR
+         .byNameCodec()
+@@ -334,7 +303,7 @@ public abstract class ChunkGenerator {
+         }
+     }
+ 
+-    public void addVanillaDecorations(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) { // CraftBukkit - rename
++    public void addVanillaDecorations(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager, @Modified(Op.ADD_PARAM) HeightContext heightContext) { // CraftBukkit - rename
+         ChunkPos pos = chunk.getPos();
+         if (!SharedConstants.debugVoidTerrain(pos)) {
+             SectionPos sectionPos = SectionPos.of(pos, level.getMinSectionY());
+@@ -416,7 +385,7 @@ public abstract class ChunkGenerator {
+ 
+                             try {
+                                 level.setCurrentlyGenerating(supplier1);
+-                                placedFeature.placeWithBiomeCheck(level, this, worldgenRandom, blockPos);
++                                placedFeature.placeWithBiomeCheck(level, this, worldgenRandom, blockPos, heightContext);
+                             } catch (Exception var30) {
+                                 CrashReport crashReport1 = CrashReport.forThrowable(var30, "Feature placement");
+                                 crashReport1.addCategory("Feature").setDetail("Description", supplier1::get);
+@@ -442,9 +411,14 @@ public abstract class ChunkGenerator {
+         this.applyBiomeDecoration(level, chunk, structureManager, true);
+     }
+ 
+-    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager, boolean addVanillaDecorations) {
++    @Modified(Op.ADD_COMPAT)
++    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunkAccess, StructureManager structureManager, boolean addVanillaDecorations) {
++        this.applyBiomeDecoration(level, chunkAccess, structureManager, addVanillaDecorations, HeightContext.vanilla(level));
++    }
++
++    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager, boolean addVanillaDecorations, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         if (addVanillaDecorations) {
+-            this.addVanillaDecorations(level, chunk, structureManager);
++            this.addVanillaDecorations(level, chunk, structureManager, heightContext);
+         }
+ 
+         org.bukkit.World world = level.getMinecraftWorld().getWorld();
+@@ -513,6 +487,7 @@ public abstract class ChunkGenerator {
+         return biome.value().getMobSettings().getMobs(category);
+     }
+ 
++    @Modified(Op.ADD_COMPAT)
+     public void createStructures(
+         RegistryAccess registryAccess,
+         ChunkGeneratorStructureState structureState,
+@@ -520,6 +495,18 @@ public abstract class ChunkGenerator {
+         ChunkAccess chunk,
+         StructureTemplateManager structureTemplateManager,
+         ResourceKey<Level> level
++    ) {
++        this.createStructures(registryAccess, structureState, structureManager, chunk, structureTemplateManager, level, HeightContext.vanilla(structureManager));
++    }
++
++    public void createStructures(
++        RegistryAccess registryAccess,
++        ChunkGeneratorStructureState structureState,
++        StructureManager structureManager,
++        ChunkAccess chunk,
++        StructureTemplateManager structureTemplateManager,
++        ResourceKey<Level> level,
++        @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         if (!SharedConstants.DEBUG_DISABLE_STRUCTURES) {
+             ChunkPos pos = chunk.getPos();
+@@ -552,7 +539,8 @@ public abstract class ChunkGenerator {
+                                     chunk,
+                                     pos,
+                                     sectionPos,
+-                                    level
++                                    level,
++                                    heightContext
+                                 );
+                             } else {
+                                 ArrayList<StructureSet.StructureSelectionEntry> list1 = new ArrayList<>(list.size());
+@@ -589,7 +577,8 @@ public abstract class ChunkGenerator {
+                                         chunk,
+                                         pos,
+                                         sectionPos,
+-                                        level
++                                        level,
++                                        heightContext
+                                     )) {
+                                         return;
+                                     }
+@@ -614,7 +603,8 @@ public abstract class ChunkGenerator {
+         ChunkAccess chunk,
+         ChunkPos chunkPos,
+         SectionPos sectionPos,
+-        ResourceKey<Level> level
++        ResourceKey<Level> level,
++        @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         Structure structure = structureSelectionEntry.structure().value();
+         int i = fetchReferences(structureManager, chunk, sectionPos, structure);
+@@ -632,7 +622,8 @@ public abstract class ChunkGenerator {
+             chunkPos,
+             i,
+             chunk,
+-            predicate
++            predicate,
++            heightContext
+         );
+         if (structureStart.isValid()) {
+             // CraftBukkit start
+diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
+index 25c537496ccea6fe27111b21fe2e47b3f6a914a1..d88c703e0eb22af1d815d712f4499305497c1180 100644
+--- a/net/minecraft/world/level/levelgen/Heightmap.java
++++ b/net/minecraft/world/level/levelgen/Heightmap.java
+@@ -152,7 +152,45 @@ public class Heightmap {
+             "MOTION_BLOCKING_NO_LEAVES",
+             Heightmap.Usage.CLIENT,
+             state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
++        ),
++
++        // Aetheria start - Custom heightmap types by Aetheria layer
++        AETHERIA_OVERWORLD_WORLD_SURFACE_WG(6, "AETHERIA_OVERWORLD_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        AETHERIA_OVERWORLD_WORLD_SURFACE(7, "AETHERIA_OVERWORLD_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        AETHERIA_OVERWORLD_OCEAN_FLOOR_WG(8, "AETHERIA_OVERWORLD_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_OVERWORLD_OCEAN_FLOOR(9, "AETHERIA_OVERWORLD_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_OVERWORLD_MOTION_BLOCKING(10, "AETHERIA_OVERWORLD_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES(
++                11,
++                "AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES",
++                Heightmap.Usage.LIVE_WORLD,
++                state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
++        ),
++
++        AETHERIA_NETHER_WORLD_SURFACE_WG(12, "AETHERIA_NETHER_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        AETHERIA_NETHER_WORLD_SURFACE(13, "AETHERIA_NETHER_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        AETHERIA_NETHER_OCEAN_FLOOR_WG(14, "AETHERIA_NETHER_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_NETHER_OCEAN_FLOOR(15, "AETHERIA_NETHER_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_NETHER_MOTION_BLOCKING(16, "AETHERIA_NETHER_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES(
++                17,
++                "AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES",
++                Heightmap.Usage.LIVE_WORLD,
++                state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
++        ),
++
++        AETHERIA_END_WORLD_SURFACE_WG(18, "AETHERIA_END_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        AETHERIA_END_WORLD_SURFACE(19, "AETHERIA_END_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        AETHERIA_END_OCEAN_FLOOR_WG(20, "AETHERIA_END_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_END_OCEAN_FLOOR(21, "AETHERIA_END_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        AETHERIA_END_MOTION_BLOCKING(22, "AETHERIA_END_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        AETHERIA_END_MOTION_BLOCKING_NO_LEAVES(
++                23,
++                "AETHERIA_END_MOTION_BLOCKING_NO_LEAVES",
++                Heightmap.Usage.LIVE_WORLD,
++                state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
+         );
++        // Aetheria end - Custom heightmap types by Aetheria layer
+ 
+         public static final Codec<Heightmap.Types> CODEC = StringRepresentable.fromEnum(Heightmap.Types::values);
+         private static final IntFunction<Heightmap.Types> BY_ID = ByIdMap.continuous(types -> types.id, values(), ByIdMap.OutOfBoundsStrategy.ZERO);
+diff --git a/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java b/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java
+index 6745fd379962713315ffc8c00e587884e7a5903a..8c5a0b1d34e18af4c2db34f0fe5fc5ea026ece32 100644
+--- a/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java
++++ b/net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java
+@@ -74,6 +74,24 @@ public record NoiseGeneratorSettings(
+         return this.useLegacyRandomSource ? WorldgenRandom.Algorithm.LEGACY : WorldgenRandom.Algorithm.XOROSHIRO;
+     }
+ 
++    // Aetheria start - Create a new NoiseGeneratorSettings with different NoiseSettings
++    public NoiseGeneratorSettings withDifferentNoiseSettings(final NoiseSettings noiseSettings) {
++        return new NoiseGeneratorSettings(
++                noiseSettings,
++                this.defaultBlock,
++                this.defaultFluid,
++                this.noiseRouter,
++                this.surfaceRule,
++                this.spawnTarget,
++                this.seaLevel,
++                this.disableMobGeneration,
++                this.aquifersEnabled,
++                this.oreVeinsEnabled,
++                this.useLegacyRandomSource
++        );
++    }
++    // Aetheria end - Create a new NoiseGeneratorSettings with different NoiseSettings
++
+     public static void bootstrap(BootstrapContext<NoiseGeneratorSettings> context) {
+         context.register(OVERWORLD, overworld(context, false, false));
+         context.register(LARGE_BIOMES, overworld(context, false, true));
+diff --git a/net/minecraft/world/level/levelgen/NoiseRouterData.java b/net/minecraft/world/level/levelgen/NoiseRouterData.java
+index f1c6baf935d53775fa26e6083323983674c2c3b5..9e7e42402ea035881961b792073abaa8f20312b8 100644
+--- a/net/minecraft/world/level/levelgen/NoiseRouterData.java
++++ b/net/minecraft/world/level/levelgen/NoiseRouterData.java
+@@ -1,6 +1,9 @@
+ package net.minecraft.world.level.levelgen;
+ 
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderGetter;
+ import net.minecraft.core.registries.Registries;
+@@ -324,7 +327,8 @@ public class NoiseRouterData {
+         return DensityFunctions.add(DensityFunctions.mul(function, DensityFunctions.constant(d)), DensityFunctions.constant(d1));
+     }
+ 
+-    protected static NoiseRouter overworld(
++    @Modified(Op.MAKE_PUBLIC)
++    public static NoiseRouter overworld(
+         HolderGetter<DensityFunction> densityFunctionRegistry, HolderGetter<NormalNoise.NoiseParameters> noiseParameters, boolean large, boolean amplified
+     ) {
+         DensityFunction densityFunction = DensityFunctions.noise(noiseParameters.getOrThrow(Noises.AQUIFER_BARRIER), 0.5);
+@@ -428,7 +432,8 @@ public class NoiseRouterData {
+         return slide(densityFunction, minY, height, 72, -184, -23.4375, 4, 32, -0.234375);
+     }
+ 
+-    protected static NoiseRouter nether(HolderGetter<DensityFunction> densityFunctions, HolderGetter<NormalNoise.NoiseParameters> noiseParameters) {
++    @Modified(Op.MAKE_PUBLIC)
++    public static NoiseRouter nether(HolderGetter<DensityFunction> densityFunctions, HolderGetter<NormalNoise.NoiseParameters> noiseParameters) {
+         return noNewCaves(densityFunctions, noiseParameters, slideNetherLike(densityFunctions, 0, 128));
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/NoiseSettings.java b/net/minecraft/world/level/levelgen/NoiseSettings.java
+index 4cf3a364595ba5f81f741295695cb9a449bdf672..69712479cfe3ae262bbaf75b84792b8ee189cca9 100644
+--- a/net/minecraft/world/level/levelgen/NoiseSettings.java
++++ b/net/minecraft/world/level/levelgen/NoiseSettings.java
+@@ -4,6 +4,9 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.DataResult;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.function.Function;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.QuartPos;
+ import net.minecraft.world.level.LevelHeightAccessor;
+ import net.minecraft.world.level.dimension.DimensionType;
+@@ -19,8 +22,10 @@ public record NoiseSettings(int minY, int height, int noiseSizeHorizontal, int n
+                 .apply(instance, NoiseSettings::new)
+         )
+         .comapFlatMap(NoiseSettings::guardY, Function.identity());
+-    protected static final NoiseSettings OVERWORLD_NOISE_SETTINGS = create(-64, 384, 1, 2);
+-    protected static final NoiseSettings NETHER_NOISE_SETTINGS = create(0, 128, 1, 2);
++    @Modified(Op.MAKE_PUBLIC)
++    public static final NoiseSettings OVERWORLD_NOISE_SETTINGS = create(-64, 384, 1, 2);
++    @Modified(Op.MAKE_PUBLIC)
++    public static final NoiseSettings NETHER_NOISE_SETTINGS = create(0, 128, 1, 2);
+     protected static final NoiseSettings END_NOISE_SETTINGS = create(0, 128, 2, 1);
+     protected static final NoiseSettings CAVES_NOISE_SETTINGS = create(-64, 192, 1, 2);
+     protected static final NoiseSettings FLOATING_ISLANDS_NOISE_SETTINGS = create(0, 256, 2, 1);
+diff --git a/net/minecraft/world/level/levelgen/feature/BambooFeature.java b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
+index 68bb87abc8a2831d75bdfe2b77f8ba1b1b4b61c1..be672194bb58fd8e88e1b1344eb1a9a9b473149e 100644
+--- a/net/minecraft/world/level/levelgen/feature/BambooFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+@@ -10,7 +12,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.block.state.properties.BambooLeaves;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.ProbabilityFeatureConfiguration;
+ 
+ public class BambooFeature extends Feature<ProbabilityFeatureConfiguration> {
+@@ -27,6 +28,7 @@ public class BambooFeature extends Feature<ProbabilityFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<ProbabilityFeatureConfiguration> context) {
+         int i = 0;
+@@ -47,7 +49,7 @@ public class BambooFeature extends Feature<ProbabilityFeatureConfiguration> {
+                             int i5 = i3 - blockPos.getX();
+                             int i6 = i4 - blockPos.getZ();
+                             if (i5 * i5 + i6 * i6 <= i2 * i2) {
+-                                mutableBlockPos1.set(i3, worldGenLevel.getHeight(Heightmap.Types.WORLD_SURFACE, i3, i4) - 1, i4);
++                                mutableBlockPos1.set(i3, worldGenLevel.getHeight(context.heightContext().worldSurface(), i3, i4) - 1, i4);
+                                 if (isDirt(worldGenLevel.getBlockState(mutableBlockPos1))) {
+                                     worldGenLevel.setBlock(mutableBlockPos1, Blocks.PODZOL.defaultBlockState(), Block.UPDATE_CLIENTS);
+                                 }
+diff --git a/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java b/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
+index 75f1949f3198baf8f7b1a2df833d5d432f5bcb77..ab629f00aad8688c518ad7361a19c91feab2994e 100644
+--- a/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
+@@ -2,7 +2,8 @@ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+ import it.unimi.dsi.fastutil.ints.IntArrayList;
+-import java.util.stream.IntStream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+@@ -13,15 +14,17 @@ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+ import net.minecraft.world.level.storage.loot.BuiltInLootTables;
+ 
++import java.util.stream.IntStream;
++
+ public class BonusChestFeature extends Feature<NoneFeatureConfiguration> {
+     public BonusChestFeature(Codec<NoneFeatureConfiguration> codec) {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
+         RandomSource randomSource = context.random();
+@@ -34,7 +37,7 @@ public class BonusChestFeature extends Feature<NoneFeatureConfiguration> {
+         for (Integer integer : list) {
+             for (Integer integer1 : list1) {
+                 mutableBlockPos.set(integer, 0, integer1);
+-                BlockPos heightmapPos = worldGenLevel.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, mutableBlockPos);
++                BlockPos heightmapPos = worldGenLevel.getHeightmapPos(context.heightContext().motionBlockingNoLeaves(), mutableBlockPos);
+                 if (worldGenLevel.isEmptyBlock(heightmapPos)
+                     || worldGenLevel.getBlockState(heightmapPos).getCollisionShape(worldGenLevel, heightmapPos).isEmpty()) {
+                     worldGenLevel.setBlock(heightmapPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
+diff --git a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
+index 0a83dcf81aedbf77ad7d7ba8ede08d8149d93978..8baa92642af1391c36dc58c95548740d21e6ec10 100644
+--- a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
+@@ -1,7 +1,9 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderSet;
+@@ -14,6 +16,8 @@ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.chunk.ChunkGenerator;
+ import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+ 
++import java.util.stream.Stream;
++
+ public record ConfiguredFeature<FC extends FeatureConfiguration, F extends Feature<FC>>(F feature, FC config) {
+     public static final Codec<ConfiguredFeature<?, ?>> DIRECT_CODEC = BuiltInRegistries.FEATURE
+         .byNameCodec()
+@@ -21,8 +25,14 @@ public record ConfiguredFeature<FC extends FeatureConfiguration, F extends Featu
+     public static final Codec<Holder<ConfiguredFeature<?, ?>>> CODEC = RegistryFileCodec.create(Registries.CONFIGURED_FEATURE, DIRECT_CODEC);
+     public static final Codec<HolderSet<ConfiguredFeature<?, ?>>> LIST_CODEC = RegistryCodecs.homogeneousList(Registries.CONFIGURED_FEATURE, DIRECT_CODEC);
+ 
++    @Deprecated
++    @Modified(Op.ADD_COMPAT)
+     public boolean place(WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos pos) {
+-        return this.feature.place(this.config, level, chunkGenerator, random, pos);
++        return this.place(level, chunkGenerator, random, pos,  HeightContext.vanilla(level));
++    }
++
++    public boolean place(WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return this.feature.place(this.config, level, chunkGenerator, random, pos, heightContext);
+     }
+ 
+     public Stream<ConfiguredFeature<?, ?>> getFeatures() {
+diff --git a/net/minecraft/world/level/levelgen/feature/Feature.java b/net/minecraft/world/level/levelgen/feature/Feature.java
+index c6d7a686bcc21d041444b647deeab2acf4859194..8214d344aeacb0baace49e55ba594f7f390acf5b 100644
+--- a/net/minecraft/world/level/levelgen/feature/Feature.java
++++ b/net/minecraft/world/level/levelgen/feature/Feature.java
+@@ -2,9 +2,9 @@ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+-import java.util.Optional;
+-import java.util.function.Function;
+-import java.util.function.Predicate;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Registry;
+@@ -19,42 +19,11 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.chunk.ChunkGenerator;
+-import net.minecraft.world.level.levelgen.feature.configurations.BlockColumnConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.BlockPileConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.BlockStateConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.ColumnFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.CountConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.DeltaFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.DiskConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.DripstoneClusterConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.EndGatewayConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.FallenTreeConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.GeodeConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.HugeMushroomFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.LargeDripstoneConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.LayerConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.MultifaceGrowthConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.NetherForestVegetationConfig;
+-import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.PointedDripstoneConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.ProbabilityFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.RandomBooleanFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.RandomFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.RandomPatchConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.ReplaceBlockConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.ReplaceSphereConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.RootSystemConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.SculkPatchConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.SimpleBlockConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.SimpleRandomFeatureConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.SpikeConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.SpringConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.TwistingVinesConfig;
+-import net.minecraft.world.level.levelgen.feature.configurations.UnderwaterMagmaConfiguration;
+-import net.minecraft.world.level.levelgen.feature.configurations.VegetationPatchConfiguration;
++import net.minecraft.world.level.levelgen.feature.configurations.*;
++
++import java.util.Optional;
++import java.util.function.Function;
++import java.util.function.Predicate;
+ 
+ public abstract class Feature<FC extends FeatureConfiguration> {
+     public static final Feature<NoneFeatureConfiguration> NO_OP = register("no_op", new NoOpFeature(NoneFeatureConfiguration.CODEC));
+@@ -188,8 +157,14 @@ public abstract class Feature<FC extends FeatureConfiguration> {
+ 
+     public abstract boolean place(FeaturePlaceContext<FC> context);
+ 
++    @Deprecated
++    @Modified(Op.ADD_COMPAT)
+     public boolean place(FC config, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin) {
+-        return level.ensureCanWrite(origin) && this.place(new FeaturePlaceContext<>(Optional.empty(), level, chunkGenerator, random, origin, config));
++        return this.place(config, level, chunkGenerator, random, origin, HeightContext.vanilla(level));
++    }
++
++    public boolean place(FC config, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return level.ensureCanWrite(origin) && this.place(new FeaturePlaceContext<>(Optional.empty(), level, chunkGenerator, random, origin, config, heightContext));
+     }
+ 
+     protected static boolean isStone(BlockState state) {
+diff --git a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
+index 453fb645622d7b605dc84d9adeaa24d7141c55ad..f6d9076cd6416106a47e49695e33c44587dfed61 100644
+--- a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
++++ b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
+@@ -1,12 +1,16 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+-import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.chunk.ChunkGenerator;
+ import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+ 
++import java.util.Optional;
++
+ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+     private final Optional<ConfiguredFeature<?, ?>> topFeature;
+     private final WorldGenLevel level;
+@@ -15,8 +19,10 @@ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+     private final BlockPos origin;
+     private final FC config;
+ 
++    private final @Modified(Op.ADD_FIELD) HeightContext heightContext;
++
+     public FeaturePlaceContext(
+-        Optional<ConfiguredFeature<?, ?>> topFeature, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin, FC config
++        Optional<ConfiguredFeature<?, ?>> topFeature, WorldGenLevel level, ChunkGenerator chunkGenerator, RandomSource random, BlockPos origin, FC config, @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         this.topFeature = topFeature;
+         this.level = level;
+@@ -24,6 +30,7 @@ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+         this.random = random;
+         this.origin = origin;
+         this.config = config;
++        this.heightContext = heightContext;
+     }
+ 
+     public Optional<ConfiguredFeature<?, ?>> topFeature() {
+@@ -49,4 +56,9 @@ public class FeaturePlaceContext<FC extends FeatureConfiguration> {
+     public FC config() {
+         return this.config;
+     }
++
++    @Modified(Op.ADD_METHOD)
++    public HeightContext heightContext() {
++        return this.heightContext;
++    }
+ }
+diff --git a/net/minecraft/world/level/levelgen/feature/FossilFeature.java b/net/minecraft/world/level/levelgen/feature/FossilFeature.java
+index ada05d365b386ee6040575e92bf48b0adaa7c0c1..1d96a3061c0010ab3493f7bec6dc79f1bf293491 100644
+--- a/net/minecraft/world/level/levelgen/feature/FossilFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/FossilFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Vec3i;
+ import net.minecraft.util.RandomSource;
+@@ -11,7 +13,6 @@ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.Mirror;
+ import net.minecraft.world.level.block.Rotation;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.structure.BoundingBox;
+ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+@@ -23,6 +24,7 @@ public class FossilFeature extends Feature<FossilFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<FossilFeatureConfiguration> context) {
+         RandomSource randomSource = context.random();
+@@ -50,7 +52,7 @@ public class FossilFeature extends Feature<FossilFeatureConfiguration> {
+ 
+         for (int i = 0; i < size.getX(); i++) {
+             for (int i1 = 0; i1 < size.getZ(); i1++) {
+-                y = Math.min(y, worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, blockPos1.getX() + i, blockPos1.getZ() + i1));
++                y = Math.min(y, worldGenLevel.getHeight(context.heightContext().oceanFloorWg(), blockPos1.getX() + i, blockPos1.getZ() + i1));
+             }
+         }
+ 
+diff --git a/net/minecraft/world/level/levelgen/feature/IcebergFeature.java b/net/minecraft/world/level/levelgen/feature/IcebergFeature.java
+index 09235e8520977ef0184b684dc861741ddc198f84..c11d93036d7b9764c1ff7c3ecbafff8373a2d9e6 100644
+--- a/net/minecraft/world/level/levelgen/feature/IcebergFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/IcebergFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
+@@ -16,11 +18,12 @@ public class IcebergFeature extends Feature<BlockStateConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<BlockStateConfiguration> context) {
+         BlockPos blockPos = context.origin();
+         WorldGenLevel worldGenLevel = context.level();
+-        blockPos = new BlockPos(blockPos.getX(), context.chunkGenerator().getSeaLevel(), blockPos.getZ());
++        blockPos = new BlockPos(blockPos.getX(), context.heightContext().seaLevel(), blockPos.getZ());
+         RandomSource randomSource = context.random();
+         boolean flag = randomSource.nextDouble() > 0.7;
+         BlockState blockState = context.config().state;
+diff --git a/net/minecraft/world/level/levelgen/feature/KelpFeature.java b/net/minecraft/world/level/levelgen/feature/KelpFeature.java
+index ec8b423ce631129e98b50fdaf55ea8cdee02a11f..34054d9e91977a0320367d61b5cec4fa1a690631 100644
+--- a/net/minecraft/world/level/levelgen/feature/KelpFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/KelpFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -8,7 +10,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.KelpBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+ 
+ public class KelpFeature extends Feature<NoneFeatureConfiguration> {
+@@ -16,13 +17,14 @@ public class KelpFeature extends Feature<NoneFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
+         int i = 0;
+         WorldGenLevel worldGenLevel = context.level();
+         BlockPos blockPos = context.origin();
+         RandomSource randomSource = context.random();
+-        int height = worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR, blockPos.getX(), blockPos.getZ());
++        int height = worldGenLevel.getHeight(context.heightContext().oceanFloor(), blockPos.getX(), blockPos.getZ());
+         BlockPos blockPos1 = new BlockPos(blockPos.getX(), height, blockPos.getZ());
+         if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER)) {
+             BlockState blockState = Blocks.KELP.defaultBlockState();
+diff --git a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
+index dcae4d6f2f8bbc4c9898c35b49576a2e25e26efc..6d5f8e89e3eba360ed644b2ec12581b4ee784562 100644
+--- a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
+@@ -1,7 +1,10 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+-import com.mojang.serialization.Codec;
+ import java.util.Optional;
++import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+@@ -13,7 +16,6 @@ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.levelgen.Column;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.LargeDripstoneConfiguration;
+ import net.minecraft.world.phys.Vec3;
+ import org.jspecify.annotations.Nullable;
+@@ -23,6 +25,7 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<LargeDripstoneConfiguration> context) {
+         WorldGenLevel worldGenLevel = context.level();
+@@ -73,11 +76,11 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+                     boolean flag = largeDripstone.moveBackUntilBaseIsInsideStoneAndShrinkRadiusIfNecessary(worldGenLevel, windOffsetter);
+                     boolean flag1 = largeDripstone1.moveBackUntilBaseIsInsideStoneAndShrinkRadiusIfNecessary(worldGenLevel, windOffsetter);
+                     if (flag) {
+-                        largeDripstone.placeBlocks(worldGenLevel, randomSource, windOffsetter);
++                        largeDripstone.placeBlocks(worldGenLevel, randomSource, windOffsetter, context.heightContext());
+                     }
+ 
+                     if (flag1) {
+-                        largeDripstone1.placeBlocks(worldGenLevel, randomSource, windOffsetter);
++                        largeDripstone1.placeBlocks(worldGenLevel, randomSource, windOffsetter, context.heightContext());
+                     }
+ 
+                     if (SharedConstants.DEBUG_LARGE_DRIPSTONE) {
+@@ -168,7 +171,7 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+             return (int)DripstoneUtils.getDripstoneHeight(radius, this.radius, this.scale, this.bluntness);
+         }
+ 
+-        void placeBlocks(WorldGenLevel level, RandomSource random, LargeDripstoneFeature.WindOffsetter windOffsetter) {
++        void placeBlocks(WorldGenLevel level, RandomSource random, LargeDripstoneFeature.WindOffsetter windOffsetter, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+             for (int i = -this.radius; i <= this.radius; i++) {
+                 for (int i1 = -this.radius; i1 <= this.radius; i1++) {
+                     float squareRoot = Mth.sqrt(i * i + i1 * i1);
+@@ -182,7 +185,7 @@ public class LargeDripstoneFeature extends Feature<LargeDripstoneConfiguration>
+                             BlockPos.MutableBlockPos mutableBlockPos = this.root.offset(i, 0, i1).mutable();
+                             boolean flag = false;
+                             int i2 = this.pointingUp
+-                                ? level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, mutableBlockPos.getX(), mutableBlockPos.getZ())
++                                ? level.getHeight(heightContext.worldSurfaceWg(), mutableBlockPos.getX(), mutableBlockPos.getZ())
+                                 : Integer.MAX_VALUE;
+ 
+                             for (int i3 = 0; i3 < heightAtRadius && mutableBlockPos.getY() < i2; i3++) {
+diff --git a/net/minecraft/world/level/levelgen/feature/OreFeature.java b/net/minecraft/world/level/levelgen/feature/OreFeature.java
+index c7b46efd4f08067e2c9c5c8b0e8b71a94a79823d..fb26f09ce80f72ea39fa0afbd00ca79ba8b08c66 100644
+--- a/net/minecraft/world/level/levelgen/feature/OreFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/OreFeature.java
+@@ -1,8 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
+-import java.util.BitSet;
+-import java.util.function.Function;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.util.Mth;
+@@ -11,14 +11,17 @@ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.chunk.BulkSectionAccess;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
+ 
++import java.util.BitSet;
++import java.util.function.Function;
++
+ public class OreFeature extends Feature<OreConfiguration> {
+     public OreFeature(Codec<OreConfiguration> codec) {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<OreConfiguration> context) {
+         RandomSource randomSource = context.random();
+@@ -43,7 +46,7 @@ public class OreFeature extends Feature<OreConfiguration> {
+ 
+         for (int i6 = i1; i6 <= i1 + i4; i6++) {
+             for (int i7 = i3; i7 <= i3 + i4; i7++) {
+-                if (i2 <= worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, i6, i7)) {
++                if (i2 <= worldGenLevel.getHeight(context.heightContext().oceanFloorWg(), i6, i7)) {
+                     return this.doPlace(worldGenLevel, randomSource, oreConfiguration, d, d1, d2, d3, d4, d5, i1, i2, i3, i4, i5);
+                 }
+             }
+diff --git a/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java b/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java
+index f48994224bb944388751e9cadffd8f822ad4da4f..68e580bd8e31f798260a20deaad50522595dcc48 100644
+--- a/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java
+@@ -8,7 +8,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.SeaPickleBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.CountConfiguration;
+ 
+ public class SeaPickleFeature extends Feature<CountConfiguration> {
+@@ -27,7 +26,7 @@ public class SeaPickleFeature extends Feature<CountConfiguration> {
+         for (int i2 = 0; i2 < i1; i2++) {
+             int i3 = randomSource.nextInt(8) - randomSource.nextInt(8);
+             int i4 = randomSource.nextInt(8) - randomSource.nextInt(8);
+-            int height = worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR, blockPos.getX() + i3, blockPos.getZ() + i4);
++            int height = worldGenLevel.getHeight(context.heightContext().oceanFloor(), blockPos.getX() + i3, blockPos.getZ() + i4);
+             BlockPos blockPos1 = new BlockPos(blockPos.getX() + i3, height, blockPos.getZ() + i4);
+             BlockState blockState = Blocks.SEA_PICKLE.defaultBlockState().setValue(SeaPickleBlock.PICKLES, randomSource.nextInt(4) + 1);
+             if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER) && blockState.canSurvive(worldGenLevel, blockPos1)) {
+diff --git a/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java b/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
+index 4c6382f25afbf025cc37c3a9d21faea36b357216..0a35f4133e2f63a9a1f0822108c3064379759e38 100644
+--- a/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -9,7 +11,6 @@ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.TallSeagrassBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.ProbabilityFeatureConfiguration;
+ 
+ public class SeagrassFeature extends Feature<ProbabilityFeatureConfiguration> {
+@@ -17,6 +18,7 @@ public class SeagrassFeature extends Feature<ProbabilityFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<ProbabilityFeatureConfiguration> context) {
+         boolean flag = false;
+@@ -26,7 +28,7 @@ public class SeagrassFeature extends Feature<ProbabilityFeatureConfiguration> {
+         ProbabilityFeatureConfiguration probabilityFeatureConfiguration = context.config();
+         int i = randomSource.nextInt(8) - randomSource.nextInt(8);
+         int i1 = randomSource.nextInt(8) - randomSource.nextInt(8);
+-        int height = worldGenLevel.getHeight(Heightmap.Types.OCEAN_FLOOR, blockPos.getX() + i, blockPos.getZ() + i1);
++        int height = worldGenLevel.getHeight(context.heightContext().oceanFloor(), blockPos.getX() + i, blockPos.getZ() + i1);
+         BlockPos blockPos1 = new BlockPos(blockPos.getX() + i, height, blockPos.getZ() + i1);
+         if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER)) {
+             boolean flag1 = randomSource.nextDouble() < probabilityFeatureConfiguration.probability;
+diff --git a/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java b/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
+index 67f2ffa22e4b45cc295e544c5fc38828c638a896..f4a208bada405b88129030193b6f659d88f5f501 100644
+--- a/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level.levelgen.feature;
+ 
+ import com.mojang.serialization.Codec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.world.level.WorldGenLevel;
+@@ -9,7 +11,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.SnowyDirtBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+ 
+ public class SnowAndFreezeFeature extends Feature<NoneFeatureConfiguration> {
+@@ -17,6 +18,7 @@ public class SnowAndFreezeFeature extends Feature<NoneFeatureConfiguration> {
+         super(codec);
+     }
+ 
++    @Modified(Op.CHANGE_BODY)
+     @Override
+     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
+         WorldGenLevel worldGenLevel = context.level();
+@@ -28,7 +30,7 @@ public class SnowAndFreezeFeature extends Feature<NoneFeatureConfiguration> {
+             for (int i1 = 0; i1 < 16; i1++) {
+                 int i2 = blockPos.getX() + i;
+                 int i3 = blockPos.getZ() + i1;
+-                int height = worldGenLevel.getHeight(Heightmap.Types.MOTION_BLOCKING, i2, i3);
++                int height = worldGenLevel.getHeight(context.heightContext().motionBlocking(), i2, i3);
+                 mutableBlockPos.set(i2, height, i3);
+                 mutableBlockPos1.set(mutableBlockPos).move(Direction.DOWN, 1);
+                 Biome biome = worldGenLevel.getBiome(mutableBlockPos).value();
+diff --git a/net/minecraft/world/level/levelgen/placement/BiomeFilter.java b/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
+index 21a169637c27fc6b9d6d64592dbeee0a003457cc..d901baf81d498229717ec9642f36d3adc14175e2 100644
+--- a/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
+@@ -1,6 +1,9 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.util.RandomSource;
+@@ -18,10 +21,10 @@ public class BiomeFilter extends PlacementFilter {
+     }
+ 
+     @Override
+-    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos) {
++    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         PlacedFeature placedFeature = context.topFeature()
+             .orElseThrow(() -> new IllegalStateException("Tried to biome check an unregistered feature, or a feature that should not restrict the biome"));
+-        Holder<Biome> biome = context.getLevel().getBiome(pos);
++        Holder<Biome> biome = context.getLevel().getBiome(pos.atY(heightContext.y(pos.getY())));
+         return context.generator().getBiomeGenerationSettings(biome).hasFeature(placedFeature);
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java b/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
+index d32cef8384c4168b911a10ae29ad1989bf91be29..5587dff3446d82c82f669d451b8f01bd2c665cc0 100644
+--- a/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
+@@ -2,6 +2,9 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+@@ -21,8 +24,8 @@ public class BlockPredicateFilter extends PlacementFilter {
+     }
+ 
+     @Override
+-    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos) {
+-        return this.predicate.test(context.getLevel(), pos);
++    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return this.predicate.test(context.getLevel(), pos.atY(heightContext.y(pos.getY())));
+     }
+ 
+     @Override
+diff --git a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
+index 06721d146ad96fa95645b8fe5eef58171b2bef33..dd9ac763756376d78caec68d0b3c543bbc01e716 100644
+--- a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
+@@ -1,15 +1,18 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+-import java.util.stream.Stream;
+-import java.util.stream.Stream.Builder;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.valueproviders.ConstantInt;
+ import net.minecraft.util.valueproviders.IntProvider;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.levelgen.Heightmap;
++
++import java.util.stream.Stream;
++import java.util.stream.Stream.Builder;
+ 
+ @Deprecated
+ public class CountOnEveryLayerPlacement extends PlacementModifier {
+@@ -31,7 +34,7 @@ public class CountOnEveryLayerPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         Builder<BlockPos> builder = Stream.builder();
+         int i = 0;
+ 
+@@ -42,7 +45,7 @@ public class CountOnEveryLayerPlacement extends PlacementModifier {
+             for (int i1 = 0; i1 < this.count.sample(random); i1++) {
+                 int i2 = random.nextInt(16) + pos.getX();
+                 int i3 = random.nextInt(16) + pos.getZ();
+-                int height = context.getHeight(Heightmap.Types.MOTION_BLOCKING, i2, i3);
++                int height = context.getHeight(heightContext.motionBlocking(), i2, i3);
+                 int i4 = findOnGroundYPosition(context, i2, height, i3, i);
+                 if (i4 != Integer.MAX_VALUE) {
+                     builder.add(new BlockPos(i2, i4, i3));
+diff --git a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
+index 5d6053cbd6d07d2a1eaf2acc1d8d42607459b9f0..ac31b3e4f379b05e032cea819f76cc734747f528 100644
+--- a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
+@@ -3,13 +3,17 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+ import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+ 
++import java.util.stream.Stream;
++
+ public class EnvironmentScanPlacement extends PlacementModifier {
+     private final Direction directionOfSearch;
+     private final BlockPredicate targetCondition;
+@@ -45,7 +49,7 @@ public class EnvironmentScanPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         BlockPos.MutableBlockPos mutableBlockPos = pos.mutable();
+         WorldGenLevel level = context.getLevel();
+         if (!this.allowedSearchCondition.test(level, mutableBlockPos)) {
+diff --git a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
+index 0d8730c75c7c037ab5b48fa198c4dc51b2c33d2c..8680a17b69f56b33b79e769af62e24051ae4c1bf 100644
+--- a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
+@@ -2,12 +2,16 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import java.util.List;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.util.RandomSource;
+ 
++import java.util.List;
++import java.util.stream.Stream;
++
+ public class FixedPlacement extends PlacementModifier {
+     public static final MapCodec<FixedPlacement> CODEC = RecordCodecBuilder.mapCodec(
+         instance -> instance.group(BlockPos.CODEC.listOf().fieldOf("positions").forGetter(placement -> placement.positions))
+@@ -24,7 +28,7 @@ public class FixedPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         int sectionPosX = SectionPos.blockToSectionCoord(pos.getX());
+         int sectionPosZ = SectionPos.blockToSectionCoord(pos.getZ());
+         boolean flag = false;
+diff --git a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
+index cfc010a3904218ec1cb1652097b0024852a02b54..d37efac366d581539437d752417e1ac5219816d3 100644
+--- a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
+@@ -2,7 +2,9 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.VerticalAnchor;
+@@ -10,6 +12,8 @@ import net.minecraft.world.level.levelgen.heightproviders.HeightProvider;
+ import net.minecraft.world.level.levelgen.heightproviders.TrapezoidHeight;
+ import net.minecraft.world.level.levelgen.heightproviders.UniformHeight;
+ 
++import java.util.stream.Stream;
++
+ public class HeightRangePlacement extends PlacementModifier {
+     public static final MapCodec<HeightRangePlacement> CODEC = RecordCodecBuilder.mapCodec(
+         instance -> instance.group(HeightProvider.CODEC.fieldOf("height").forGetter(placement -> placement.height)).apply(instance, HeightRangePlacement::new)
+@@ -33,8 +37,8 @@ public class HeightRangePlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
+-        return Stream.of(pos.atY(this.height.sample(random, context)));
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return Stream.of(pos.atY(heightContext.y(this.height.sample(random, context))));
+     }
+ 
+     @Override
+diff --git a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
+index 437b650fdc21faa1b76c41e94d3d98c00d0a2881..c139fdee00931fcd20ba10663b43e971bc7123ae 100644
+--- a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
+@@ -2,11 +2,15 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.Heightmap;
+ 
++import java.util.stream.Stream;
++
+ public class HeightmapPlacement extends PlacementModifier {
+     public static final MapCodec<HeightmapPlacement> CODEC = RecordCodecBuilder.mapCodec(
+         instance -> instance.group(Heightmap.Types.CODEC.fieldOf("heightmap").forGetter(placement -> placement.heightmap))
+@@ -23,10 +27,10 @@ public class HeightmapPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         int x = pos.getX();
+         int z = pos.getZ();
+-        int height = context.getHeight(this.heightmap, x, z);
++        int height = context.getHeight(heightContext.resolveHeightmapOrSelf(this.heightmap), x, z);
+         return height > context.getMinY() ? Stream.of(new BlockPos(x, height, z)) : Stream.of();
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
+index cd4bae645f4ee20f8d58e707784ca027b35ddae2..d430b51726c8f37df1c7ac8327de2c089fa20bfd 100644
+--- a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
+@@ -1,10 +1,14 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
++import java.util.stream.Stream;
++
+ public class InSquarePlacement extends PlacementModifier {
+     private static final InSquarePlacement INSTANCE = new InSquarePlacement();
+     public static final MapCodec<InSquarePlacement> CODEC = MapCodec.unit(() -> INSTANCE);
+@@ -14,7 +18,7 @@ public class InSquarePlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         int i = random.nextInt(16) + pos.getX();
+         int i1 = random.nextInt(16) + pos.getZ();
+         return Stream.of(new BlockPos(i, pos.getY(), i1));
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
+index a58d0245899fdb95a91c402f291311a30c40faf2..3c645b3f779a5e6cde1149a6c08759a448e54a34 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
+@@ -5,6 +5,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.List;
+ import java.util.Optional;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+@@ -34,25 +38,31 @@ public record PlacedFeature(Holder<ConfiguredFeature<?, ?>> feature, List<Placem
+         )
+         .listOf();
+ 
++    @Deprecated
++    @Modified(Op.ADD_COMPAT)
+     public boolean place(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos) {
+-        return this.placeWithContext(new PlacementContext(level, generator, Optional.empty()), random, pos);
++        return this.place(level, generator, random, pos, HeightContext.vanilla(level));
++    }
++
++    public boolean place(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return this.placeWithContext(new PlacementContext(level, generator, Optional.empty()), random, pos, heightContext);
+     }
+ 
+-    public boolean placeWithBiomeCheck(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos) {
+-        return this.placeWithContext(new PlacementContext(level, generator, Optional.of(this)), random, pos);
++    public boolean placeWithBiomeCheck(WorldGenLevel level, ChunkGenerator generator, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return this.placeWithContext(new PlacementContext(level, generator, Optional.of(this)), random, pos, heightContext);
+     }
+ 
+-    private boolean placeWithContext(PlacementContext context, RandomSource source, BlockPos pos) {
++    private boolean placeWithContext(PlacementContext context, RandomSource source, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         Stream<BlockPos> stream = Stream.of(pos);
+ 
+         for (PlacementModifier placementModifier : this.placement) {
+-            stream = stream.flatMap(blockPos -> placementModifier.getPositions(context, source, blockPos));
++            stream = stream.flatMap(blockPos -> placementModifier.getPositions(context, source, blockPos, heightContext));
+         }
+ 
+         ConfiguredFeature<?, ?> configuredFeature = this.feature.value();
+         MutableBoolean mutableBoolean = new MutableBoolean();
+         stream.forEach(blockPos -> {
+-            if (configuredFeature.place(context.getLevel(), context.generator(), source, blockPos)) {
++            if (configuredFeature.place(context.getLevel(), context.generator(), source, blockPos, heightContext)) {
+                 mutableBoolean.setTrue();
+                 if (SharedConstants.DEBUG_FEATURE_COUNT) {
+                     FeatureCountTracker.featurePlaced(context.getLevel().getLevel(), configuredFeature, context.topFeature());
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
+index c894f0f63c0c6f55f0c4ac1d84336138b0505109..822e158a91a3d0c3b03417f33f489e7763355bb0 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
+@@ -1,14 +1,18 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
++import java.util.stream.Stream;
++
+ public abstract class PlacementFilter extends PlacementModifier {
+     @Override
+-    public final Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
+-        return this.shouldPlace(context, random, pos) ? Stream.of(pos) : Stream.of();
++    public final Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return this.shouldPlace(context, random, pos, heightContext) ? Stream.of(pos) : Stream.of();
+     }
+ 
+-    protected abstract boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos);
++    protected abstract boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext);
+ }
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
+index 39154c291bc3a4ec7a163f210aa6d4e53230d297..9d42bc98b1439c3bcf0fdac35e16bcfae76975b3 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.Codec;
+ import java.util.stream.Stream;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.util.RandomSource;
+@@ -11,7 +15,7 @@ public abstract class PlacementModifier {
+         .byNameCodec()
+         .dispatch(PlacementModifier::type, PlacementModifierType::codec);
+ 
+-    public abstract Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos);
++    public abstract Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext);
+ 
+     public abstract PlacementModifierType<?> type();
+ }
+diff --git a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
+index 0cb949acf53802cf64923e6ce56977a861a6892b..66cc9fae6827813c056db1e5ddc103c10ab2ba49 100644
+--- a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
+@@ -2,12 +2,16 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.valueproviders.ConstantInt;
+ import net.minecraft.util.valueproviders.IntProvider;
+ 
++import java.util.stream.Stream;
++
+ public class RandomOffsetPlacement extends PlacementModifier {
+     public static final MapCodec<RandomOffsetPlacement> CODEC = RecordCodecBuilder.mapCodec(
+         instance -> instance.group(
+@@ -37,7 +41,7 @@ public class RandomOffsetPlacement extends PlacementModifier {
+     }
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         int i = pos.getX() + this.xzSpread.sample(random);
+         int i1 = pos.getY() + this.ySpread.sample(random);
+         int i2 = pos.getZ() + this.xzSpread.sample(random);
+diff --git a/net/minecraft/world/level/levelgen/placement/RarityFilter.java b/net/minecraft/world/level/levelgen/placement/RarityFilter.java
+index 8d3a5a8790eb1333d3a51b8bd6e2685d08e7e4a2..b82dd3c4571b14b033d12ac28a5614a1ef4ce4fb 100644
+--- a/net/minecraft/world/level/levelgen/placement/RarityFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/RarityFilter.java
+@@ -1,6 +1,9 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+ import com.mojang.serialization.MapCodec;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.ExtraCodecs;
+ import net.minecraft.util.RandomSource;
+@@ -18,7 +21,7 @@ public class RarityFilter extends PlacementFilter {
+     }
+ 
+     @Override
+-    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos) {
++    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         return random.nextFloat() < 1.0F / this.chance;
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
+index 0098f5951611ebb8d518d1832cb4a8e69e98c2d8..d53c1681fa3eb77c3f8b7a9c7d8e2a28c2813ea2 100644
+--- a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
+@@ -1,15 +1,19 @@
+ package net.minecraft.world.level.levelgen.placement;
+ 
+-import java.util.stream.IntStream;
+-import java.util.stream.Stream;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
++import java.util.stream.IntStream;
++import java.util.stream.Stream;
++
+ public abstract class RepeatingPlacement extends PlacementModifier {
+     protected abstract int count(RandomSource random, BlockPos pos);
+ 
+     @Override
+-    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos) {
++    public Stream<BlockPos> getPositions(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         return IntStream.range(0, this.count(random, pos)).mapToObj(i -> pos);
+     }
+ }
+diff --git a/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java b/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
+index a7792d20c1832878e64aeaf6b75808d4535bf9b2..d4a03ed1bbbf786d41720af8567da143b6e22739 100644
+--- a/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
+@@ -3,6 +3,9 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.Heightmap;
+@@ -31,8 +34,8 @@ public class SurfaceRelativeThresholdFilter extends PlacementFilter {
+     }
+ 
+     @Override
+-    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos) {
+-        long l = context.getHeight(this.heightmap, pos.getX(), pos.getZ());
++    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        long l = context.getHeight(heightContext.resolveHeightmapOrSelf(this.heightmap), pos.getX(), pos.getZ());
+         long l1 = l + this.minInclusive;
+         long l2 = l + this.maxInclusive;
+         return l1 <= pos.getY() && pos.getY() <= l2;
+diff --git a/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java b/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
+index fa65d1683ea4f6946699af86acd1cd8b57e75e60..af872d953d2b65d166ba42e31296330111efd33c 100644
+--- a/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
+@@ -3,9 +3,11 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ 
+ public class SurfaceWaterDepthFilter extends PlacementFilter {
+     public static final MapCodec<SurfaceWaterDepthFilter> CODEC = RecordCodecBuilder.mapCodec(
+@@ -23,9 +25,9 @@ public class SurfaceWaterDepthFilter extends PlacementFilter {
+     }
+ 
+     @Override
+-    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos) {
+-        int height = context.getHeight(Heightmap.Types.OCEAN_FLOOR, pos.getX(), pos.getZ());
+-        int height1 = context.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX(), pos.getZ());
++    protected boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        int height = context.getHeight(heightContext.oceanFloor(), pos.getX(), pos.getZ());
++        int height1 = context.getHeight(heightContext.worldSurface(), pos.getX(), pos.getZ());
+         return height1 - height <= this.maxWaterDepth;
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java b/net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java
+index cd1bbbf9c446e2c7b21f9db5b54c98856fe8a71c..5732fda30244d53a6f7889ab3cd70872a14d5c77 100644
+--- a/net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java
+@@ -1,8 +1,10 @@
+ package net.minecraft.world.level.levelgen.structure;
+ 
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.world.level.ChunkPos;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.WorldgenRandom;
+ import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
+ 
+@@ -19,10 +21,10 @@ public abstract class SinglePieceStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
+-        return getLowestY(context, this.width, this.depth) < context.chunkGenerator().getSeaLevel()
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return getLowestY(context, this.width, this.depth, heightContext) < context.chunkGenerator().getSeaLevel()
+             ? Optional.empty()
+-            : onTopOfChunkCenter(context, Heightmap.Types.WORLD_SURFACE_WG, structurePiecesBuilder -> this.generatePieces(structurePiecesBuilder, context));
++            : onTopOfChunkCenter(context, heightContext.worldSurfaceWg(), structurePiecesBuilder -> this.generatePieces(structurePiecesBuilder, context));
+     }
+ 
+     private void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
+diff --git a/net/minecraft/world/level/levelgen/structure/Structure.java b/net/minecraft/world/level/levelgen/structure/Structure.java
+index 8328e864c72b7a358d6bb1f33459b8c4df2ecb1a..d2ec8107f17abffddc535d7ee42f29f3800ce501 100644
+--- a/net/minecraft/world/level/levelgen/structure/Structure.java
++++ b/net/minecraft/world/level/levelgen/structure/Structure.java
+@@ -10,6 +10,9 @@ import java.util.Optional;
+ import java.util.function.Consumer;
+ import java.util.function.Function;
+ import java.util.function.Predicate;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderSet;
+@@ -92,13 +95,14 @@ public abstract class Structure {
+         ChunkPos chunkPos,
+         int references,
+         LevelHeightAccessor heightAccessor,
+-        Predicate<Holder<Biome>> validBiome
++        Predicate<Holder<Biome>> validBiome,
++        @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         ProfiledDuration profiledDuration = JvmProfiler.INSTANCE.onStructureGenerate(chunkPos, level, structure);
+         Structure.GenerationContext generationContext = new Structure.GenerationContext(
+             registryAccess, chunkGenerator, biomeSource, randomState, structureTemplateManager, seed, chunkPos, heightAccessor, validBiome
+         );
+-        Optional<Structure.GenerationStub> optional = this.findValidGenerationPoint(generationContext);
++        Optional<Structure.GenerationStub> optional = this.findValidGenerationPoint(generationContext, heightContext);
+         if (optional.isPresent()) {
+             StructurePiecesBuilder piecesBuilder = optional.get().getPiecesBuilder();
+             StructureStart structureStart = new StructureStart(this, chunkPos, references, piecesBuilder.build());
+@@ -155,37 +159,37 @@ public abstract class Structure {
+     ) {
+     }
+ 
+-    private static int[] getCornerHeights(Structure.GenerationContext context, int minX, int maxX, int minZ, int maxZ) {
++    private static int[] getCornerHeights(Structure.GenerationContext context, int minX, int maxX, int minZ, int maxZ, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         ChunkGenerator chunkGenerator = context.chunkGenerator();
+         LevelHeightAccessor levelHeightAccessor = context.heightAccessor();
+         RandomState randomState = context.randomState();
+         return new int[]{
+-            chunkGenerator.getFirstOccupiedHeight(minX, minZ, Heightmap.Types.WORLD_SURFACE_WG, levelHeightAccessor, randomState),
+-            chunkGenerator.getFirstOccupiedHeight(minX, minZ + maxZ, Heightmap.Types.WORLD_SURFACE_WG, levelHeightAccessor, randomState),
+-            chunkGenerator.getFirstOccupiedHeight(minX + maxX, minZ, Heightmap.Types.WORLD_SURFACE_WG, levelHeightAccessor, randomState),
+-            chunkGenerator.getFirstOccupiedHeight(minX + maxX, minZ + maxZ, Heightmap.Types.WORLD_SURFACE_WG, levelHeightAccessor, randomState)
++            chunkGenerator.getFirstOccupiedHeight(minX, minZ, heightContext.worldSurfaceWg(), levelHeightAccessor, randomState),
++            chunkGenerator.getFirstOccupiedHeight(minX, minZ + maxZ, heightContext.worldSurfaceWg(), levelHeightAccessor, randomState),
++            chunkGenerator.getFirstOccupiedHeight(minX + maxX, minZ, heightContext.worldSurfaceWg(), levelHeightAccessor, randomState),
++            chunkGenerator.getFirstOccupiedHeight(minX + maxX, minZ + maxZ, heightContext.worldSurfaceWg(), levelHeightAccessor, randomState)
+         };
+     }
+ 
+-    public static int getMeanFirstOccupiedHeight(Structure.GenerationContext context, int minX, int maxX, int minZ, int maxZ) {
+-        int[] cornerHeights = getCornerHeights(context, minX, maxX, minZ, maxZ);
++    public static int getMeanFirstOccupiedHeight(Structure.GenerationContext context, int minX, int maxX, int minZ, int maxZ, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        int[] cornerHeights = getCornerHeights(context, minX, maxX, minZ, maxZ, heightContext);
+         return (cornerHeights[0] + cornerHeights[1] + cornerHeights[2] + cornerHeights[3]) / 4;
+     }
+ 
+-    protected static int getLowestY(Structure.GenerationContext context, int maxX, int maxZ) {
++    protected static int getLowestY(Structure.GenerationContext context, int maxX, int maxZ, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         ChunkPos chunkPos = context.chunkPos();
+         int minBlockX = chunkPos.getMinBlockX();
+         int minBlockZ = chunkPos.getMinBlockZ();
+-        return getLowestY(context, minBlockX, minBlockZ, maxX, maxZ);
++        return getLowestY(context, minBlockX, minBlockZ, maxX, maxZ, heightContext);
+     }
+ 
+-    protected static int getLowestY(Structure.GenerationContext context, int minX, int minZ, int maxX, int maxZ) {
+-        int[] cornerHeights = getCornerHeights(context, minX, maxX, minZ, maxZ);
++    protected static int getLowestY(Structure.GenerationContext context, int minX, int minZ, int maxX, int maxZ, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        int[] cornerHeights = getCornerHeights(context, minX, maxX, minZ, maxZ, heightContext);
+         return Math.min(Math.min(cornerHeights[0], cornerHeights[1]), Math.min(cornerHeights[2], cornerHeights[3]));
+     }
+ 
+     @Deprecated
+-    protected BlockPos getLowestYIn5by5BoxOffset7Blocks(Structure.GenerationContext context, Rotation rotation) {
++    protected BlockPos getLowestYIn5by5BoxOffset7Blocks(Structure.GenerationContext context, Rotation rotation, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         int i = 5;
+         int i1 = 5;
+         if (rotation == Rotation.CLOCKWISE_90) {
+@@ -200,13 +204,18 @@ public abstract class Structure {
+         ChunkPos chunkPos = context.chunkPos();
+         int blockX = chunkPos.getBlockX(7);
+         int blockZ = chunkPos.getBlockZ(7);
+-        return new BlockPos(blockX, getLowestY(context, blockX, blockZ, i, i1), blockZ);
++        return new BlockPos(blockX, getLowestY(context, blockX, blockZ, i, i1, heightContext), blockZ);
+     }
+ 
+-    protected abstract Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context);
++    protected abstract Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext);
+ 
++    @Modified(Op.ADD_COMPAT)
+     public Optional<Structure.GenerationStub> findValidGenerationPoint(Structure.GenerationContext context) {
+-        return this.findGenerationPoint(context).filter(stub -> isValidBiome(stub, context));
++        return this.findValidGenerationPoint(context, HeightContext.vanilla(context));
++    }
++
++    public Optional<Structure.GenerationStub> findValidGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return this.findGenerationPoint(context, heightContext).filter(stub -> isValidBiome(stub, context));
+     }
+ 
+     public abstract StructureType<?> type();
+diff --git a/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java b/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
+index 12a8c5d85c9b6a433b90ae98743e78a48bf1e7d4..0d926fad7b88e5ad3eeeb1b94f5a9b2dd21bb9c0 100644
+--- a/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
++++ b/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
+@@ -4,6 +4,10 @@ import com.google.common.collect.Lists;
+ import com.mojang.logging.LogUtils;
+ import java.util.List;
+ import java.util.Optional;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Holder;
+@@ -58,7 +62,8 @@ public class JigsawPlacement {
+         JigsawStructure.MaxDistance maxDistanceFromCenter,
+         PoolAliasLookup aliasLookup,
+         DimensionPadding dimensionPadding,
+-        LiquidSettings liquidSettings
++        LiquidSettings liquidSettings,
++        @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         RegistryAccess registryAccess = context.registryAccess();
+         ChunkGenerator chunkGenerator = context.chunkGenerator();
+@@ -108,7 +113,7 @@ public class JigsawPlacement {
+             int i1 = (boundingBox.maxZ() + boundingBox.minZ()) / 2;
+             int i2 = projectStartToHeightmap.isEmpty()
+                 ? blockPos1.getY()
+-                : pos.getY() + chunkGenerator.getFirstFreeHeight(i, i1, projectStartToHeightmap.get(), levelHeightAccessor, context.randomState());
++                : pos.getY() + chunkGenerator.getFirstFreeHeight(i, i1, heightContext.resolveHeightmapOrSelf(projectStartToHeightmap.get()), levelHeightAccessor, context.randomState());
+             int i3 = boundingBox.minY() + poolElementStructurePiece.getGroundLevelDelta();
+             poolElementStructurePiece.move(0, i2 - i3, 0);
+             if (isStartTooCloseToWorldHeightLimits(levelHeightAccessor, dimensionPadding, poolElementStructurePiece.getBoundingBox())) {
+@@ -213,7 +218,7 @@ public class JigsawPlacement {
+     }
+ 
+     public static boolean generateJigsaw(
+-        ServerLevel level, Holder<StructureTemplatePool> startPool, Identifier startJigsawName, int maxDepth, BlockPos pos, boolean keepJigsaws
++        ServerLevel level, Holder<StructureTemplatePool> startPool, Identifier startJigsawName, int maxDepth, BlockPos pos, boolean keepJigsaws, @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         ChunkGenerator generator = level.getChunkSource().getGenerator();
+         StructureTemplateManager structureManager = level.getStructureManager();
+@@ -241,7 +246,8 @@ public class JigsawPlacement {
+             new JigsawStructure.MaxDistance(128),
+             PoolAliasLookup.EMPTY,
+             JigsawStructure.DEFAULT_DIMENSION_PADDING,
+-            JigsawStructure.DEFAULT_LIQUID_SETTINGS
++            JigsawStructure.DEFAULT_LIQUID_SETTINGS,
++            heightContext
+         );
+         if (optional.isPresent()) {
+             StructurePiecesBuilder piecesBuilder = optional.get().getPiecesBuilder();
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/BuriedTreasureStructure.java b/net/minecraft/world/level/levelgen/structure/structures/BuriedTreasureStructure.java
+index ddba93a3744b46f3033ffc04d8ff732eb0393224..7b3ebb1070d749ff17c2be8511ee18de1b6fb214 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/BuriedTreasureStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/BuriedTreasureStructure.java
+@@ -2,8 +2,11 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ 
+ import com.mojang.serialization.MapCodec;
+ import java.util.Optional;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+ import net.minecraft.world.level.levelgen.structure.StructureType;
+ import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
+@@ -16,12 +19,12 @@ public class BuriedTreasureStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
+-        return onTopOfChunkCenter(context, Heightmap.Types.OCEAN_FLOOR_WG, structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context));
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return onTopOfChunkCenter(context, heightContext.oceanFloorWg(), structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context, heightContext));
+     }
+ 
+-    private static void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
+-        BlockPos blockPos = new BlockPos(context.chunkPos().getBlockX(9), 90, context.chunkPos().getBlockZ(9));
++    private static void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        BlockPos blockPos = new BlockPos(context.chunkPos().getBlockX(9), heightContext.y(90), context.chunkPos().getBlockZ(9));
+         builder.addPiece(new BuriedTreasurePieces.BuriedTreasurePiece(blockPos));
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/EndCityStructure.java b/net/minecraft/world/level/levelgen/structure/structures/EndCityStructure.java
+index 653c03d214d2e690852adc4d697e2b24c39ea3d0..fadd61f287a091b025ac2ef2d17f60e456724689 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/EndCityStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/EndCityStructure.java
+@@ -4,6 +4,9 @@ import com.google.common.collect.Lists;
+ import com.mojang.serialization.MapCodec;
+ import java.util.List;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.world.level.block.Rotation;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+@@ -19,10 +22,10 @@ public class EndCityStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         Rotation random = Rotation.getRandom(context.random());
+-        BlockPos lowestYIn5by5BoxOffset7Blocks = this.getLowestYIn5by5BoxOffset7Blocks(context, random);
+-        return lowestYIn5by5BoxOffset7Blocks.getY() < 60
++        BlockPos lowestYIn5by5BoxOffset7Blocks = this.getLowestYIn5by5BoxOffset7Blocks(context, random, heightContext);
++        return lowestYIn5by5BoxOffset7Blocks.getY() < heightContext.y(60)
+             ? Optional.empty()
+             : Optional.of(
+                 new Structure.GenerationStub(
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/IglooStructure.java b/net/minecraft/world/level/levelgen/structure/structures/IglooStructure.java
+index a5c99078415a368307f1d0fe3a42934e8ab9ca28..f05fa119930e4c8b2c51b7c727cbf13e9c5f84db 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/IglooStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/IglooStructure.java
+@@ -2,10 +2,12 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ 
+ import com.mojang.serialization.MapCodec;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.block.Rotation;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.WorldgenRandom;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+ import net.minecraft.world.level.levelgen.structure.StructureType;
+@@ -19,14 +21,14 @@ public class IglooStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
+-        return onTopOfChunkCenter(context, Heightmap.Types.WORLD_SURFACE_WG, structurePiecesBuilder -> this.generatePieces(structurePiecesBuilder, context));
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return onTopOfChunkCenter(context, heightContext.worldSurfaceWg(), structurePiecesBuilder -> this.generatePieces(structurePiecesBuilder, context, heightContext));
+     }
+ 
+-    private void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
++    private void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         ChunkPos chunkPos = context.chunkPos();
+         WorldgenRandom worldgenRandom = context.random();
+-        BlockPos blockPos = new BlockPos(chunkPos.getMinBlockX(), 90, chunkPos.getMinBlockZ());
++        BlockPos blockPos = new BlockPos(chunkPos.getMinBlockX(), heightContext.y(90), chunkPos.getMinBlockZ());
+         Rotation random = Rotation.getRandom(worldgenRandom);
+         IglooPieces.addPieces(context.structureTemplateManager(), blockPos, random, builder, worldgenRandom);
+     }
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/JigsawStructure.java b/net/minecraft/world/level/levelgen/structure/structures/JigsawStructure.java
+index 992c9f66ba2219270cbf5e1a4d59b001caca0be7..11822ab6c25b11b3beb2a1bbc4efa8e7f86ae25d 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/JigsawStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/JigsawStructure.java
+@@ -9,6 +9,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.List;
+ import java.util.Optional;
+ import java.util.function.Function;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.resources.Identifier;
+@@ -139,7 +143,7 @@ public final class JigsawStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         ChunkPos chunkPos = context.chunkPos();
+         int i = this.startHeight.sample(context.random(), new WorldGenerationContext(context.chunkGenerator(), context.heightAccessor()));
+         BlockPos blockPos = new BlockPos(chunkPos.getMinBlockX(), i, chunkPos.getMinBlockZ());
+@@ -154,7 +158,8 @@ public final class JigsawStructure extends Structure {
+             this.maxDistanceFromCenter,
+             PoolAliasLookup.create(this.poolAliases, blockPos, context.seed()),
+             this.dimensionPadding,
+-            this.liquidSettings
++            this.liquidSettings,
++            heightContext
+         );
+     }
+ 
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/MineshaftStructure.java b/net/minecraft/world/level/levelgen/structure/structures/MineshaftStructure.java
+index 5f2118f664c1013b99137c6d34a11c40c2559156..ba95c63476762ac5fec4065544ccba38b15a0bc8 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/MineshaftStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/MineshaftStructure.java
+@@ -6,6 +6,9 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.Optional;
+ import java.util.function.IntFunction;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.ByIdMap;
+ import net.minecraft.util.Mth;
+@@ -15,7 +18,6 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.chunk.ChunkGenerator;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.WorldgenRandom;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+ import net.minecraft.world.level.levelgen.structure.StructureType;
+@@ -34,16 +36,16 @@ public class MineshaftStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         context.random().nextDouble();
+         ChunkPos chunkPos = context.chunkPos();
+-        BlockPos blockPos = new BlockPos(chunkPos.getMiddleBlockX(), 50, chunkPos.getMinBlockZ());
++        BlockPos blockPos = new BlockPos(chunkPos.getMiddleBlockX(), heightContext.y(50), chunkPos.getMinBlockZ());
+         StructurePiecesBuilder structurePiecesBuilder = new StructurePiecesBuilder();
+-        int i = this.generatePiecesAndAdjust(structurePiecesBuilder, context);
++        int i = this.generatePiecesAndAdjust(structurePiecesBuilder, context, heightContext);
+         return Optional.of(new Structure.GenerationStub(blockPos.offset(0, i, 0), Either.right(structurePiecesBuilder)));
+     }
+ 
+-    private int generatePiecesAndAdjust(StructurePiecesBuilder builder, Structure.GenerationContext context) {
++    private int generatePiecesAndAdjust(StructurePiecesBuilder builder, Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         ChunkPos chunkPos = context.chunkPos();
+         WorldgenRandom worldgenRandom = context.random();
+         ChunkGenerator chunkGenerator = context.chunkGenerator();
+@@ -56,7 +58,7 @@ public class MineshaftStructure extends Structure {
+         if (this.type == MineshaftStructure.Type.MESA) {
+             BlockPos center = builder.getBoundingBox().getCenter();
+             int baseHeight = chunkGenerator.getBaseHeight(
+-                center.getX(), center.getZ(), Heightmap.Types.WORLD_SURFACE_WG, context.heightAccessor(), context.randomState()
++                center.getX(), center.getZ(), heightContext.worldSurfaceWg(), context.heightAccessor(), context.randomState()
+             );
+             int i = baseHeight <= seaLevel ? seaLevel : Mth.randomBetweenInclusive(worldgenRandom, seaLevel, baseHeight);
+             int i1 = i - center.getY();
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/NetherFortressStructure.java b/net/minecraft/world/level/levelgen/structure/structures/NetherFortressStructure.java
+index 0a3b0b28641f18937240b77545997637f1d21b4c..a9e4c1af86124fcd7d4a6d0cb56c3d239ea281bc 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/NetherFortressStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/NetherFortressStructure.java
+@@ -3,6 +3,9 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ import com.mojang.serialization.MapCodec;
+ import java.util.List;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.random.WeightedList;
+ import net.minecraft.world.entity.EntityType;
+@@ -28,13 +31,13 @@ public class NetherFortressStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         ChunkPos chunkPos = context.chunkPos();
+-        BlockPos blockPos = new BlockPos(chunkPos.getMinBlockX(), 64, chunkPos.getMinBlockZ());
+-        return Optional.of(new Structure.GenerationStub(blockPos, structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context)));
++        BlockPos blockPos = new BlockPos(chunkPos.getMinBlockX(), heightContext.y(64), chunkPos.getMinBlockZ());
++        return Optional.of(new Structure.GenerationStub(blockPos, structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context, heightContext)));
+     }
+ 
+-    private static void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
++    private static void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         NetherFortressPieces.StartPiece startPiece = new NetherFortressPieces.StartPiece(
+             context.random(), context.chunkPos().getBlockX(2), context.chunkPos().getBlockZ(2)
+         );
+@@ -48,7 +51,7 @@ public class NetherFortressStructure extends Structure {
+             structurePiece.addChildren(startPiece, builder, context.random());
+         }
+ 
+-        builder.moveInsideHeights(context.random(), 48, 70);
++        builder.moveInsideHeights(context.random(), heightContext.y(48), heightContext.y(70));
+     }
+ 
+     @Override
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/NetherFossilStructure.java b/net/minecraft/world/level/levelgen/structure/structures/NetherFossilStructure.java
+index 1569bbcb4fd3a7018e466f8445974498e76f4bcf..bab607e21d820bc170c803c82e61b8b40ac8a76e 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/NetherFossilStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/NetherFossilStructure.java
+@@ -3,6 +3,9 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.world.level.EmptyBlockGetter;
+@@ -28,11 +31,11 @@ public class NetherFossilStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         WorldgenRandom worldgenRandom = context.random();
+         int i = context.chunkPos().getMinBlockX() + worldgenRandom.nextInt(16);
+         int i1 = context.chunkPos().getMinBlockZ() + worldgenRandom.nextInt(16);
+-        int seaLevel = context.chunkGenerator().getSeaLevel();
++        int seaLevel = heightContext.seaLevel();
+         WorldGenerationContext worldGenerationContext = new WorldGenerationContext(context.chunkGenerator(), context.heightAccessor());
+         int i2 = this.height.sample(worldgenRandom, worldGenerationContext);
+         NoiseColumn baseColumn = context.chunkGenerator().getBaseColumn(i, i1, context.heightAccessor(), context.randomState());
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/OceanMonumentStructure.java b/net/minecraft/world/level/levelgen/structure/structures/OceanMonumentStructure.java
+index 6941b2c89df8a7c77166e3fb76150cbc852371d9..f44ce65326346f8d53f8a60f1db4f3abba5b94a5 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/OceanMonumentStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/OceanMonumentStructure.java
+@@ -3,12 +3,14 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ import com.mojang.serialization.MapCodec;
+ import java.util.Objects;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Holder;
+ import net.minecraft.tags.BiomeTags;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.biome.Biome;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.LegacyRandomSource;
+ import net.minecraft.world.level.levelgen.RandomSupport;
+ import net.minecraft.world.level.levelgen.WorldgenRandom;
+@@ -27,7 +29,7 @@ public class OceanMonumentStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         int blockX = context.chunkPos().getBlockX(9);
+         int blockZ = context.chunkPos().getBlockZ(9);
+ 
+@@ -38,7 +40,7 @@ public class OceanMonumentStructure extends Structure {
+             }
+         }
+ 
+-        return onTopOfChunkCenter(context, Heightmap.Types.OCEAN_FLOOR_WG, structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context));
++        return onTopOfChunkCenter(context, heightContext.oceanFloorWg(), structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context));
+     }
+ 
+     private static StructurePiece createTopPiece(ChunkPos chunkPos, WorldgenRandom random) {
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/OceanRuinStructure.java b/net/minecraft/world/level/levelgen/structure/structures/OceanRuinStructure.java
+index 343b78e679ec09c9ae610d7a75300348e37464ac..f12a18626d6079f35fea5e9928d9dd8e68c7cc97 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/OceanRuinStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/OceanRuinStructure.java
+@@ -4,11 +4,13 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.ExtraCodecs;
+ import net.minecraft.util.StringRepresentable;
+ import net.minecraft.world.level.block.Rotation;
+-import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+ import net.minecraft.world.level.levelgen.structure.StructureType;
+ import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
+@@ -35,8 +37,8 @@ public class OceanRuinStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
+-        return onTopOfChunkCenter(context, Heightmap.Types.OCEAN_FLOOR_WG, builder -> this.generatePieces(builder, context));
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return onTopOfChunkCenter(context, heightContext.oceanFloorWg(), builder -> this.generatePieces(builder, context));
+     }
+ 
+     private void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/RuinedPortalStructure.java b/net/minecraft/world/level/levelgen/structure/structures/RuinedPortalStructure.java
+index a58921292156f83081fc2b2dd295b7b8a05ac217..f440363457871e7a22c074dc9ace366d924419e9 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/RuinedPortalStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/RuinedPortalStructure.java
+@@ -7,6 +7,9 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.List;
+ import java.util.Optional;
+ import java.util.stream.Collectors;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.QuartPos;
+@@ -67,7 +70,7 @@ public class RuinedPortalStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         RuinedPortalPiece.Properties properties = new RuinedPortalPiece.Properties();
+         WorldgenRandom worldgenRandom = context.random();
+         RuinedPortalStructure.Setup setup = null;
+@@ -130,7 +133,8 @@ public class RuinedPortalStructure extends Structure {
+                 boundingBox.getYSpan(),
+                 boundingBox,
+                 levelHeightAccessor,
+-                randomState
++                randomState,
++                heightContext
+             );
+             BlockPos blockPos1 = new BlockPos(worldPosition.getX(), i1, worldPosition.getZ());
+             return Optional.of(
+@@ -188,7 +192,8 @@ public class RuinedPortalStructure extends Structure {
+         int blockCountY,
+         BoundingBox box,
+         LevelHeightAccessor level,
+-        RandomState randomState
++        RandomState randomState,
++        @Modified(Op.ADD_PARAM) HeightContext heightContext
+     ) {
+         int i = level.getMinY() + 15;
+         int i1;
+@@ -222,8 +227,8 @@ public class RuinedPortalStructure extends Structure {
+             .map(pos -> chunkGenerator.getBaseColumn(pos.getX(), pos.getZ(), level, randomState))
+             .collect(Collectors.toList());
+         Heightmap.Types types = verticalPlacement == RuinedPortalPiece.VerticalPlacement.ON_OCEAN_FLOOR
+-            ? Heightmap.Types.OCEAN_FLOOR_WG
+-            : Heightmap.Types.WORLD_SURFACE_WG;
++            ? heightContext.oceanFloorWg()
++            : heightContext.worldSurfaceWg();
+ 
+         int i3;
+         for (i3 = i1; i3 > i; i3--) {
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/ShipwreckStructure.java b/net/minecraft/world/level/levelgen/structure/structures/ShipwreckStructure.java
+index 334cad70b007e457a9add7ed6afc3829b9ed71b0..6524833a1d676061a6ff891d0ffadd608d9dca88 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/ShipwreckStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/ShipwreckStructure.java
+@@ -4,6 +4,9 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.world.level.block.Rotation;
+ import net.minecraft.world.level.levelgen.Heightmap;
+@@ -25,14 +28,14 @@ public class ShipwreckStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
+-        Heightmap.Types types = this.isBeached ? Heightmap.Types.WORLD_SURFACE_WG : Heightmap.Types.OCEAN_FLOOR_WG;
+-        return onTopOfChunkCenter(context, types, structurePiecesBuilder -> this.generatePieces(structurePiecesBuilder, context));
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        Heightmap.Types types = this.isBeached ? heightContext.worldSurfaceWg() : heightContext.oceanFloorWg();
++        return onTopOfChunkCenter(context, types, structurePiecesBuilder -> this.generatePieces(structurePiecesBuilder, context, heightContext));
+     }
+ 
+-    private void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
++    private void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         Rotation random = Rotation.getRandom(context.random());
+-        BlockPos blockPos = new BlockPos(context.chunkPos().getMinBlockX(), 90, context.chunkPos().getMinBlockZ());
++        BlockPos blockPos = new BlockPos(context.chunkPos().getMinBlockX(), heightContext.y(90), context.chunkPos().getMinBlockZ());
+         ShipwreckPieces.ShipwreckPiece shipwreckPiece = ShipwreckPieces.addRandomPiece(
+             context.structureTemplateManager(), blockPos, random, builder, context.random(), this.isBeached
+         );
+@@ -40,10 +43,10 @@ public class ShipwreckStructure extends Structure {
+             BoundingBox boundingBox = shipwreckPiece.getBoundingBox();
+             int i;
+             if (this.isBeached) {
+-                int lowestY = Structure.getLowestY(context, boundingBox.minX(), boundingBox.getXSpan(), boundingBox.minZ(), boundingBox.getZSpan());
++                int lowestY = Structure.getLowestY(context, boundingBox.minX(), boundingBox.getXSpan(), boundingBox.minZ(), boundingBox.getZSpan(), heightContext);
+                 i = shipwreckPiece.calculateBeachedPosition(lowestY, context.random());
+             } else {
+-                i = Structure.getMeanFirstOccupiedHeight(context, boundingBox.minX(), boundingBox.getXSpan(), boundingBox.minZ(), boundingBox.getZSpan());
++                i = Structure.getMeanFirstOccupiedHeight(context, boundingBox.minX(), boundingBox.getXSpan(), boundingBox.minZ(), boundingBox.getZSpan(), heightContext);
+             }
+ 
+             shipwreckPiece.adjustPositionHeight(i);
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/StrongholdStructure.java b/net/minecraft/world/level/levelgen/structure/structures/StrongholdStructure.java
+index efb9fd0fa11417b5cb80677a14870bf46dfc6670..1cdb8aff2878acf0aa1e55ed184210fcb94c23e0 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/StrongholdStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/StrongholdStructure.java
+@@ -3,6 +3,10 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ import com.mojang.serialization.MapCodec;
+ import java.util.List;
+ import java.util.Optional;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+ import net.minecraft.world.level.levelgen.structure.StructurePiece;
+ import net.minecraft.world.level.levelgen.structure.StructureType;
+@@ -16,7 +20,7 @@ public class StrongholdStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         return Optional.of(
+             new Structure.GenerationStub(context.chunkPos().getWorldPosition(), structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context))
+         );
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/SwampHutStructure.java b/net/minecraft/world/level/levelgen/structure/structures/SwampHutStructure.java
+index 135d698229a3125473e00c92704a0c5e7260fec6..c412ac25f8d9ac4cb37a202d9e041a99d12162f9 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/SwampHutStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/SwampHutStructure.java
+@@ -2,7 +2,10 @@ package net.minecraft.world.level.levelgen.structure.structures;
+ 
+ import com.mojang.serialization.MapCodec;
+ import java.util.Optional;
+-import net.minecraft.world.level.levelgen.Heightmap;
++
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.world.level.levelgen.structure.Structure;
+ import net.minecraft.world.level.levelgen.structure.StructureType;
+ import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
+@@ -15,8 +18,8 @@ public class SwampHutStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
+-        return onTopOfChunkCenter(context, Heightmap.Types.WORLD_SURFACE_WG, structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context));
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
++        return onTopOfChunkCenter(context, heightContext.worldSurfaceWg(), structurePiecesBuilder -> generatePieces(structurePiecesBuilder, context));
+     }
+ 
+     private static void generatePieces(StructurePiecesBuilder builder, Structure.GenerationContext context) {
+diff --git a/net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionStructure.java b/net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionStructure.java
+index 6e90f1fd987dec641fb4660384f5a1a67e17d611..c44b4d51b0b3523bd2aaaa78168d919a26f83ede 100644
+--- a/net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionStructure.java
++++ b/net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionStructure.java
+@@ -4,6 +4,9 @@ import com.google.common.collect.Lists;
+ import com.mojang.serialization.MapCodec;
+ import java.util.List;
+ import java.util.Optional;
++import net.azisaba.aetheria.annotations.Modified;
++import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.aetheria.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.ChunkPos;
+@@ -27,10 +30,10 @@ public class WoodlandMansionStructure extends Structure {
+     }
+ 
+     @Override
+-    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context) {
++    public Optional<Structure.GenerationStub> findGenerationPoint(Structure.GenerationContext context, @Modified(Op.ADD_PARAM) HeightContext heightContext) {
+         Rotation random = Rotation.getRandom(context.random());
+-        BlockPos lowestYIn5by5BoxOffset7Blocks = this.getLowestYIn5by5BoxOffset7Blocks(context, random);
+-        return lowestYIn5by5BoxOffset7Blocks.getY() < 60
++        BlockPos lowestYIn5by5BoxOffset7Blocks = this.getLowestYIn5by5BoxOffset7Blocks(context, random, heightContext);
++        return lowestYIn5by5BoxOffset7Blocks.getY() < heightContext.y(60)
+             ? Optional.empty()
+             : Optional.of(
+                 new Structure.GenerationStub(
