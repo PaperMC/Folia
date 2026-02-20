@@ -31,7 +31,11 @@ public class AetheriaBiomeSource extends BiomeSource {
     @Override
     public Holder<Biome> getNoiseBiome(final int x, final int y, final int z, final Climate.Sampler sampler) {
         final int blockY = QuartPos.toBlock(y);
-        final AetheriaLayer.Type layerType = this.layout.getLayerTypeAtOrThrow(blockY);
+        final AetheriaLayer.Type layerType = this.layout.getLayerTypeAt(blockY);
+        if (layerType == null) {
+            throw new IllegalStateException("Y is outside the bounds of the layout: " + y);
+        }
+
         final BiomeSource layerBiomeSource = layerType.generator().getBiomeSource();
         final int layerY = this.layout.toLayerY(layerType, blockY);
         return layerBiomeSource.getNoiseBiome(x, QuartPos.fromBlock(layerY), z, sampler);

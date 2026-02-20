@@ -4,7 +4,6 @@ import com.mojang.serialization.MapCodec;
 import net.azisaba.aetheria.world.height.HeightContext;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.*;
@@ -14,14 +13,11 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
-import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.blending.Blender;
-import net.minecraft.world.level.levelgen.structure.StructureSet;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import org.jspecify.annotations.NullMarked;
 
@@ -38,10 +34,6 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
     public AetheriaChunkGenerator(final AetheriaLayout layout) {
         super(new AetheriaBiomeSource(layout));
         this.layout = layout;
-    }
-
-    public AetheriaLayout getLayout() {
-        return this.layout;
     }
 
     @Override
@@ -121,7 +113,7 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
     public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
         for (final AetheriaLayer.Type layerType : this.layout) {
             final ChunkGenerator layerGenerator = layerType.generator();
-            final HeightContext heightmapSet = HeightContext.aetheria(this.layout, layerType);
+            final HeightContext heightmapSet = this.layout.createHeightContext(layerType);
             layerGenerator.applyBiomeDecoration(level, chunk, structureManager, true, heightmapSet);
         }
     }
@@ -222,22 +214,6 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
 
             return chunk;
         }, Runnable::run);
-    }
-
-    @Override
-    public void createStructures(final RegistryAccess registryAccess, final ChunkGeneratorStructureState structureState, final StructureManager structureManager, final ChunkAccess chunk, final StructureTemplateManager structureTemplateManager, final ResourceKey<Level> level) {
-        final HolderLookup<StructureSet> structureSets = registryAccess.lookupOrThrow(Registries.STRUCTURE_SET);
-        final HolderLookup<NormalNoise.NoiseParameters> noiseParameters = registryAccess.lookupOrThrow(Registries.NOISE);
-        for (final AetheriaLayer.Type layerType : this.layout) {
-            final ChunkGenerator layerGenerator = layerType.generator();
-            final RandomState layerRandomState = Objects.requireNonNullElse(
-                    this.randomStateSource.getOrCreate(structureState.getLevelSeed(), layerType, noiseParameters),
-                    structureState.randomState()
-            );
-            final ChunkGeneratorStructureState layerStructureState = layerGenerator.createState(structureSets, layerRandomState, structureState.getLevelSeed(), structureManager.level.getMinecraftWorld().spigotConfig);
-            final HeightContext heightContext = HeightContext.aetheria(this.layout, layerType);
-            layerGenerator.createStructures(registryAccess, layerStructureState, structureManager, chunk, structureTemplateManager, level, heightContext);
-        }
     }
 
     @Override
