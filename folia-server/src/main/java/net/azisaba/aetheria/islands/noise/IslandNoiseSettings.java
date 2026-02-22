@@ -6,16 +6,16 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public record IslandNoiseSettings(
-        double baseCornerRadius,
-        double cornerRadiusAmplitude,
-        double coastBand,
-        double coastAmplitude,
-        IntProvider terraceCount,
-        IntProvider terraceStepHeight,
-        int shoreDepthStepBlocks,
-        double shapeNoiseBaseAmplitude,
-        double shapeNoiseProgressAmplitude,
-        double detailNoiseBaseAmplitude
+        double cornerRadius,
+        double cornerRadiusNoiseAmplitude,
+        double coastlineNoiseBand,
+        double coastlineNoiseAmplitude,
+        double inlandShapeNoiseBaseAmplitude,
+        double inlandShapeNoiseProgressAmplitude,
+        double surfaceDetailNoiseAmplitude,
+        int offshoreDepthStepDistanceBlocks,
+        IntProvider terraceCountProvider,
+        IntProvider terraceStepHeightProvider
 ) {
     public static IslandNoiseSettings createDefault() {
         return new IslandNoiseSettings(
@@ -23,12 +23,12 @@ public record IslandNoiseSettings(
                 9.0,
                 26.0,
                 10.0,
-                UniformInt.of(3, 5),
-                UniformInt.of(4, 6),
-                8,
                 0.08,
                 0.12,
-                0.3
+                0.3,
+                8,
+                UniformInt.of(3, 5),
+                UniformInt.of(4, 6)
         );
     }
 }

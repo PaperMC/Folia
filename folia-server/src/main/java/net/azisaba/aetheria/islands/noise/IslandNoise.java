@@ -6,6 +6,7 @@ import de.articdive.jnoise.modules.octavation.fractal_functions.FractalFunction;
 import de.articdive.jnoise.pipeline.JNoise;
 import net.azisaba.aetheria.islands.Islands;
 import net.azisaba.aetheria.islands.IslandsGeneratorSettings;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import org.jspecify.annotations.NullMarked;
 
@@ -22,16 +23,13 @@ public final class IslandNoise {
         );
     }
 
-    private static double clamp01(final double v) {
-        return v < 0 ? 0 : Math.min(v, 1);
-    }
+    private final long seed;
 
-    private static double smoothstep(final double t) {
-        return t * t * (3 - 2 * t);
-    }
-
+    private final int width;
+    private final int height;
     private final double halfWidth;
     private final double halfHeight;
+
     private final IslandNoiseSettings settings;
 
     private final JNoise coastNoise;
@@ -43,6 +41,9 @@ public final class IslandNoise {
     private final int terraceTotalHeight;
 
     public IslandNoise(final long seed, final int width, final int height, final IslandNoiseSettings noiseSettings) {
+        this.seed = seed;
+        this.width = width;
+        this.height = height;
         this.halfWidth = width / 2.0;
         this.halfHeight = height / 2.0;
         this.settings = noiseSettings;
@@ -68,70 +69,109 @@ public final class IslandNoise {
                 .build();
 
         final RandomSource terraceRandomSource = RandomSource.create(seed ^ 0x4CF5AD432745937FL);
-        this.terraceStepHeights = new int[Math.max(1, this.settings.terraceCount().sample(terraceRandomSource))];
+        this.terraceStepHeights = new int[Math.max(1, this.settings.terraceCountProvider().sample(terraceRandomSource))];
         for (int i = 0; i < this.terraceStepHeights.length; i++) {
-            final int stepHeight = Math.max(1, this.settings.terraceStepHeight().sample(terraceRandomSource));
+            final int stepHeight = Math.max(1, this.settings.terraceStepHeightProvider().sample(terraceRandomSource));
             this.terraceStepHeights[i] = stepHeight;
         }
         this.terraceTotalHeight = Arrays.stream(this.terraceStepHeights).sum();
     }
 
-    public Sample sample(final double x, final double z, final IslandsGeneratorSettings generatorSettings) {
-        final double signedDistance = this.computeSignedDistance(x, z);
-        return new Sample(signedDistance, this.computeSurfaceY(x, z, signedDistance, generatorSettings));
+    public long seed() {
+        return this.seed;
+    }
+
+    public int width() {
+        return this.width;
+    }
+
+    public int height() {
+        return this.height;
     }
 
     public double computeSignedDistance(final double x, final double z) {
         final double cornerInfluence = this.cornerMask(x, z);
         final double cornerNoiseSample = this.cornerNoise.evaluateNoise(x, z);
-        final double cornerRadius = this.settings.baseCornerRadius() + cornerNoiseSample * this.settings.cornerRadiusAmplitude() * cornerInfluence;
+        final double cornerRadius = this.settings.cornerRadius() + cornerNoiseSample * this.settings.cornerRadiusNoiseAmplitude() * cornerInfluence;
 
         final double baseSignedDistance = this.sdfRoundedRect(x, z, cornerRadius);
 
-        final double coastInfluence = clamp01(1.0 - Math.abs(baseSignedDistance) / this.settings.coastBand());
+        final double coastInfluence = Mth.clamp(1.0 - Math.abs(baseSignedDistance) / this.settings.coastlineNoiseBand(), 0.0, 1.0);
         final double coastNoiseSample = this.coastNoise.evaluateNoise(x, z);
-        final double coastlineOffset = coastNoiseSample * this.settings.coastAmplitude() * coastInfluence;
+        final double coastlineOffset = coastNoiseSample * this.settings.coastlineNoiseAmplitude() * coastInfluence;
 
         return baseSignedDistance + coastlineOffset;
     }
 
-    private int computeSurfaceY(final double x, final double z, final double signedDistance, final IslandsGeneratorSettings generatorSettings) {
+    public int computeBaseHighestY(
+            final double x,
+            final double z,
+            final double signedDistance,
+            final IslandsGeneratorSettings generatorSettings
+    ) {
+        final int terracedSurfaceY = this.computeTerracedHighestY(x, z, signedDistance, generatorSettings);
         if (signedDistance > 0.0) {
-            final int shoreDepthStepBlocks = Math.max(1, this.settings.shoreDepthStepBlocks());
+            return terracedSurfaceY;
+        }
+
+        final double insideDistance = Math.max(0.0, -signedDistance - generatorSettings.beachWidth());
+        final double progress = Mth.smoothstep(insideDistance / Math.max(1.0, this.halfWidth));
+        final int coastY = generatorSettings.seaLevel() + 1;
+        final int centerY = Math.max(generatorSettings.landTopY() - 1, coastY + this.terraceTotalHeight);
+        final double detailNoise = this.landDetailNoise.evaluateNoise(x, z);
+        final int detailOffset = (int) Math.round(detailNoise * (this.settings.surfaceDetailNoiseAmplitude() + progress));
+        return Math.max(coastY, Math.min(centerY + 1, terracedSurfaceY + detailOffset));
+    }
+
+    public int computeTerracedHighestY(
+            final double x,
+            final double z,
+            final double signedDistance,
+            final IslandsGeneratorSettings generatorSettings
+    ) {
+        if (signedDistance > 0.0) {
+            final int shoreDepthStepBlocks = Math.max(1, this.settings.offshoreDepthStepDistanceBlocks());
             final int gradualDepth = Math.min(generatorSettings.seaDepth(), (int) Math.floor(signedDistance / shoreDepthStepBlocks));
             return generatorSettings.seaLevel() - gradualDepth;
         }
 
         final double insideDistance = Math.max(0.0, -signedDistance - generatorSettings.beachWidth());
-        final double progress = smoothstep(insideDistance / Math.max(1.0, this.halfWidth));
+        final double progress = Mth.smoothstep(insideDistance / Math.max(1.0, this.halfWidth));
 
         final double shapeNoiseSample = this.landShapeNoise.evaluateNoise(x, z);
-        final double noisyProgress = clamp01(progress + shapeNoiseSample * (this.settings.shapeNoiseBaseAmplitude() + this.settings.shapeNoiseProgressAmplitude() * progress));
+        final double noisyProgress = Mth.clamp(
+                progress + shapeNoiseSample
+                        * (this.settings.inlandShapeNoiseBaseAmplitude() + this.settings.inlandShapeNoiseProgressAmplitude() * progress),
+                0.0,
+                1.0
+        );
 
         final int coastY = generatorSettings.seaLevel() + 1;
         final int centerY = Math.max(generatorSettings.landTopY() - 1, coastY + this.terraceTotalHeight);
         final int span = centerY - coastY;
 
         final int rawSurfaceY = coastY + (int) Math.round(noisyProgress * span);
-        final int surfaceY = coastY + this.terracedHeight(rawSurfaceY - coastY);
+        final int terracedRelativeY = this.terracedHeight(rawSurfaceY - coastY);
+        return coastY + terracedRelativeY;
+    }
 
-        final double detailNoise = this.landDetailNoise.evaluateNoise(x, z);
-        final int detailOffset = (int) Math.round(detailNoise * (this.settings.detailNoiseBaseAmplitude() + progress));
-
-        return Math.max(coastY, Math.min(centerY + 1, surfaceY + detailOffset));
+    public int terraceStepAtY(final int baseHighestY, final IslandsGeneratorSettings generatorSettings) {
+        final int coastY = generatorSettings.seaLevel() + 1;
+        final int terracedRelativeY = Math.max(0, baseHighestY - coastY);
+        return this.currentTerraceStepHeight(terracedRelativeY);
     }
 
     private double cornerMask(final double x, final double z) {
         final double ax = Math.abs(x);
         final double az = Math.abs(z);
 
-        final double sx = this.halfWidth - this.settings.baseCornerRadius();
-        final double sz = this.halfHeight - this.settings.baseCornerRadius();
+        final double sx = this.halfWidth - this.settings.cornerRadius();
+        final double sz = this.halfHeight - this.settings.cornerRadius();
 
-        final double tx = clamp01((ax - sx) / this.settings.baseCornerRadius());
-        final double tz = clamp01((az - sz) / this.settings.baseCornerRadius());
+        final double tx = Mth.clamp((ax - sx) / this.settings.cornerRadius(), 0.0, 1.0);
+        final double tz = Mth.clamp((az - sz) / this.settings.cornerRadius(), 0.0, 1.0);
 
-        return smoothstep(tx) * smoothstep(tz);
+        return Mth.smoothstep(tx) * Mth.smoothstep(tz);
     }
 
     private double sdfRoundedRect(final double x, final double z, final double r) {
@@ -162,6 +202,18 @@ public final class IslandNoise {
         return accumulated;
     }
 
-    public record Sample(double signedDistance, int highestY) {
+    private int currentTerraceStepHeight(final int terracedRelativeHeight) {
+        final int height = Math.max(0, terracedRelativeHeight);
+        int accumulated = 0;
+
+        for (final int stepHeight : this.terraceStepHeights) {
+            final int next = accumulated + stepHeight;
+            if (height < next) {
+                return stepHeight;
+            }
+            accumulated = next;
+        }
+
+        return this.terraceStepHeights[this.terraceStepHeights.length - 1];
     }
 }

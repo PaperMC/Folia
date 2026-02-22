@@ -60,7 +60,7 @@ public final class AetheriaLevelStems {
         final Holder<Biome> biome = lookup.lookup(Registries.BIOME)
                 .orElseThrow()
                 .getter()
-                .getOrThrow(Biomes.PLAINS);
+                .getOrThrow(Biomes.FLOWER_FOREST);
         final BiomeSource biomeSource = new FixedBiomeSource(biome);
         final IslandsChunkGenerator generator = new IslandsChunkGenerator(
                 new IslandsGeneratorSettings(
