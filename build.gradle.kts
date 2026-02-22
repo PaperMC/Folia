@@ -4,7 +4,7 @@ import io.papermc.paperweight.tasks.RebuildGitPatches
 
 plugins {
     java // TODO java launcher tasks
-    id("io.papermc.paperweight.patcher") version "2.0.0-beta.19"
+    alias(libs.plugins.paperweight.patcher)
 }
 
 paperweight {
@@ -30,7 +30,7 @@ paperweight {
     }
 }
 
-val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
+val jnoise = libs.jnoise
 
 subprojects {
     apply(plugin = "java-library")
@@ -44,10 +44,11 @@ subprojects {
 
     repositories {
         mavenCentral()
-        maven(paperMavenPublicUrl)
+        maven("https://repo.papermc.io/repository/maven-public/")
     }
 
     dependencies {
+        "implementation"(jnoise.pipeline)
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
     }
 
