@@ -1,2 +1,2 @@
-include("core")
+include("islands")
 includeBuild("../")

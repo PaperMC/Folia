@@ -20,7 +20,7 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class VanilifeDimensionTypes {
-    public static final ResourceKey<DimensionType> AETHERIA = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.withVanilifeNamespace("aetheria"));
+    public static final ResourceKey<DimensionType> AETHERIA = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "aetheria"));
 
     public static void bootstrap(final WritableRegistry<DimensionType> writable, final RegistryOps.RegistryInfoLookup lookup) {
         final HolderGetter<Timeline> timelines = lookup.lookup(Registries.TIMELINE)

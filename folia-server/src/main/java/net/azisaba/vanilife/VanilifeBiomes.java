@@ -21,11 +21,11 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class VanilifeBiomes {
-    public static final ResourceKey<Biome> THE_END = ResourceKey.create(Registries.BIOME, Identifier.withVanilifeNamespace("the_end"));
-    public static final ResourceKey<Biome> END_BARRENS = ResourceKey.create(Registries.BIOME, Identifier.withVanilifeNamespace("end_barrens"));
-    public static final ResourceKey<Biome> END_MIDLANDS = ResourceKey.create(Registries.BIOME, Identifier.withVanilifeNamespace("end_midlands"));
-    public static final ResourceKey<Biome> END_HIGHLANDS = ResourceKey.create(Registries.BIOME, Identifier.withVanilifeNamespace("end_highlands"));
-    public static final ResourceKey<Biome> SMALL_END_ISLANDS = ResourceKey.create(Registries.BIOME, Identifier.withVanilifeNamespace("small_end_islands"));
+    public static final ResourceKey<Biome> THE_END = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "the_end"));
+    public static final ResourceKey<Biome> END_BARRENS = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "end_barrens"));
+    public static final ResourceKey<Biome> END_MIDLANDS = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "end_midlands"));
+    public static final ResourceKey<Biome> END_HIGHLANDS = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "end_highlands"));
+    public static final ResourceKey<Biome> SMALL_END_ISLANDS = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "small_end_islands"));
 
     public static void bootstrap(final WritableRegistry<Biome> writable, final RegistryOps.RegistryInfoLookup lookup) {
         final HolderGetter<PlacedFeature> placedFeature = lookup.lookup(Registries.PLACED_FEATURE)

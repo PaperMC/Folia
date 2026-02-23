@@ -194,10 +194,10 @@ public class IslandsChunkGenerator extends ChunkGenerator {
     private IslandNoise getIslandNoise(final long levelSeed, final IslandPos islandPos) {
         long noiseKey = levelSeed;
 
-        noiseKey ^= ((long) islandPos.gridX() * 0x9E3779B97F4A7C15L);
+        noiseKey ^= ((long) islandPos.x() * 0x9E3779B97F4A7C15L);
         noiseKey = Long.rotateLeft(noiseKey, 27);
 
-        noiseKey ^= ((long) islandPos.gridZ() * 0xC2B2AE3D27D4EB4FL);
+        noiseKey ^= ((long) islandPos.z() * 0xC2B2AE3D27D4EB4FL);
         noiseKey = Long.rotateLeft(noiseKey, 31);
 
         return this.islandNoiseCache.computeIfAbsent(noiseKey, k -> IslandNoise.createDefault(islandPos.computeSeed(levelSeed)));
@@ -206,10 +206,10 @@ public class IslandsChunkGenerator extends ChunkGenerator {
     private RiverMap getRiverMap(final long levelSeed, final IslandPos islandPos, final IslandNoise islandNoise) {
         long noiseKey = levelSeed;
 
-        noiseKey ^= ((long) islandPos.gridX() * 0x9E3779B97F4A7C15L);
+        noiseKey ^= ((long) islandPos.x() * 0x9E3779B97F4A7C15L);
         noiseKey = Long.rotateLeft(noiseKey, 27);
 
-        noiseKey ^= ((long) islandPos.gridZ() * 0xC2B2AE3D27D4EB4FL);
+        noiseKey ^= ((long) islandPos.z() * 0xC2B2AE3D27D4EB4FL);
         noiseKey = Long.rotateLeft(noiseKey, 31);
 
         return this.riverMapCache.computeIfAbsent(noiseKey, k -> RiverMap.createDefault(islandNoise, this.settings));

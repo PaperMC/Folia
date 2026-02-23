@@ -4,7 +4,7 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public record IslandPos(int x, int z) {
-    private static final int SPACING_BLOCKS = (Islands.ISLAND_SPACING_GRIDS + Islands.ISLAND_WIDTH_GRIDS) * Islands.GRID_SIZE;
+    private static final int SPACING_BLOCKS = (IslandDefaults.SPACING_GRIDS + IslandDefaults.ISLAND_SIZE_X_GRIDS) * IslandDefaults.GRID_SIZE;
 
     public static IslandPos fromBlockPos(final int blockX, final int blockZ) {
         return new IslandPos(gridOf(blockX), gridOf(blockZ));

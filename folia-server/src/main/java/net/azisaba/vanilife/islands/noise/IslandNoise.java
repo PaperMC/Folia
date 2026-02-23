@@ -4,7 +4,7 @@ import de.articdive.jnoise.core.api.functions.Interpolation;
 import de.articdive.jnoise.generators.noise_parameters.fade_functions.FadeFunction;
 import de.articdive.jnoise.modules.octavation.fractal_functions.FractalFunction;
 import de.articdive.jnoise.pipeline.JNoise;
-import net.azisaba.vanilife.islands.Islands;
+import net.azisaba.vanilife.islands.IslandDefaults;
 import net.azisaba.vanilife.islands.IslandsGeneratorSettings;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -17,8 +17,8 @@ public final class IslandNoise {
     public static IslandNoise createDefault(final long seed) {
         return new IslandNoise(
                 seed,
-                Islands.ISLAND_WIDTH_GRIDS * Islands.GRID_SIZE,
-                Islands.ISLAND_HEIGHT_GRIDS * Islands.GRID_SIZE,
+                IslandDefaults.ISLAND_SIZE_X_GRIDS * IslandDefaults.GRID_SIZE,
+                IslandDefaults.ISLAND_SIZE_Z_GRIDS * IslandDefaults.GRID_SIZE,
                 IslandNoiseSettings.createDefault()
         );
     }

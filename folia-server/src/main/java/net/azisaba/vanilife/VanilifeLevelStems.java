@@ -1,5 +1,7 @@
 package net.azisaba.vanilife;
 
+import io.papermc.paper.adventure.PaperAdventure;
+import net.azisaba.vanilife.islands.IslandDefaults;
 import net.azisaba.vanilife.islands.IslandsChunkGenerator;
 import net.azisaba.vanilife.islands.IslandsGeneratorSettings;
 import net.azisaba.vanilife.world.AetheriaChunkGenerator;
@@ -26,8 +28,8 @@ import java.util.List;
 
 @NullMarked
 public final class VanilifeLevelStems {
-    public static final ResourceKey<LevelStem> MAIN = ResourceKey.create(Registries.LEVEL_STEM, Identifier.withVanilifeNamespace("2026/spring"));
-    public static final ResourceKey<LevelStem> ISLANDS = ResourceKey.create(Registries.LEVEL_STEM, Identifier.withVanilifeNamespace("islands"));
+    public static final ResourceKey<LevelStem> MAIN = ResourceKey.create(Registries.LEVEL_STEM, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "2026/spring"));
+    public static final ResourceKey<LevelStem> ISLANDS = ResourceKey.create(Registries.LEVEL_STEM, PaperAdventure.asVanilla(IslandDefaults.WORLD_KEY));
 
     public static void bootstrap(final WritableRegistry<LevelStem> writable, final RegistryOps.RegistryInfoLookup lookup) {
         writable.register(VanilifeLevelStems.MAIN, VanilifeLevelStems.aetheria(lookup), RegistrationInfo.BUILT_IN);
@@ -64,11 +66,11 @@ public final class VanilifeLevelStems {
         final BiomeSource biomeSource = new FixedBiomeSource(biome);
         final IslandsChunkGenerator generator = new IslandsChunkGenerator(
                 new IslandsGeneratorSettings(
-                        62,
+                        IslandDefaults.SEA_LEVEL,
                         36,
-                        64,
-                        128,
-                        8
+                        IslandDefaults.SEA_LEVEL + 1,
+                        IslandDefaults.HEIGHT,
+                        12
                 ),
                 biomeSource
         );
