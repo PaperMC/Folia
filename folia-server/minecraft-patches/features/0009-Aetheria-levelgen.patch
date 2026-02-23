@@ -5,15 +5,15 @@ Subject: [PATCH] Aetheria levelgen
 
 
 diff --git a/net/minecraft/data/worldgen/SurfaceRuleData.java b/net/minecraft/data/worldgen/SurfaceRuleData.java
-index 250db80854d0725097d2e709e58f67f36f53a462..a0eb01f7da92523e11d29eb8c64721207da44549 100644
+index 250db80854d0725097d2e709e58f67f36f53a462..36acb6e7f979f7864d0c110f9ac63160309a291c 100644
 --- a/net/minecraft/data/worldgen/SurfaceRuleData.java
 +++ b/net/minecraft/data/worldgen/SurfaceRuleData.java
 @@ -2,6 +2,8 @@ package net.minecraft.data.worldgen;
  
  import com.google.common.collect.ImmutableList;
  import com.google.common.collect.ImmutableList.Builder;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.world.level.biome.Biomes;
  import net.minecraft.world.level.block.Block;
  import net.minecraft.world.level.block.Blocks;
@@ -70,24 +70,33 @@ index 250db80854d0725097d2e709e58f67f36f53a462..a0eb01f7da92523e11d29eb8c6472120
  
      public static SurfaceRules.RuleSource end() {
 diff --git a/net/minecraft/resources/Identifier.java b/net/minecraft/resources/Identifier.java
-index ae6219185aa00a2753b0986ecf5f8456f4c2515d..b568d7ed2ce59f4fb5145ece5a0aa3b8ed1ea89c 100644
+index ae6219185aa00a2753b0986ecf5f8456f4c2515d..7e566c6ae41880cc24493c4b81b8a1d35754e820 100644
 --- a/net/minecraft/resources/Identifier.java
 +++ b/net/minecraft/resources/Identifier.java
-@@ -56,6 +56,12 @@ public final class Identifier implements Comparable<Identifier> {
+@@ -7,6 +7,9 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.DataResult;
+ import io.netty.buffer.ByteBuf;
+ import java.util.function.UnaryOperator;
++
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import net.minecraft.IdentifierException;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.network.codec.ByteBufCodecs;
+@@ -56,6 +59,11 @@ public final class Identifier implements Comparable<Identifier> {
          return new Identifier("minecraft", assertValidPath("minecraft", location));
      }
  
-+    // Aetheria start - Create an Identifier in the aetheria namespace
-+    public static Identifier withAetheriaNamespace(String location) {
-+        return new Identifier("aetheria", assertValidPath("aetheria", location));
++    @Modified(Op.ADD_METHOD)
++    public static Identifier withVanilifeNamespace(String location) {
++        return new Identifier("vanilife", assertValidPath("vanilife", location));
 +    }
-+    // Aetheria start - Create an Identifier in the aetheria namespace
 +
      public static @Nullable Identifier tryParse(String location) {
          return tryBySeparator(location, ':');
      }
 diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
-index 2211cd81bf986e0dda97841e39bed23bedb38914..e322780582c752dabd92ac0a057b90f4b0439c75 100644
+index 2211cd81bf986e0dda97841e39bed23bedb38914..4a700aa0e68044bb950710be679861230ab5223d 100644
 --- a/net/minecraft/resources/RegistryDataLoader.java
 +++ b/net/minecraft/resources/RegistryDataLoader.java
 @@ -21,6 +21,12 @@ import java.util.Map.Entry;
@@ -95,11 +104,11 @@ index 2211cd81bf986e0dda97841e39bed23bedb38914..e322780582c752dabd92ac0a057b90f4
  import java.util.function.Function;
  import java.util.stream.Collectors;
 +
-+import net.azisaba.aetheria.AetheriaBiomes;
-+import net.azisaba.aetheria.AetheriaDimensionTypes;
-+import net.azisaba.aetheria.AetheriaLevelStems;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.VanilifeBiomes;
++import net.azisaba.vanilife.VanilifeDimensionTypes;
++import net.azisaba.vanilife.VanilifeLevelStems;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
@@ -120,11 +129,11 @@ index 2211cd81bf986e0dda97841e39bed23bedb38914..e322780582c752dabd92ac0a057b90f4
 +            final WritableRegistry<?> registry = loader.registry();
 +
 +            if (registry.key().equals(Registries.BIOME)) {
-+                AetheriaBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
++                VanilifeBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
 +            } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
-+                AetheriaDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
++                VanilifeDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
 +            } else if (registry.key().equals(Registries.LEVEL_STEM)) {
-+                AetheriaLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
++                VanilifeLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
 +            }
 +        });
 +        // Aetheria end - Register Aetheria objects in data-driven registries
@@ -132,15 +141,15 @@ index 2211cd81bf986e0dda97841e39bed23bedb38914..e322780582c752dabd92ac0a057b90f4
              Registry<?> registry = loader.registry();
  
 diff --git a/net/minecraft/world/level/biome/BiomeManager.java b/net/minecraft/world/level/biome/BiomeManager.java
-index 73962e79a0f3d892e3155443a1b84508b0f4042e..87af3d53161115ab29c6801be75db74d29a8ecb8 100644
+index 73962e79a0f3d892e3155443a1b84508b0f4042e..1ee7b32ae9dc579337520edfbf337ffaeaeebf00 100644
 --- a/net/minecraft/world/level/biome/BiomeManager.java
 +++ b/net/minecraft/world/level/biome/BiomeManager.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.biome;
  
  import com.google.common.hash.Hashing;
-+import net.azisaba.aetheria.world.AetheriaLayer;
-+import net.azisaba.aetheria.world.AetheriaLayout;
++import net.azisaba.vanilife.world.AetheriaLayer;
++import net.azisaba.vanilife.world.AetheriaLayout;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
  import net.minecraft.core.QuartPos;
@@ -162,7 +171,7 @@ index 73962e79a0f3d892e3155443a1b84508b0f4042e..87af3d53161115ab29c6801be75db74d
          int i = pos.getX() - 2;
          int i1 = pos.getY() - 2;
 diff --git a/net/minecraft/world/level/biome/TheEndBiomeSource.java b/net/minecraft/world/level/biome/TheEndBiomeSource.java
-index cf3172be76fa4c7987ed569138439ff42f92fa7f..b65ad4d9937a24e5a3c1cf9b7a8a28dfa9575c15 100644
+index cf3172be76fa4c7987ed569138439ff42f92fa7f..51a80ed2676253f5f72850e528a6c564f68662b9 100644
 --- a/net/minecraft/world/level/biome/TheEndBiomeSource.java
 +++ b/net/minecraft/world/level/biome/TheEndBiomeSource.java
 @@ -3,6 +3,9 @@ package net.minecraft.world.level.biome;
@@ -170,8 +179,8 @@ index cf3172be76fa4c7987ed569138439ff42f92fa7f..b65ad4d9937a24e5a3c1cf9b7a8a28df
  import com.mojang.serialization.codecs.RecordCodecBuilder;
  import java.util.stream.Stream;
 +
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.Holder;
  import net.minecraft.core.HolderGetter;
  import net.minecraft.core.QuartPos;
@@ -186,7 +195,7 @@ index cf3172be76fa4c7987ed569138439ff42f92fa7f..b65ad4d9937a24e5a3c1cf9b7a8a28df
          this.highlands = highlands;
          this.midlands = midlands;
 diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
-index d57b3ed1c53d2818caf420004296297f006f36d7..0c7664d3903d2e2d7637618f8e33a1c685951152 100644
+index d57b3ed1c53d2818caf420004296297f006f36d7..fd92282bb1cbe7051258f6d239e8dc0ce191baba 100644
 --- a/net/minecraft/world/level/chunk/ChunkGenerator.java
 +++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
 @@ -9,68 +9,29 @@ import it.unimi.dsi.fastutil.ints.IntSet;
@@ -206,9 +215,9 @@ index d57b3ed1c53d2818caf420004296297f006f36d7..0c7664d3903d2e2d7637618f8e33a1c6
 -import java.util.function.Predicate;
 -import java.util.function.Supplier;
 -import java.util.stream.Collectors;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
@@ -396,7 +405,7 @@ index 6745fd379962713315ffc8c00e587884e7a5903a..8c5a0b1d34e18af4c2db34f0fe5fc5ea
          context.register(OVERWORLD, overworld(context, false, false));
          context.register(LARGE_BIOMES, overworld(context, false, true));
 diff --git a/net/minecraft/world/level/levelgen/NoiseRouterData.java b/net/minecraft/world/level/levelgen/NoiseRouterData.java
-index f1c6baf935d53775fa26e6083323983674c2c3b5..9e7e42402ea035881961b792073abaa8f20312b8 100644
+index f1c6baf935d53775fa26e6083323983674c2c3b5..020d578219d2c890704493105f5de8928f1d2837 100644
 --- a/net/minecraft/world/level/levelgen/NoiseRouterData.java
 +++ b/net/minecraft/world/level/levelgen/NoiseRouterData.java
 @@ -1,6 +1,9 @@
@@ -404,8 +413,8 @@ index f1c6baf935d53775fa26e6083323983674c2c3b5..9e7e42402ea035881961b792073abaa8
  
  import java.util.stream.Stream;
 +
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.Holder;
  import net.minecraft.core.HolderGetter;
  import net.minecraft.core.registries.Registries;
@@ -430,7 +439,7 @@ index f1c6baf935d53775fa26e6083323983674c2c3b5..9e7e42402ea035881961b792073abaa8
      }
  
 diff --git a/net/minecraft/world/level/levelgen/NoiseSettings.java b/net/minecraft/world/level/levelgen/NoiseSettings.java
-index 4cf3a364595ba5f81f741295695cb9a449bdf672..69712479cfe3ae262bbaf75b84792b8ee189cca9 100644
+index 4cf3a364595ba5f81f741295695cb9a449bdf672..ca3821251e22c0a0d6dcad5eaff318f1e5272300 100644
 --- a/net/minecraft/world/level/levelgen/NoiseSettings.java
 +++ b/net/minecraft/world/level/levelgen/NoiseSettings.java
 @@ -4,6 +4,9 @@ import com.mojang.serialization.Codec;
@@ -438,8 +447,8 @@ index 4cf3a364595ba5f81f741295695cb9a449bdf672..69712479cfe3ae262bbaf75b84792b8e
  import com.mojang.serialization.codecs.RecordCodecBuilder;
  import java.util.function.Function;
 +
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.QuartPos;
  import net.minecraft.world.level.LevelHeightAccessor;
  import net.minecraft.world.level.dimension.DimensionType;
@@ -457,15 +466,15 @@ index 4cf3a364595ba5f81f741295695cb9a449bdf672..69712479cfe3ae262bbaf75b84792b8e
      protected static final NoiseSettings CAVES_NOISE_SETTINGS = create(-64, 192, 1, 2);
      protected static final NoiseSettings FLOATING_ISLANDS_NOISE_SETTINGS = create(0, 256, 2, 1);
 diff --git a/net/minecraft/world/level/levelgen/feature/BambooFeature.java b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
-index 68bb87abc8a2831d75bdfe2b77f8ba1b1b4b61c1..47e539bca47dac5e3b6863d4926f5815005660f0 100644
+index 68bb87abc8a2831d75bdfe2b77f8ba1b1b4b61c1..1142b3b8cb73942d9aae5544d0f77a4146f7e167 100644
 --- a/net/minecraft/world/level/levelgen/feature/BambooFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/BambooFeature.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.levelgen.feature;
  
  import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
  import net.minecraft.util.RandomSource;
@@ -495,7 +504,7 @@ index 68bb87abc8a2831d75bdfe2b77f8ba1b1b4b61c1..47e539bca47dac5e3b6863d4926f5815
                                      worldGenLevel.setBlock(mutableBlockPos1, Blocks.PODZOL.defaultBlockState(), Block.UPDATE_CLIENTS);
                                  }
 diff --git a/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java b/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
-index 75f1949f3198baf8f7b1a2df833d5d432f5bcb77..1147d127ac6ee167922fac2c4e211aa2eca8eddd 100644
+index 75f1949f3198baf8f7b1a2df833d5d432f5bcb77..f19bacaa253a49d7d8a3127ac67eb29964621cd9 100644
 --- a/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/BonusChestFeature.java
 @@ -2,7 +2,8 @@ package net.minecraft.world.level.levelgen.feature;
@@ -503,8 +512,8 @@ index 75f1949f3198baf8f7b1a2df833d5d432f5bcb77..1147d127ac6ee167922fac2c4e211aa2
  import com.mojang.serialization.Codec;
  import it.unimi.dsi.fastutil.ints.IntArrayList;
 -import java.util.stream.IntStream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
  import net.minecraft.util.RandomSource;
@@ -537,7 +546,7 @@ index 75f1949f3198baf8f7b1a2df833d5d432f5bcb77..1147d127ac6ee167922fac2c4e211aa2
                      || worldGenLevel.getBlockState(heightmapPos).getCollisionShape(worldGenLevel, heightmapPos).isEmpty()) {
                      worldGenLevel.setBlock(heightmapPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
 diff --git a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
-index 0a83dcf81aedbf77ad7d7ba8ede08d8149d93978..b5dca1d07e67083bb59df6a33c8c49e047eb8ed4 100644
+index 0a83dcf81aedbf77ad7d7ba8ede08d8149d93978..f12520f990d28c28e8ce8d4c3c182da266f159b6 100644
 --- a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
 @@ -1,7 +1,9 @@
@@ -545,9 +554,9 @@ index 0a83dcf81aedbf77ad7d7ba8ede08d8149d93978..b5dca1d07e67083bb59df6a33c8c49e0
  
  import com.mojang.serialization.Codec;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
  import net.minecraft.core.HolderSet;
@@ -577,7 +586,7 @@ index 0a83dcf81aedbf77ad7d7ba8ede08d8149d93978..b5dca1d07e67083bb59df6a33c8c49e0
  
      public Stream<ConfiguredFeature<?, ?>> getFeatures() {
 diff --git a/net/minecraft/world/level/levelgen/feature/Feature.java b/net/minecraft/world/level/levelgen/feature/Feature.java
-index c6d7a686bcc21d041444b647deeab2acf4859194..334e0e548473d0c17e5c845e94eeeaf06608c62b 100644
+index c6d7a686bcc21d041444b647deeab2acf4859194..cf41eaeec0eea4e320dfc1d820772ef63217bebb 100644
 --- a/net/minecraft/world/level/levelgen/feature/Feature.java
 +++ b/net/minecraft/world/level/levelgen/feature/Feature.java
 @@ -2,9 +2,9 @@ package net.minecraft.world.level.levelgen.feature;
@@ -587,9 +596,9 @@ index c6d7a686bcc21d041444b647deeab2acf4859194..334e0e548473d0c17e5c845e94eeeaf0
 -import java.util.Optional;
 -import java.util.function.Function;
 -import java.util.function.Predicate;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
  import net.minecraft.core.Registry;
@@ -658,16 +667,16 @@ index c6d7a686bcc21d041444b647deeab2acf4859194..334e0e548473d0c17e5c845e94eeeaf0
  
      protected static boolean isStone(BlockState state) {
 diff --git a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
-index 453fb645622d7b605dc84d9adeaa24d7141c55ad..cc277d4c4906ce9f38e9d03dc51e853bb06052ee 100644
+index 453fb645622d7b605dc84d9adeaa24d7141c55ad..a544df25b1167084a8f898463da68ffb3377f05e 100644
 --- a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
 +++ b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
 @@ -1,12 +1,16 @@
  package net.minecraft.world.level.levelgen.feature;
  
 -import java.util.Optional;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.WorldGenLevel;
@@ -710,15 +719,15 @@ index 453fb645622d7b605dc84d9adeaa24d7141c55ad..cc277d4c4906ce9f38e9d03dc51e853b
 +    }
  }
 diff --git a/net/minecraft/world/level/levelgen/feature/FossilFeature.java b/net/minecraft/world/level/levelgen/feature/FossilFeature.java
-index ada05d365b386ee6040575e92bf48b0adaa7c0c1..1eca38051bb7b3c546489e2ff2a57528a928e3b5 100644
+index ada05d365b386ee6040575e92bf48b0adaa7c0c1..6253dfeb90302789c72a41e96a5835e058b0f315 100644
 --- a/net/minecraft/world/level/levelgen/feature/FossilFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/FossilFeature.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.levelgen.feature;
  
  import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Vec3i;
  import net.minecraft.util.RandomSource;
@@ -748,15 +757,15 @@ index ada05d365b386ee6040575e92bf48b0adaa7c0c1..1eca38051bb7b3c546489e2ff2a57528
          }
  
 diff --git a/net/minecraft/world/level/levelgen/feature/IcebergFeature.java b/net/minecraft/world/level/levelgen/feature/IcebergFeature.java
-index 09235e8520977ef0184b684dc861741ddc198f84..4014e818c642bdfbcff5714e623f2a6ff9d6f80a 100644
+index 09235e8520977ef0184b684dc861741ddc198f84..a4ab69f4d92413ccd178d66ddd3cd71c2f68770a 100644
 --- a/net/minecraft/world/level/levelgen/feature/IcebergFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/IcebergFeature.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.levelgen.feature;
  
  import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.Mth;
  import net.minecraft.util.RandomSource;
@@ -775,15 +784,15 @@ index 09235e8520977ef0184b684dc861741ddc198f84..4014e818c642bdfbcff5714e623f2a6f
          boolean flag = randomSource.nextDouble() > 0.7;
          BlockState blockState = context.config().state;
 diff --git a/net/minecraft/world/level/levelgen/feature/KelpFeature.java b/net/minecraft/world/level/levelgen/feature/KelpFeature.java
-index ec8b423ce631129e98b50fdaf55ea8cdee02a11f..08528d8e2d8d8141f55c8905f71729db67e5422a 100644
+index ec8b423ce631129e98b50fdaf55ea8cdee02a11f..98722a88a6d4ad45f2bb6d8f309c028580cc548f 100644
 --- a/net/minecraft/world/level/levelgen/feature/KelpFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/KelpFeature.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.levelgen.feature;
  
  import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.WorldGenLevel;
@@ -812,7 +821,7 @@ index ec8b423ce631129e98b50fdaf55ea8cdee02a11f..08528d8e2d8d8141f55c8905f71729db
          if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER)) {
              BlockState blockState = Blocks.KELP.defaultBlockState();
 diff --git a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
-index dcae4d6f2f8bbc4c9898c35b49576a2e25e26efc..ecb9563db5b2a4dc0ed0009e1d8a51d41a4f1375 100644
+index dcae4d6f2f8bbc4c9898c35b49576a2e25e26efc..ecb573ca0521d86bfda9ea793c391c01ae71f5e6 100644
 --- a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
 @@ -1,7 +1,10 @@
@@ -821,9 +830,9 @@ index dcae4d6f2f8bbc4c9898c35b49576a2e25e26efc..ecb9563db5b2a4dc0ed0009e1d8a51d4
 -import com.mojang.serialization.Codec;
  import java.util.Optional;
 +import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.SharedConstants;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
@@ -876,7 +885,7 @@ index dcae4d6f2f8bbc4c9898c35b49576a2e25e26efc..ecb9563db5b2a4dc0ed0009e1d8a51d4
  
                              for (int i3 = 0; i3 < heightAtRadius && mutableBlockPos.getY() < i2; i3++) {
 diff --git a/net/minecraft/world/level/levelgen/feature/OreFeature.java b/net/minecraft/world/level/levelgen/feature/OreFeature.java
-index c7b46efd4f08067e2c9c5c8b0e8b71a94a79823d..ec16c267bd6c8b002f2fbe5163fbfc1c7fed8642 100644
+index c7b46efd4f08067e2c9c5c8b0e8b71a94a79823d..4a30771d4ca88e2c4cf1f561f6ee9aef980104bc 100644
 --- a/net/minecraft/world/level/levelgen/feature/OreFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/OreFeature.java
 @@ -1,8 +1,8 @@
@@ -885,8 +894,8 @@ index c7b46efd4f08067e2c9c5c8b0e8b71a94a79823d..ec16c267bd6c8b002f2fbe5163fbfc1c
  import com.mojang.serialization.Codec;
 -import java.util.BitSet;
 -import java.util.function.Function;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
  import net.minecraft.util.Mth;
@@ -940,15 +949,15 @@ index f48994224bb944388751e9cadffd8f822ad4da4f..68e580bd8e31f798260a20deaad50522
              BlockState blockState = Blocks.SEA_PICKLE.defaultBlockState().setValue(SeaPickleBlock.PICKLES, randomSource.nextInt(4) + 1);
              if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER) && blockState.canSurvive(worldGenLevel, blockPos1)) {
 diff --git a/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java b/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
-index 4c6382f25afbf025cc37c3a9d21faea36b357216..1a0bfe4dca63291f0e79e7d6de486455128e119a 100644
+index 4c6382f25afbf025cc37c3a9d21faea36b357216..341128d6f89059d743f1706f55d627fcdeff0576 100644
 --- a/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/SeagrassFeature.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.levelgen.feature;
  
  import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.WorldGenLevel;
@@ -978,15 +987,15 @@ index 4c6382f25afbf025cc37c3a9d21faea36b357216..1a0bfe4dca63291f0e79e7d6de486455
          if (worldGenLevel.getBlockState(blockPos1).is(Blocks.WATER)) {
              boolean flag1 = randomSource.nextDouble() < probabilityFeatureConfiguration.probability;
 diff --git a/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java b/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
-index 67f2ffa22e4b45cc295e544c5fc38828c638a896..af8ccbf300b8603fbf94e7292c9f38e0175de6fa 100644
+index 67f2ffa22e4b45cc295e544c5fc38828c638a896..88dce4158b64dfbc4fa46fae550f1888d2e31579 100644
 --- a/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
 +++ b/net/minecraft/world/level/levelgen/feature/SnowAndFreezeFeature.java
 @@ -1,6 +1,8 @@
  package net.minecraft.world.level.levelgen.feature;
  
  import com.mojang.serialization.Codec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
  import net.minecraft.world.level.WorldGenLevel;
@@ -1016,16 +1025,16 @@ index 67f2ffa22e4b45cc295e544c5fc38828c638a896..af8ccbf300b8603fbf94e7292c9f38e0
                  mutableBlockPos1.set(mutableBlockPos).move(Direction.DOWN, 1);
                  Biome biome = worldGenLevel.getBiome(mutableBlockPos).value();
 diff --git a/net/minecraft/world/level/levelgen/placement/BiomeFilter.java b/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
-index 21a169637c27fc6b9d6d64592dbeee0a003457cc..14fd6b7a847d3b652c52cca671f332b01d9b0e0f 100644
+index 21a169637c27fc6b9d6d64592dbeee0a003457cc..4e07c03af2f117634477db3de54fa5a046d04bac 100644
 --- a/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
 +++ b/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
 @@ -1,6 +1,9 @@
  package net.minecraft.world.level.levelgen.placement;
  
  import com.mojang.serialization.MapCodec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
  import net.minecraft.util.RandomSource;
@@ -1043,16 +1052,16 @@ index 21a169637c27fc6b9d6d64592dbeee0a003457cc..14fd6b7a847d3b652c52cca671f332b0
      }
  
 diff --git a/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java b/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
-index d32cef8384c4168b911a10ae29ad1989bf91be29..a20b066fb595f4f69c86054980333f4913fd6d72 100644
+index d32cef8384c4168b911a10ae29ad1989bf91be29..7aed7a8c3a67ab03b93469e0e7b875c1df1543b4 100644
 --- a/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
 +++ b/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
 @@ -2,6 +2,9 @@ package net.minecraft.world.level.levelgen.placement;
  
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
@@ -1068,7 +1077,7 @@ index d32cef8384c4168b911a10ae29ad1989bf91be29..a20b066fb595f4f69c86054980333f49
  
      @Override
 diff --git a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
-index 06721d146ad96fa95645b8fe5eef58171b2bef33..54b509ee06fcce24920952fc0f007ca7c29ae2e5 100644
+index 06721d146ad96fa95645b8fe5eef58171b2bef33..4c5c8659a77606acb412bd9fc26aae9b8ec9e175 100644
 --- a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
 @@ -1,15 +1,18 @@
@@ -1077,9 +1086,9 @@ index 06721d146ad96fa95645b8fe5eef58171b2bef33..54b509ee06fcce24920952fc0f007ca7
  import com.mojang.serialization.MapCodec;
 -import java.util.stream.Stream;
 -import java.util.stream.Stream.Builder;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.util.valueproviders.ConstantInt;
@@ -1112,7 +1121,7 @@ index 06721d146ad96fa95645b8fe5eef58171b2bef33..54b509ee06fcce24920952fc0f007ca7
                  if (i4 != Integer.MAX_VALUE) {
                      builder.add(new BlockPos(i2, i4, i3));
 diff --git a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
-index 5d6053cbd6d07d2a1eaf2acc1d8d42607459b9f0..3d313bd5aee6b17feddcf47ac2a3c58e936b04ee 100644
+index 5d6053cbd6d07d2a1eaf2acc1d8d42607459b9f0..cd9e90a0b3da965e691c594b5297451c320a8b14 100644
 --- a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
 @@ -3,13 +3,17 @@ package net.minecraft.world.level.levelgen.placement;
@@ -1120,9 +1129,9 @@ index 5d6053cbd6d07d2a1eaf2acc1d8d42607459b9f0..3d313bd5aee6b17feddcf47ac2a3c58e
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
  import net.minecraft.util.RandomSource;
@@ -1144,7 +1153,7 @@ index 5d6053cbd6d07d2a1eaf2acc1d8d42607459b9f0..3d313bd5aee6b17feddcf47ac2a3c58e
          WorldGenLevel level = context.getLevel();
          if (!this.allowedSearchCondition.test(level, mutableBlockPos)) {
 diff --git a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
-index 0d8730c75c7c037ab5b48fa198c4dc51b2c33d2c..4e2dfcf3b380061747242d3888ee28048efa6c5d 100644
+index 0d8730c75c7c037ab5b48fa198c4dc51b2c33d2c..f24f6b81f9df5aa85534ad6da2794dda072fdfdf 100644
 --- a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
 @@ -2,12 +2,16 @@ package net.minecraft.world.level.levelgen.placement;
@@ -1153,9 +1162,9 @@ index 0d8730c75c7c037ab5b48fa198c4dc51b2c33d2c..4e2dfcf3b380061747242d3888ee2804
  import com.mojang.serialization.codecs.RecordCodecBuilder;
 -import java.util.List;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
  import net.minecraft.util.RandomSource;
@@ -1176,7 +1185,7 @@ index 0d8730c75c7c037ab5b48fa198c4dc51b2c33d2c..4e2dfcf3b380061747242d3888ee2804
          int sectionPosZ = SectionPos.blockToSectionCoord(pos.getZ());
          boolean flag = false;
 diff --git a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
-index cfc010a3904218ec1cb1652097b0024852a02b54..6d3b6c88ccc44e82c0517bb2539bebd3cff799b4 100644
+index cfc010a3904218ec1cb1652097b0024852a02b54..30925091a3b1dfeb47992ee93c95b5e24ca566a9 100644
 --- a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
 @@ -2,7 +2,9 @@ package net.minecraft.world.level.levelgen.placement;
@@ -1184,9 +1193,9 @@ index cfc010a3904218ec1cb1652097b0024852a02b54..6d3b6c88ccc44e82c0517bb2539bebd3
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.levelgen.VerticalAnchor;
@@ -1211,7 +1220,7 @@ index cfc010a3904218ec1cb1652097b0024852a02b54..6d3b6c88ccc44e82c0517bb2539bebd3
  
      @Override
 diff --git a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
-index 437b650fdc21faa1b76c41e94d3d98c00d0a2881..d6fa4f508d55cd32024983148ed6198ba26d26e0 100644
+index 437b650fdc21faa1b76c41e94d3d98c00d0a2881..2cdafec2c0cfa4c700e3cabd664442d5d49efcba 100644
 --- a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
 @@ -2,11 +2,15 @@ package net.minecraft.world.level.levelgen.placement;
@@ -1219,9 +1228,9 @@ index 437b650fdc21faa1b76c41e94d3d98c00d0a2881..d6fa4f508d55cd32024983148ed6198b
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.levelgen.Heightmap;
@@ -1245,7 +1254,7 @@ index 437b650fdc21faa1b76c41e94d3d98c00d0a2881..d6fa4f508d55cd32024983148ed6198b
      }
  
 diff --git a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
-index cd4bae645f4ee20f8d58e707784ca027b35ddae2..89941010df909db9c36e55609900ff37bd17d337 100644
+index cd4bae645f4ee20f8d58e707784ca027b35ddae2..1d8e98c381a0d805db68d29beb5bb7570e8ad317 100644
 --- a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
 @@ -1,10 +1,14 @@
@@ -1253,9 +1262,9 @@ index cd4bae645f4ee20f8d58e707784ca027b35ddae2..89941010df909db9c36e55609900ff37
  
  import com.mojang.serialization.MapCodec;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  
@@ -1274,22 +1283,21 @@ index cd4bae645f4ee20f8d58e707784ca027b35ddae2..89941010df909db9c36e55609900ff37
          int i1 = random.nextInt(16) + pos.getZ();
          return Stream.of(new BlockPos(i, pos.getY(), i1));
 diff --git a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
-index a58d0245899fdb95a91c402f291311a30c40faf2..62e6a49362a9af97f0bd2635571a3be2217667dc 100644
+index a58d0245899fdb95a91c402f291311a30c40faf2..5ec2bea9751d4f4a1e1c968555dc7901603d1f8f 100644
 --- a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
 +++ b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
-@@ -5,6 +5,11 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
+@@ -5,6 +5,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  import java.util.List;
  import java.util.Optional;
  import java.util.stream.Stream;
 +
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
-+import net.azisaba.aetheria.world.height.HeightmapSet;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.SharedConstants;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
-@@ -34,25 +39,31 @@ public record PlacedFeature(Holder<ConfiguredFeature<?, ?>> feature, List<Placem
+@@ -34,25 +38,31 @@ public record PlacedFeature(Holder<ConfiguredFeature<?, ?>> feature, List<Placem
          )
          .listOf();
  
@@ -1328,16 +1336,16 @@ index a58d0245899fdb95a91c402f291311a30c40faf2..62e6a49362a9af97f0bd2635571a3be2
                  if (SharedConstants.DEBUG_FEATURE_COUNT) {
                      FeatureCountTracker.featurePlaced(context.getLevel().getLevel(), configuredFeature, context.topFeature());
 diff --git a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
-index c894f0f63c0c6f55f0c4ac1d84336138b0505109..ffd20ebd446b8ece42fdaa20a8941ff73531c44a 100644
+index c894f0f63c0c6f55f0c4ac1d84336138b0505109..44a2d1086f0212d6c066a754e8c6bbc00f4ce3c8 100644
 --- a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
 +++ b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
 @@ -1,14 +1,18 @@
  package net.minecraft.world.level.levelgen.placement;
  
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  
@@ -1355,22 +1363,21 @@ index c894f0f63c0c6f55f0c4ac1d84336138b0505109..ffd20ebd446b8ece42fdaa20a8941ff7
 +    protected abstract boolean shouldPlace(PlacementContext context, RandomSource random, BlockPos pos, @Modified(Op.ADD_ARGUMENT) HeightContext heightContext);
  }
 diff --git a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
-index 39154c291bc3a4ec7a163f210aa6d4e53230d297..4b86b4843231d63e6e404a2030dcccfae3e34659 100644
+index 39154c291bc3a4ec7a163f210aa6d4e53230d297..2fe1113e8ae2a85d151953ac60084aeadecb5359 100644
 --- a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
 +++ b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
-@@ -2,6 +2,11 @@ package net.minecraft.world.level.levelgen.placement;
+@@ -2,6 +2,10 @@ package net.minecraft.world.level.levelgen.placement;
  
  import com.mojang.serialization.Codec;
  import java.util.stream.Stream;
 +
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
-+import net.azisaba.aetheria.world.height.HeightmapSet;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.registries.BuiltInRegistries;
  import net.minecraft.util.RandomSource;
-@@ -11,7 +16,7 @@ public abstract class PlacementModifier {
+@@ -11,7 +15,7 @@ public abstract class PlacementModifier {
          .byNameCodec()
          .dispatch(PlacementModifier::type, PlacementModifierType::codec);
  
@@ -1380,7 +1387,7 @@ index 39154c291bc3a4ec7a163f210aa6d4e53230d297..4b86b4843231d63e6e404a2030dcccfa
      public abstract PlacementModifierType<?> type();
  }
 diff --git a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
-index 0cb949acf53802cf64923e6ce56977a861a6892b..a7833f605833a9a4c0d0ee1d03ea3490cd5a499f 100644
+index 0cb949acf53802cf64923e6ce56977a861a6892b..9df3f4ace9fbd54055bdd14b8d886987f910e9c3 100644
 --- a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
 @@ -2,12 +2,16 @@ package net.minecraft.world.level.levelgen.placement;
@@ -1388,9 +1395,9 @@ index 0cb949acf53802cf64923e6ce56977a861a6892b..a7833f605833a9a4c0d0ee1d03ea3490
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.util.valueproviders.ConstantInt;
@@ -1411,16 +1418,16 @@ index 0cb949acf53802cf64923e6ce56977a861a6892b..a7833f605833a9a4c0d0ee1d03ea3490
          int i1 = pos.getY() + this.ySpread.sample(random);
          int i2 = pos.getZ() + this.xzSpread.sample(random);
 diff --git a/net/minecraft/world/level/levelgen/placement/RarityFilter.java b/net/minecraft/world/level/levelgen/placement/RarityFilter.java
-index 8d3a5a8790eb1333d3a51b8bd6e2685d08e7e4a2..b64572015ae6c33470ec2203641d788ecd3462f8 100644
+index 8d3a5a8790eb1333d3a51b8bd6e2685d08e7e4a2..d09e0bfea96e3d9093361cbdebe3064d3e83ee92 100644
 --- a/net/minecraft/world/level/levelgen/placement/RarityFilter.java
 +++ b/net/minecraft/world/level/levelgen/placement/RarityFilter.java
 @@ -1,6 +1,9 @@
  package net.minecraft.world.level.levelgen.placement;
  
  import com.mojang.serialization.MapCodec;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.ExtraCodecs;
  import net.minecraft.util.RandomSource;
@@ -1434,7 +1441,7 @@ index 8d3a5a8790eb1333d3a51b8bd6e2685d08e7e4a2..b64572015ae6c33470ec2203641d788e
      }
  
 diff --git a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
-index 0098f5951611ebb8d518d1832cb4a8e69e98c2d8..b942eb4b4a98db1f4ca0ee40b69787a044740b65 100644
+index 0098f5951611ebb8d518d1832cb4a8e69e98c2d8..1ab1edfe58426f806496be816ffdfe0f98404bd3 100644
 --- a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
 +++ b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
 @@ -1,15 +1,19 @@
@@ -1442,9 +1449,9 @@ index 0098f5951611ebb8d518d1832cb4a8e69e98c2d8..b942eb4b4a98db1f4ca0ee40b69787a0
  
 -import java.util.stream.IntStream;
 -import java.util.stream.Stream;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  
@@ -1461,16 +1468,16 @@ index 0098f5951611ebb8d518d1832cb4a8e69e98c2d8..b942eb4b4a98db1f4ca0ee40b69787a0
      }
  }
 diff --git a/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java b/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
-index a7792d20c1832878e64aeaf6b75808d4535bf9b2..fe8d2e6d67541294c8cff2310bd6a600e7b659a8 100644
+index a7792d20c1832878e64aeaf6b75808d4535bf9b2..5d00477ad63ba7cc843674c3e423f98d70e3ea34 100644
 --- a/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
 +++ b/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
 @@ -3,6 +3,9 @@ package net.minecraft.world.level.levelgen.placement;
  import com.mojang.serialization.Codec;
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  import net.minecraft.world.level.levelgen.Heightmap;
@@ -1486,16 +1493,16 @@ index a7792d20c1832878e64aeaf6b75808d4535bf9b2..fe8d2e6d67541294c8cff2310bd6a600
          long l2 = l + this.maxInclusive;
          return l1 <= pos.getY() && pos.getY() <= l2;
 diff --git a/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java b/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
-index fa65d1683ea4f6946699af86acd1cd8b57e75e60..787234d7561627cc86066ffd17bf19e247da08d9 100644
+index fa65d1683ea4f6946699af86acd1cd8b57e75e60..51e0290e9d1b0e81174260d9b5470ce5d2e2db54 100644
 --- a/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
 +++ b/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
 @@ -3,9 +3,11 @@ package net.minecraft.world.level.levelgen.placement;
  import com.mojang.serialization.Codec;
  import com.mojang.serialization.MapCodec;
  import com.mojang.serialization.codecs.RecordCodecBuilder;
-+import net.azisaba.aetheria.annotations.Modified;
-+import net.azisaba.aetheria.annotations.Op;
-+import net.azisaba.aetheria.world.height.HeightContext;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.world.height.HeightContext;
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
 -import net.minecraft.world.level.levelgen.Heightmap;
