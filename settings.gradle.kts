@@ -14,4 +14,6 @@ rootProject.name = "folia"
 
 include("folia-api")
 include("folia-server")
-includeBuild("plugins")
+if (gradle.startParameter.taskNames.any { it.substringAfterLast(':') in setOf("runServer", "runDevServer") }) {
+    includeBuild("plugins")
+}

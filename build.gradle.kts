@@ -103,44 +103,44 @@ tasks.register("printPaperVersion") {
     }
 }
 
-val preparePlugins = tasks.register<Copy>("preparePlugins") {
+val runWorkDir = providers.gradleProperty("paper.runWorkDir").orElse("run")
+
+val preparePlugins = tasks.register<Sync>("preparePlugins") {
     group = "runs"
     description = "Build and install plugins into 'run/plugins' (prefixed with module-)"
 
-    dependsOn(gradle.includedBuild("plugins").task(":buildAllPluginJars"))
-
-    val runDir = providers.gradleProperty("paper.runWorkDir").orElse("run")
-    val pluginsDirProvider = runDir.map { layout.projectDirectory.dir("plugins/$it").asFile }
-
-    doFirst {
-        val pluginsDir = pluginsDirProvider.get()
-        if (!pluginsDir.exists()) pluginsDir.mkdir()
-
-        pluginsDir.listFiles()
-            ?.filter { it.isFile && it.name.startsWith("module-") && it.extension == "jar" }
-            ?.forEach { it.delete() }
+    if (gradle.includedBuilds.any { it.name == "plugins" }) {
+        dependsOn(gradle.includedBuild("plugins").task(":buildAllPluginJars"))
     }
 
-    from(fileTree("plugins") {
+    preserve {
+        include("*.jar")
+        exclude("module-*.jar")
+    }
+
+    from(layout.projectDirectory.dir("plugins")) {
         include("**/build/libs/*.jar")
         exclude("**/*-sources.jar", "**/*-javadoc.jar")
-    }) {
+
         eachFile {
-            relativePath = RelativePath(true, name)
+            val newName = "module-$name"
+            relativePath = RelativePath(true, newName)
         }
+
         includeEmptyDirs = false
     }
 
-    into(layout.projectDirectory.dir("run/plugins"))
+    into(runWorkDir.map { layout.projectDirectory.dir("$it/plugins") })
 }
 
-
 gradle.projectsEvaluated {
-    project(":folia-server").tasks.named("runServer") {
-        dependsOn(preparePlugins)
-    }
+    findProject(":folia-server")
+        ?.tasks
+        ?.findByName("runServer")
+        ?.dependsOn(preparePlugins)
 
-    project(":folia-server").tasks.named("runDevServer") {
-        dependsOn(preparePlugins)
-    }
+    findProject(":folia-server")
+        ?.tasks
+        ?.findByName("runDevServer")
+        ?.dependsOn(preparePlugins)
 }
