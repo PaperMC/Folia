@@ -1,0 +1,30 @@
+services:
+  postgres-test-db:
+    image: postgres:16-alpine
+    container_name: aetheria-postgres-test
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: testdb
+      TZ: Asia/Tokyo
+    ports:
+      - "15432:5432"
+
+    command: >
+      postgres
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c checkpoint_timeout=30min
+      -c max_wal_size=2GB
+
+    tmpfs:
+      - /var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d testdb"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+    restart: unless-stopped
