@@ -9,8 +9,10 @@ plugins {
     alias(libs.plugins.shadow) apply false
 }
 
+val kotlinx = libs.kotlinx
 val koin = libs.koin
 val tomlkt = libs.tomlkt
+val mccoroutine = libs.mccoroutine
 
 subprojects {
     apply(plugin = "java-library")
@@ -25,8 +27,11 @@ subprojects {
 
     dependencies {
         compileOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
+        implementation(kotlinx.coroutines.core)
         implementation(koin.core)
         implementation(tomlkt)
+        implementation(mccoroutine.folia.api)
+        implementation(mccoroutine.folia.core)
         implementation(kotlin("stdlib"))
     }
 
