@@ -23,9 +23,11 @@ class PortalFinder(
             for (orientation in DetectedPortal.Orientation.entries) {
                 for (dx in 0..(allowedInnerWidth.last() + 1)) {
                     for (dy in 0..(allowedInnerHeight.last() + 1)) {
-                        val minX = if (orientation == DetectedPortal.Orientation.XY) start.blockX() - dx else start.blockX
+                        val minX =
+                            if (orientation == DetectedPortal.Orientation.XY) start.blockX() - dx else start.blockX
                         val minY = start.blockY() - dy
-                        val minZ = if (orientation == DetectedPortal.Orientation.XY) start.blockZ() else start.blockZ() - dx
+                        val minZ =
+                            if (orientation == DetectedPortal.Orientation.XY) start.blockZ() else start.blockZ() - dx
 
                         val minBound = Position.block(minX, minY, minZ)
 
@@ -33,7 +35,7 @@ class PortalFinder(
                         if (!candidate.containsOnFrame(start.toBlock(), orientation)) continue
                         if (!validateCandidate(plugin, world, candidate, orientation)) continue
 
-                        return@withContext candidate.toDetectedPortal(orientation)
+                        return@withContext candidate.toDetectedPortal(world, orientation)
                     }
                 }
             }
@@ -172,7 +174,7 @@ class PortalFinder(
                 }
             }
 
-        fun toDetectedPortal(orientation: DetectedPortal.Orientation): DetectedPortal {
+        fun toDetectedPortal(world: World, orientation: DetectedPortal.Orientation): DetectedPortal {
             val maxBound = when (orientation) {
                 DetectedPortal.Orientation.XY ->
                     Position.block(
@@ -188,7 +190,7 @@ class PortalFinder(
                         minBound.blockZ() + innerWidth + 1
                     )
             }
-            return DetectedPortal(minBound, maxBound, innerWidth, innerHeight, orientation)
+            return DetectedPortal(world, innerWidth, innerHeight, minBound, maxBound, orientation)
         }
 
         fun toBlockPosition(dx: Int, dy: Int, orientation: DetectedPortal.Orientation): BlockPosition =
