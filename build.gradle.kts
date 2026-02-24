@@ -114,8 +114,8 @@ val preparePlugins = tasks.register<Sync>("preparePlugins") {
     }
 
     preserve {
-        include("*.jar")
         exclude("module-*.jar")
+        include("**/*")
     }
 
     from(layout.projectDirectory.dir("plugins")) {
