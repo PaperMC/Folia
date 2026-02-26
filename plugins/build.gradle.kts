@@ -13,6 +13,9 @@ val kotlinx = libs.kotlinx
 val koin = libs.koin
 val tomlkt = libs.tomlkt
 val mccoroutine = libs.mccoroutine
+val packetevents = libs.packetevents
+val entitylib = libs.entitylib
+val packed = libs.packed
 
 subprojects {
     apply(plugin = "java-library")
@@ -23,15 +26,21 @@ subprojects {
     repositories {
         mavenCentral()
         maven("https://repo.papermc.io/repository/maven-public/")
+        maven("https://repo.codemc.io/repository/maven-releases/")
+        maven("https://maven.pvphub.me/tofaa")
+        mavenLocal()
     }
 
     dependencies {
         compileOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
+        compileOnly(packetevents)
         implementation(kotlinx.coroutines.core)
         implementation(koin.core)
         implementation(tomlkt)
         implementation(mccoroutine.folia.api)
         implementation(mccoroutine.folia.core)
+        implementation(entitylib)
+        implementation(packed)
         implementation(kotlin("stdlib"))
     }
 

@@ -4,23 +4,37 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public record IslandPos(int x, int z) {
-    private static final int SPACING_BLOCKS = (IslandDefaults.SPACING_GRIDS + IslandDefaults.ISLAND_SIZE_X_GRIDS) * IslandDefaults.GRID_SIZE;
-
     public static IslandPos fromBlockPos(final int blockX, final int blockZ) {
         return new IslandPos(gridOf(blockX), gridOf(blockZ));
     }
 
     private static int gridOf(final int levelCoord) {
-        final int half = IslandPos.SPACING_BLOCKS / 2;
-        return Math.floorDiv(levelCoord + half, IslandPos.SPACING_BLOCKS);
+        final int half = IslandDefaults.SPACING_BLOCKS / 2;
+        return Math.floorDiv(levelCoord + half, IslandDefaults.SPACING_BLOCKS);
+    }
+
+    public int minBlockX() {
+        return centerBlockX() - (IslandDefaults.ISLAND_SIZE_X_BLOCKS / 2);
+    }
+
+    public int maxBlockX() {
+        return centerBlockX() + (IslandDefaults.ISLAND_SIZE_X_BLOCKS / 2);
+    }
+
+    public int minBlockZ() {
+        return centerBlockZ() - (IslandDefaults.ISLAND_SIZE_Z_BLOCKS / 2);
+    }
+
+    public int maxBlockZ() {
+        return centerBlockZ() + (IslandDefaults.ISLAND_SIZE_Z_BLOCKS / 2);
     }
 
     public int centerBlockX() {
-        return this.x * IslandPos.SPACING_BLOCKS;
+        return this.x * IslandDefaults.SPACING_BLOCKS;
     }
 
     public int centerBlockZ() {
-        return this.z * IslandPos.SPACING_BLOCKS;
+        return this.z * IslandDefaults.SPACING_BLOCKS;
     }
 
     public long computeSeed(final long levelSeed) {
