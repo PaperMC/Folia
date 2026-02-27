@@ -5,10 +5,11 @@ import net.azisaba.vanilife.islands.IslandDefaults
 import net.azisaba.vanilife.islands.IslandPos
 import org.bukkit.Bukkit
 import org.bukkit.World
+import org.bukkit.plugin.Plugin
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
-class IslandAccess(private val islandRepository: IslandRepository) : IslandInfoLookup {
+class IslandManager(private val plugin: Plugin, private val islandRepository: IslandRepository) : IslandInfoLookup {
     private val world: World = Bukkit.getWorld(IslandDefaults.WORLD_KEY)!!
 
     private val map: MutableMap<IslandPos, Island> = ConcurrentHashMap()
@@ -35,7 +36,7 @@ class IslandAccess(private val islandRepository: IslandRepository) : IslandInfoL
     private fun getOrCreateInstance(info: IslandInfo): Island {
         posByOwner.putIfAbsent(info.ownerUuid, info.pos)
         return map.computeIfAbsent(info.pos) { pos ->
-            Island(pos, info.ownerUuid, info.settings, world, islandRepository)
+            Island(plugin, world, pos, info.ownerUuid, info.settings, islandRepository)
         }
     }
 }

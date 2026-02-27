@@ -14,8 +14,6 @@ import net.azisaba.vanilife.housing.waves.wrack.Flotsam
 import net.azisaba.vanilife.housing.waves.wrack.WrackType
 import net.azisaba.vanilife.islands.IslandDefaults
 import net.kyori.adventure.text.Component
-import org.bukkit.Material
-import org.bukkit.inventory.ItemStack
 import java.util.*
 import kotlin.math.PI
 import kotlin.math.cos
@@ -23,12 +21,15 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
+    val pendingFlotsamCount: Int
+        get() = flotsamQueue.size
+
     private val random: Random = Random(pos.computeSeed())
+    private var cycleRandom: CycleRandom = CycleRandom.roll(random)
     private val ticksOffset = random.nextLong(0L, CYCLE_TICKS)
 
-    private var cycleRandom: CycleRandom = CycleRandom.roll(random)
-
     private var flotsam: Flotsam? = null
+    private val flotsamQueue: ArrayDeque<WrackType> = ArrayDeque(128)
 
     override fun spawn(location: Location, parent: EntityContainer): Boolean {
         if (!super.spawn(location, parent)) return false
@@ -64,13 +65,18 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
         }
     }
 
+    fun enqueueFlotsam(wrackType: WrackType) {
+        flotsamQueue.addLast(wrackType)
+    }
+
     private fun startCycleTick() {
-        if (random.nextDouble() < 0.2) {
-            val wrackType = WrackType("bottle", listOf(ItemStack.of(Material.BREAD)).iterator())
+        if (flotsamQueue.isNotEmpty()) {
+            val wrackType = flotsamQueue.removeFirst()
             flotsam = Flotsam.create(wrackType, this).apply {
                 viewers.forEach(::addViewer)
             }
         }
+
         cycleRandom = CycleRandom.roll(random)
         consumeEntityMeta(TextDisplayMeta::class.java) { meta ->
             meta.translation = Vector3f()

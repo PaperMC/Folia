@@ -5,10 +5,9 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
-import net.azisaba.vanilife.housing.islands.IslandAccess
+import net.azisaba.vanilife.housing.islands.IslandManager
 import net.azisaba.vanilife.housing.persistence.DatabaseIslandRepository
 import net.azisaba.vanilife.housing.persistence.IslandRepository
-import net.azisaba.vanilife.housing.waves.setupWaveManager
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
@@ -36,13 +35,12 @@ class Main : JavaPlugin() {
                 single { config }
                 single { database }
                 single<IslandRepository> { DatabaseIslandRepository(get()) }
-                single<IslandAccess> { IslandAccess(get()) }
+                single<IslandManager> { IslandManager(get(), get()) }
             })
         }
 
         setupEventListeners(koinApp.koin)
         setupPacked()
-        setupWaveManager()
     }
 
     override fun onDisable() {

@@ -1,8 +1,7 @@
 package net.azisaba.vanilife.housing.islands
 
-import io.papermc.paper.math.BlockPosition
-import io.papermc.paper.math.Position
 import net.azisaba.vanilife.housing.persistence.IslandRepository
+import net.azisaba.vanilife.housing.waves.wrack.WrackType
 import net.azisaba.vanilife.islands.IslandDefaults
 import net.azisaba.vanilife.islands.IslandPos
 import net.kyori.adventure.audience.Audience
@@ -12,15 +11,17 @@ import net.kyori.adventure.pointer.Pointers
 import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.World
+import org.bukkit.plugin.Plugin
 import org.joml.Vector2fc
 import org.joml.Vector3dc
 import kotlin.uuid.Uuid
 
 class Island internal constructor(
+    plugin: Plugin,
+    val world: World,
     override val pos: IslandPos,
     override val ownerUuid: Uuid,
     settings: IslandSettings,
-    val world: World,
     private val islandRepository: IslandRepository,
 ) : ForwardingAudience, IslandInfo {
     override var settings: IslandSettings = settings
@@ -39,18 +40,7 @@ class Island internal constructor(
             return spawnPoint
         }
 
-    val minBound: BlockPosition
-    val maxBound: BlockPosition
-
-    init {
-        val halfW = IslandDefaults.ISLAND_SIZE_X_BLOCKS / 2
-        val halfH = IslandDefaults.ISLAND_SIZE_Z_BLOCKS / 2
-        val cx = pos.centerBlockX()
-        val cz = pos.centerBlockZ()
-
-        minBound = Position.block(cx - halfW, world.minHeight, cx - halfH)
-        maxBound = Position.block(cz + halfW, world.maxHeight - 1, cz + halfH)
-    }
+    private val waveManager: IslandWaveManager = IslandWaveManager(world, pos).startWith(plugin)
 
     suspend fun <T> set(pointer: Pointer<T>, value: T) = when (value) {
         IslandInfo.DISPLAY_NAME -> setDisplayName(value as Component?)
@@ -74,10 +64,11 @@ class Island internal constructor(
         settings = settings.copy(spawnRotation = spawnRotation)
     }
 
-    operator fun contains(pos: Position): Boolean =
-        pos.x() in minBound.x()..maxBound.x() && pos.y() in minBound.y()..maxBound.y() && pos.z() in minBound.z()..maxBound.z()
-
-    override fun audiences(): Iterable<Audience> = world.players.filter { it.location in this }
+    override fun audiences(): Iterable<Audience> = world.players.filter { pos.contains(it.location) }
 
     override fun pointers(): Pointers = super<IslandInfo>.pointers()
+
+    fun addFlotsam(wrackType: WrackType) {
+        waveManager.addFlotsam(wrackType)
+    }
 }

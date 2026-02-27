@@ -25,7 +25,7 @@ import kotlin.random.Random
 
 internal class Flotsam private constructor(
     private val wrackType: WrackType,
-    private val tracker: DummyTracker
+    private val tracker: DummyTracker,
 ) : KoinComponent {
     private val plugin: Plugin by inject()
 

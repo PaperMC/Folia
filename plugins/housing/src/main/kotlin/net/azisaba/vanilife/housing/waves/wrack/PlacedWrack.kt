@@ -23,13 +23,15 @@ import kotlin.random.Random
 @ConsistentCopyVisibility
 internal data class PlacedWrack private constructor(val holder: Plugin, val wrackType: WrackType, val tracker: DummyTracker) {
     fun interact(event: HitBoxInteractEvent) {
+        val hitBoxSource = (event.hitBox.source() as? BukkitEntity)?.source()
+        hitBoxSource?.remove()
         dropItemStack()
         tracker.close()
     }
 
     fun damage(event: HitBoxDamagedEvent) {
-        val s = (event.hitBox.source() as? BukkitEntity)?.source()
-        println(s?.type?.key())
+        val hitBoxSource = (event.hitBox.source() as? BukkitEntity)?.source()
+        hitBoxSource?.remove()
         dropItemStack()
         tracker.close()
     }
