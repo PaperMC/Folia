@@ -2,9 +2,7 @@ package net.azisaba.vanilife.housing.waves.flotsam
 
 import com.github.retrooper.packetevents.protocol.world.Location
 import com.github.shynixn.mccoroutine.folia.launch
-import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
-import kotlinx.coroutines.withContext
 import kr.toxicity.model.api.BetterModel
 import kr.toxicity.model.api.bukkit.platform.BukkitLocation
 import kr.toxicity.model.api.bukkit.platform.BukkitPlayer
@@ -54,21 +52,15 @@ data class Flotsam(val wavePos: WavePos, val tracker: DummyTracker, val itemStac
 
         plugin.launch {
             val finder = AsyncLandFinder(plugin, world, random)
-            val location = finder.find(wavePos) ?: return@launch
-            withContext(plugin.regionDispatcher(location)) {
-                world.dropItemNaturally(location, itemStack)
-            }
+            val location = finder.find(wavePos)?.add(0.0, 1.0, 0.0) ?: return@launch
+            val placed = PlacedWrack.place(plugin, location, itemStack)
+            placed.show(tracker.pipeline.allPlayer().toList())
+            tracker.close()
         }
-
-        remove()
-    }
-
-    private fun remove() {
-        tracker.close()
     }
 
     companion object {
-        fun flotsam(wrapperWave: WrapperWave, itemStack: ItemStack): Flotsam {
+        fun create(wrapperWave: WrapperWave, itemStack: ItemStack): Flotsam {
             val world = Bukkit.getWorld(IslandDefaults.WORLD_KEY)!!
             val paperLocation = SpigotConversionUtil.toBukkitLocation(world, wrapperWave.location)
             val platformLocation = BukkitLocation(paperLocation)

@@ -65,7 +65,7 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
 
     private fun startCycleTick() {
         if (random.nextDouble() < 0.2) {
-            flotsam = Flotsam.flotsam(this, ItemStack.of(Material.DIAMOND)).apply {
+            flotsam = Flotsam.create(this, ItemStack.of(Material.DIAMOND)).apply {
                 viewers.forEach(::addViewer)
             }
         }
