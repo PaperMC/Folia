@@ -10,7 +10,8 @@ import me.tofaa.entitylib.container.EntityContainer
 import me.tofaa.entitylib.meta.display.TextDisplayMeta
 import me.tofaa.entitylib.wrapper.WrapperEntity
 import net.azisaba.vanilife.housing.HousingFonts
-import net.azisaba.vanilife.housing.waves.flotsam.Flotsam
+import net.azisaba.vanilife.housing.waves.wrack.Flotsam
+import net.azisaba.vanilife.housing.waves.wrack.WrackType
 import net.azisaba.vanilife.islands.IslandDefaults
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
@@ -65,7 +66,8 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
 
     private fun startCycleTick() {
         if (random.nextDouble() < 0.2) {
-            flotsam = Flotsam.create(this, ItemStack.of(Material.DIAMOND)).apply {
+            val wrackType = WrackType("bottle", listOf(ItemStack.of(Material.BREAD)).iterator())
+            flotsam = Flotsam.create(wrackType, this).apply {
                 viewers.forEach(::addViewer)
             }
         }
@@ -96,7 +98,7 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
         }
         refresh()
 
-        flotsam?.driftTick(time, target)
+        flotsam?.driftTick(time, pos, target)
     }
 
     private fun movementEndTick() {
@@ -116,7 +118,7 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
         }
         refresh()
 
-        flotsam?.endTick()
+        flotsam?.endTick(pos)
         flotsam = null
     }
 

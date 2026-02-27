@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.housing.waves.flotsam
+package net.azisaba.vanilife.housing.waves.wrack
 
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
@@ -14,35 +14,32 @@ import org.joml.Vector3i
 import org.joml.Vector3ic
 import kotlin.random.Random
 
-class AsyncLandFinder(
-    private val plugin: Plugin,
-    private val world: World,
-    private val selectorRandom: Random,
-    private val offsetRadiusX: Int = 6,
-    private val offsetRadiusY: Int = 3,
-    private val offsetRadiusZ: Int = 6,
+internal class AsyncLandFinder(
+    private val random: Random,
+    private val offsetRadiusX: Int = 6, private val offsetRadiusY: Int = 3, private val offsetRadiusZ: Int = 6,
     private val maxCandidates: Int = 12,
 ) {
-    suspend fun find(wavePos: WavePos): Location? {
+    suspend fun find(plugin: Plugin, world: World, wavePos: WavePos): Location? {
         val start = SpigotConversionUtil.toBukkitLocation(world, wavePos.location())
         return withContext(plugin.regionDispatcher(start)) {
             val candidates = ArrayList<Location>(maxCandidates)
+
             val offsets = shuffledOffsets()
             for (offset in offsets) {
                 val x = start.x() + offset.x()
                 val y = start.y() + offset.y()
                 val z = start.z() + offset.z()
                 val location = Location(world, x, y, z).toBlockLocation()
-                val land = findLandAt(location) ?: continue
+                val land = findLandAt(plugin, location) ?: continue
                 candidates += land
                 if (candidates.size >= maxCandidates) break
             }
-            if (candidates.isEmpty()) return@withContext null
-            return@withContext candidates[selectorRandom.nextInt(candidates.size)]
+
+            return@withContext if (candidates.isEmpty()) null else candidates[random.nextInt(candidates.size)]
         }
     }
 
-    private suspend fun findLandAt(location: Location): Location? {
+    private suspend fun findLandAt(plugin: Plugin, location: Location): Location? {
         return if (Bukkit.isOwnedByCurrentRegion(location)) {
             testLandAt(location)
         } else {
@@ -51,8 +48,8 @@ class AsyncLandFinder(
     }
 
     private fun testLandAt(location: Location): Location? {
-        val block = world.getBlockAt(location)
-        val isLandBlock = block.type == Material.SAND && block.getRelative(BlockFace.UP).type.isAir
+        val block = location.world.getBlockAt(location)
+        val isLandBlock = block.type.isAir && block.getRelative(BlockFace.DOWN).type == Material.SAND
         return if (isLandBlock) location else null
     }
 
@@ -65,7 +62,6 @@ class AsyncLandFinder(
                 }
             }
         }
-        result.shuffle(selectorRandom)
-        return result
+        return result.shuffled(random)
     }
 }
