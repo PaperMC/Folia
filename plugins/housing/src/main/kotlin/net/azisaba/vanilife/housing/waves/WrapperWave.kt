@@ -4,15 +4,18 @@ import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes
 import com.github.retrooper.packetevents.protocol.particle.Particle
 import com.github.retrooper.packetevents.protocol.particle.type.ParticleTypes
 import com.github.retrooper.packetevents.protocol.world.Location
-import com.github.retrooper.packetevents.util.Vector3d
 import com.github.retrooper.packetevents.util.Vector3f
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerParticle
 import me.tofaa.entitylib.container.EntityContainer
 import me.tofaa.entitylib.meta.display.TextDisplayMeta
 import me.tofaa.entitylib.wrapper.WrapperEntity
 import net.azisaba.vanilife.housing.HousingFonts
+import net.azisaba.vanilife.housing.waves.flotsam.Flotsam
 import net.azisaba.vanilife.islands.IslandDefaults
 import net.kyori.adventure.text.Component
+import org.bukkit.Material
+import org.bukkit.inventory.ItemStack
+import java.util.*
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -23,6 +26,8 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
     private val ticksOffset = random.nextLong(0L, CYCLE_TICKS)
 
     private var cycleRandom: CycleRandom = CycleRandom.roll(random)
+
+    private var flotsam: Flotsam? = null
 
     override fun spawn(location: Location, parent: EntityContainer): Boolean {
         if (!super.spawn(location, parent)) return false
@@ -37,18 +42,33 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
         return true
     }
 
+    override fun addViewer(uuid: UUID) {
+        super.addViewer(uuid)
+        flotsam?.addViewer(uuid)
+    }
+
+    override fun removeViewer(uuid: UUID) {
+        super.removeViewer(uuid)
+        flotsam?.removeViewer(uuid)
+    }
+
     override fun tick(time: Long) {
         val progress = progressAt(time)
         if ((time + ticksOffset) % CYCLE_TICKS == 0L) {
             startCycleTick()
         } else if (progress < cycleRandom.movementProgressEnd) {
-            movementTick(progress)
+            movementTick(time, progress)
         } else if (!entityMeta.isInvisible) {
             movementEndTick()
         }
     }
 
     private fun startCycleTick() {
+        if (random.nextDouble() < 0.2) {
+            flotsam = Flotsam.flotsam(this, ItemStack.of(Material.DIAMOND)).apply {
+                viewers.forEach(::addViewer)
+            }
+        }
         cycleRandom = CycleRandom.roll(random)
         consumeEntityMeta(TextDisplayMeta::class.java) { meta ->
             meta.translation = Vector3f()
@@ -58,8 +78,8 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
         refresh()
     }
 
-    private fun movementTick(progress: Double) {
-        val target = computeLocation(progress)
+    private fun movementTick(time: Long, computedProgress: Double) {
+        val target = computeLocation(computedProgress)
         val dx = target.x - x
         val dy = target.y - y
         val dz = target.z - z
@@ -75,18 +95,15 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
             meta.translation = translation
         }
         refresh()
+
+        flotsam?.driftTick(time, target)
     }
 
     private fun movementEndTick() {
-        val endLocation = computeLocation(cycleRandom.movementProgressEnd)
-        val forwardDir = -pos.coastSide.coastNormalSign
-        val poofOffset = 3.5
-        val poofX = if (pos.coastSide.axisX) endLocation.x + forwardDir * poofOffset else endLocation.x
-        val poofZ = if (pos.coastSide.axisX) endLocation.z else endLocation.z + forwardDir * poofOffset
         val particlePacket = WrapperPlayServerParticle(
             Particle(ParticleTypes.POOF),
             false,
-            Vector3d(poofX, endLocation.y, poofZ),
+            pos.computeForward(computeLocation(cycleRandom.movementProgressEnd), 4.5).position,
             Vector3f(0.9f, 0f, 0.9f),
             0.01f,
             6,
@@ -98,6 +115,9 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
             meta.isInvisible = true
         }
         refresh()
+
+        flotsam?.endTick()
+        flotsam = null
     }
 
     private fun progressAt(ticks: Long): Double {
@@ -109,7 +129,7 @@ class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DISPLAY) {
     private fun computeLocation(progress: Double): Location {
         val coastSize = if (pos.coastSide.axisX) IslandDefaults.ISLAND_SIZE_X_BLOCKS else IslandDefaults.ISLAND_SIZE_Z_BLOCKS
 
-        val forwardEnd = (coastSize * 0.18 - 12.0).coerceIn(12.0, 30.0)
+        val forwardEnd = (coastSize * 0.18 - 20.0).coerceIn(12.0, 30.0)
         val forwardSpin = (coastSize * 0.078).coerceIn(10.0, 28.0)
         val forwardStart = forwardEnd + forwardSpin
 

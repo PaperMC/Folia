@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.housing.waves
 
 import com.github.retrooper.packetevents.protocol.world.Location
+import com.github.retrooper.packetevents.util.Vector3d
 import net.azisaba.vanilife.islands.IslandDefaults
 import net.azisaba.vanilife.islands.IslandPos
 
@@ -24,6 +25,13 @@ data class WavePos(
         val x = if (coastSide.axisX) edgeCoord().toDouble() else lateral
         val z = if (coastSide.axisX) lateral else edgeCoord().toDouble()
         return Location(x, IslandDefaults.SEA_LEVEL + 0.15, z, coastSide.yaw, 0f)
+    }
+
+    fun computeForward(location: Location, offset: Double): Location {
+        val forwardDir = -coastSide.coastNormalSign
+        val x = if (coastSide.axisX) location.x + forwardDir * offset else location.x
+        val z = if (coastSide.axisX) location.z else location.z + forwardDir * offset
+        return Location(Vector3d(x, location.y, z), location.yaw, location.pitch)
     }
 
     fun computeSeed(): Long {
