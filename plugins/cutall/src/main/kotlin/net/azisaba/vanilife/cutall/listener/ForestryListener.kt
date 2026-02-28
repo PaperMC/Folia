@@ -1,9 +1,8 @@
 package net.azisaba.vanilife.cutall.listener
 
-import com.github.shynixn.mccoroutine.folia.regionDispatcher
-import kotlinx.coroutines.withContext
+import net.azisaba.vanilife.cutall.cutdown.CutDownAnimator
+import net.azisaba.vanilife.cutall.cutdown.CutDownContext
 import net.azisaba.vanilife.cutall.finder.TreeFinderRouter
-import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
@@ -20,21 +19,9 @@ internal class ForestryListener(private val plugin: Plugin, private val finderRo
             event.isCancelled = true
             val detected = finderRouter.find(block) ?: return
 
-            detected.trunkBlocks.forEach { trunkBlock ->
-                if (Bukkit.isOwnedByCurrentRegion(trunkBlock)) trunkBlock.breakNaturally() else {
-                    withContext(plugin.regionDispatcher(trunkBlock.location)) {
-                        trunkBlock.breakNaturally()
-                    }
-                }
-            }
+            val context = CutDownContext(player, block, detected)
 
-            detected.leavesBlocks.forEach { leavesBlock ->
-                if (Bukkit.isOwnedByCurrentRegion(leavesBlock)) leavesBlock.breakNaturally() else {
-                    withContext(plugin.regionDispatcher(leavesBlock.location)) {
-                        leavesBlock.breakNaturally()
-                    }
-                }
-            }
+            CutDownAnimator().animate(context)
         }
     }
 }
