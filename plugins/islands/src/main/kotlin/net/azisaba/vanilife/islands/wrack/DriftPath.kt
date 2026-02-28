@@ -8,6 +8,7 @@ import net.azisaba.vanilife.islands.boundaryBlock
 import org.bukkit.World
 import org.bukkit.plugin.Plugin
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.random.Random
@@ -45,11 +46,11 @@ internal data class DriftPath(val startPos: Position, val endPos: Position, val 
         val horizontalOffset = horizontalWave * horizontalAmplitude * envelope
 
         val verticalWave = sin(t * PI * (frequency * 0.7) + phase * 0.5)
-        val verticalOffset = verticalWave * verticalAmplitude * envelope
+        val verticalOffset = -abs(verticalWave) * verticalAmplitude * envelope
 
         val finalX = baseX + orthoX * horizontalOffset
         val finalZ = baseZ + orthoZ * horizontalOffset
-        val finalY = baseY + verticalOffset
+        val finalY = (baseY + verticalOffset).coerceAtMost(IslandDefaults.SEA_LEVEL.toDouble() - 0.05)
 
         return Position.fine(finalX, finalY, finalZ)
     }
