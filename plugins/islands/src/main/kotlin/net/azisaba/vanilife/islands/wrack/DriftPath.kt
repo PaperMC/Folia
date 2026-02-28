@@ -60,7 +60,9 @@ internal data class DriftPath(val startPos: Position, val endPos: Position, val 
 
     companion object {
         suspend fun random(islandPos: IslandPos, coastSide: CoastSide, world: World, plugin: Plugin): DriftPath {
-            val random = Random(islandPos.computeSeed(world.seed) xor coastSide.ordinal.toLong())
+            val salt = System.nanoTime()
+            val random = Random(islandPos.computeSeed(world.seed) xor coastSide.ordinal.toLong() xor salt)
+
             val landFinder = LandFinder(random)
 
             val seaLevel = IslandDefaults.SEA_LEVEL.toDouble()

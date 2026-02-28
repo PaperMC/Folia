@@ -11,6 +11,7 @@ import net.azisaba.vanilife.islands.removePlayer
 import net.azisaba.vanilife.islands.storage.resolveSpawnPoint
 import net.azisaba.vanilife.islands.wrack.WrackType
 import net.kyori.adventure.sound.Sound
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -52,13 +53,16 @@ internal class IslandPlayerListener(private val plugin: Plugin, private val serv
     fun onPlayerChat(event: AsyncChatEvent) {
         plugin.launch {
             val island = service.lookupByOwner(event.player.uniqueId)
-            island?.spawnWrack(
-                WrackType(
-                    "bottle",
-                    Sound.sound(SoundEventKeys.ENTITY_ITEM_PICKUP, Sound.Source.PLAYER, 0.5f, 0.1f),
-                    listOf(ItemStack.of(Material.COOKED_BEEF)).iterator(),
+            val message = PlainTextComponentSerializer.plainText().serialize(event.message())
+            repeat(message.length) {
+                island?.spawnWrack(
+                    WrackType(
+                        "bottle",
+                        Sound.sound(SoundEventKeys.ENTITY_ITEM_PICKUP, Sound.Source.PLAYER, 0.5f, 0.1f),
+                        listOf(ItemStack.of(Material.COOKED_BEEF)).iterator(),
+                    )
                 )
-            )
+            }
         }
     }
 }
