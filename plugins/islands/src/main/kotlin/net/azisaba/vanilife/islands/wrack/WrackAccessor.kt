@@ -1,11 +1,11 @@
 package net.azisaba.vanilife.islands.wrack
 
 import com.github.shynixn.mccoroutine.folia.scope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import net.azisaba.vanilife.islands.CoastSide
 import net.azisaba.vanilife.islands.IslandPos
 import org.bukkit.Bukkit
-import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 
@@ -14,71 +14,76 @@ interface WrackAccessor {
 
     fun removeWrackViewer(player: Player)
 
-    fun enqueueSpawnWrack(wrackType: WrackType)
+    fun spawnWrack(wrackType: WrackType)
 
     suspend fun wrackTick(time: Long)
 }
 
 internal class IslandWrackAccessor(val islandPos: IslandPos, val plugin: Plugin) : WrackAccessor {
-    private val scope = plugin.scope
-
     private val viewers: MutableSet<Player> = mutableSetOf()
-
-    private val spawnQueue: ArrayDeque<WrackType> = ArrayDeque()
-
     private val wrackEntities: MutableList<WrackEntity> = mutableListOf()
     private val tickingWrackEntities: MutableList<WrackEntity> = mutableListOf()
 
-    override fun addWrackViewer(player: Player) {
-        wrackEntities.forEach { it.addViewer(player) }
-        viewers.add(player)
-    }
+    private val channel: Channel<Action> = Channel(Channel.BUFFERED)
 
-    override fun removeWrackViewer(player: Player) {
-        wrackEntities.forEach { it.removeViewer(player) }
-        viewers.remove(player)
-    }
+    override fun addWrackViewer(player: Player) = enqueueAction(Action.AddViewer(player))
 
-    override fun enqueueSpawnWrack(wrackType: WrackType) {
-        spawnQueue.add(wrackType)
+    override fun removeWrackViewer(player: Player) = enqueueAction(Action.RemoveViewer(player))
+
+    override fun spawnWrack(wrackType: WrackType) = enqueueAction(Action.SpawnWrack(wrackType, CoastSide.entries.random()))
+
+    fun enqueueAction(action: Action) {
+        val result = channel.trySend(action)
+        if (result.isFailure) {
+            plugin.componentLogger.warn("Failed to enqueue action: $action (${result.exceptionOrNull()})")
+        }
     }
 
     override suspend fun wrackTick(time: Long) {
         tickingWrackEntities.removeIf { !it.tick(time) }
 
         if (time % 200L == 0L) {
-            viewers.removeIf(Player::isValid)
+            viewers.removeIf { !it.isValid }
         }
 
-        if (spawnQueue.isNotEmpty()) {
-            spawnQueuedWracks(time)
+        while (true) {
+            val action = channel.tryReceive().getOrNull() ?: break
+            when (action) {
+                is Action.AddViewer -> addViewerAction(action)
+                is Action.RemoveViewer -> removeViewerAction(action)
+                is Action.SpawnWrack -> spawnWrackAction(action, time)
+            }
         }
     }
 
-    private suspend fun spawnWrack(wrackType: WrackType, coastSide: CoastSide, time: Long) {
-        val world = Bukkit.getIslandsWorld()
-        val driftPath = DriftPath.random(islandPos, coastSide, world, plugin)
-        val wrackEntity = WrackEntity(wrackType, world, driftPath, time) {
-            scope.launch {
-                wrackEntities.remove(it)
-                tickingWrackEntities.remove(it)
-            }
+    private fun addViewerAction(action: Action.AddViewer) {
+        val player = action.viewer
+        viewers.add(player)
+        wrackEntities.forEach { it.addViewer(player) }
+    }
+
+    private fun removeViewerAction(action: Action.RemoveViewer) {
+        val player = action.viewer
+        viewers.remove(player)
+        wrackEntities.forEach { it.removeViewer(player) }
+    }
+
+    private suspend fun spawnWrackAction(action: Action.SpawnWrack, time: Long) {
+        val driftPath = DriftPath.random(islandPos, action.coastSide, Bukkit.getIslandsWorld(), plugin)
+        val wrackEntity = WrackEntity(action.wrackType, Bukkit.getIslandsWorld(), driftPath, time) {
+            wrackEntities.remove(it)
+            tickingWrackEntities.remove(it)
         }
         viewers.forEach(wrackEntity::addViewer)
         tickingWrackEntities.add(wrackEntity)
         wrackEntities.add(wrackEntity)
     }
 
-    private suspend fun spawnQueuedWracks(time: Long) {
-        val wrackTypesToSpawn = buildList(spawnQueue.size) {
-            while (spawnQueue.isNotEmpty()) {
-                add(spawnQueue.removeFirst())
-            }
-        }
+    sealed interface Action {
+        data class AddViewer(val viewer: Player) : Action
 
-        for (wrackType in wrackTypesToSpawn) {
-            val coastSide = CoastSide.entries.random()
-            spawnWrack(wrackType, coastSide, time)
-        }
+        data class RemoveViewer(val viewer: Player) : Action
+
+        data class SpawnWrack(val wrackType: WrackType, val coastSide: CoastSide) : Action
     }
 }

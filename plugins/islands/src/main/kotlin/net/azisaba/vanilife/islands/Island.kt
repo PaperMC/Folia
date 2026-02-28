@@ -92,7 +92,6 @@ class Island internal constructor(
         job = plugin.launch {
             var time = 0L
             while (isActive) {
-                println(time)
                 tick(time++)
                 delay(50L)
             }
