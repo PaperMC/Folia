@@ -50,7 +50,7 @@ internal data class DriftPath(val startPos: Position, val endPos: Position, val 
 
         val finalX = baseX + orthoX * horizontalOffset
         val finalZ = baseZ + orthoZ * horizontalOffset
-        val finalY = (baseY + verticalOffset).coerceAtMost(IslandDefaults.SEA_LEVEL.toDouble() - 0.05)
+        val finalY = (baseY + verticalOffset).coerceAtMost(IslandDefaults.SEA_LEVEL.toDouble() + 0.05)
 
         return Position.fine(finalX, finalY, finalZ)
     }
