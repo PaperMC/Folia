@@ -1,6 +1,5 @@
 package net.azisaba.vanilife.islands;
 
-import io.papermc.paper.math.Position;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
@@ -46,11 +45,5 @@ public record IslandPos(int x, int z) {
         s *= 0x94D049BB133111EBL;
         s ^= (s >>> 31);
         return s;
-    }
-
-    public boolean contains(final Position position) {
-        return position.blockX() >= this.minBlockX() && position.x() <= this.maxBlockX() &&
-                position.blockY() >= IslandDefaults.MIN_Y && position.y() <= IslandDefaults.MAX_Y &&
-                position.blockZ() >= this.minBlockZ() && position.z() <= this.maxBlockZ();
     }
 }
