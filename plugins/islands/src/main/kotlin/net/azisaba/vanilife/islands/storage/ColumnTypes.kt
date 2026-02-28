@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.islands.persistence
+package net.azisaba.vanilife.islands.storage
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer

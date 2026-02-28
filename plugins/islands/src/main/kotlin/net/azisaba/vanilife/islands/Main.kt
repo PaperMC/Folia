@@ -5,9 +5,9 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
-import net.azisaba.vanilife.islands.island.IslandManager
-import net.azisaba.vanilife.islands.persistence.DatabaseIslandRepository
-import net.azisaba.vanilife.islands.persistence.IslandRepository
+import net.azisaba.vanilife.islands.storage.DatabaseIslandRepository
+import net.azisaba.vanilife.islands.storage.IslandRepository
+import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
@@ -35,7 +35,7 @@ class Main : JavaPlugin() {
                 single { config }
                 single { database }
                 single<IslandRepository> { DatabaseIslandRepository(get()) }
-                single<IslandManager> { IslandManager(get(), get()) }
+                single<IslandManager> { IslandManager(get(), Bukkit.getIslandsWorld(), get()) }
             })
         }
 

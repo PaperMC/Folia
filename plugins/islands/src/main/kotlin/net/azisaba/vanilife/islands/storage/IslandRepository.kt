@@ -1,14 +1,14 @@
-package net.azisaba.vanilife.islands.persistence
+package net.azisaba.vanilife.islands.storage
 
-import net.azisaba.vanilife.islands.island.IslandInfo
-import net.azisaba.vanilife.islands.island.IslandInfoLookup
+import net.azisaba.vanilife.islands.IslandInfoLookup
 import net.azisaba.vanilife.islands.IslandPos
-import net.azisaba.vanilife.islands.island.IslandSettings
+import net.azisaba.vanilife.islands.IslandSummary
 import net.kyori.adventure.text.Component
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -18,10 +18,14 @@ import org.joml.Vector2f
 import org.joml.Vector2fc
 import org.joml.Vector3d
 import org.joml.Vector3dc
-import kotlin.uuid.Uuid
+import java.util.*
 
-interface IslandRepository : IslandInfoLookup {
-    suspend fun insert(ownerUuid: Uuid, settings: IslandSettings = IslandSettings()): IslandInfo
+internal interface IslandRepository : IslandInfoLookup {
+    override suspend fun lookupByOwner(ownerUuid: UUID): IslandSummary?
+
+    override suspend fun lookupByPos(islandPos: IslandPos): IslandSummary?
+
+    suspend fun insert(ownerUuid: UUID, primaryData: PrimaryIslandData = PrimaryIslandData.Snapshot()): IslandSummary
 
     suspend fun updateDisplayName(where: IslandPos, displayName: Component?)
 
@@ -31,32 +35,28 @@ interface IslandRepository : IslandInfoLookup {
 }
 
 internal class DatabaseIslandRepository(private val database: Database) : IslandRepository {
-    override suspend fun insert(ownerUuid: Uuid, settings: IslandSettings): IslandInfo = suspendTransaction(database) {
-        val pos = IslandsTable.insertAndGetId {
+    override suspend fun insert(ownerUuid: UUID, primaryData: PrimaryIslandData): IslandSummary = suspendTransaction(database) {
+        val islandPos = IslandsTable.insertAndGetId {
             it[IslandsTable.owner] = ownerUuid
-            it[IslandsTable.displayName] = settings.displayName
-            it[IslandsTable.spawnOffsetX] = settings.spawnOffset.x()
-            it[IslandsTable.spawnOffsetY] = settings.spawnOffset.y()
-            it[IslandsTable.spawnOffsetZ] = settings.spawnOffset.z()
-            it[IslandsTable.spawnRotationYaw] = settings.spawnRotation.x()
-            it[IslandsTable.spawnRotationPitch] = settings.spawnRotation.y()
+            it[IslandsTable.displayName] = primaryData.displayName
+            it[IslandsTable.spawnOffsetX] = primaryData.spawnOffset.x()
+            it[IslandsTable.spawnOffsetY] = primaryData.spawnOffset.y()
+            it[IslandsTable.spawnOffsetZ] = primaryData.spawnOffset.z()
+            it[IslandsTable.spawnRotationYaw] = primaryData.spawnRotation.x()
+            it[IslandsTable.spawnRotationPitch] = primaryData.spawnRotation.y()
         }.value
-        object : IslandInfo {
-            override val pos: IslandPos = deserializePos(pos)
-            override val ownerUuid: Uuid = ownerUuid
-            override val settings: IslandSettings = settings
-        }
+        IslandSummary(deserializePos(islandPos), ownerUuid, primaryData)
     }
 
-    override suspend fun lookupByPos(pos: IslandPos): IslandInfo? = suspendTransaction(database) {
+    override suspend fun lookupByPos(islandPos: IslandPos): IslandSummary? = suspendTransaction(database) {
         IslandsTable
             .selectAll()
-            .where { IslandsTable.id eq serializePos(pos) }
+            .where { IslandsTable.id eq serializePos(islandPos) }
             .firstOrNull()
             ?.toIslandInfo()
     }
 
-    override suspend fun lookupByOwner(ownerUuid: Uuid): IslandInfo? = suspendTransaction(database) {
+    override suspend fun lookupByOwner(ownerUuid: UUID): IslandSummary? = suspendTransaction(database) {
         IslandsTable
             .selectAll()
             .where { IslandsTable.owner eq ownerUuid }
@@ -88,9 +88,9 @@ internal class DatabaseIslandRepository(private val database: Database) : Island
         Unit
     }
 
-    private fun serializePos(pos: IslandPos): Long {
-        val x = pos.x().toLong()
-        val z = pos.z().toLong()
+    private fun serializePos(islandPos: IslandPos): Long {
+        val x = islandPos.x().toLong()
+        val z = islandPos.z().toLong()
 
         require(x in 0 until POS_WIDTH) { "x out of range: $x (expected 0..${POS_WIDTH - 1})" }
         require(z >= 0) { "z must be >= 0: $z" }
@@ -98,10 +98,10 @@ internal class DatabaseIslandRepository(private val database: Database) : Island
         return z * POS_WIDTH + x + 1L
     }
 
-    private fun deserializePos(value: Long): IslandPos {
-        require(value >= 1L) { "value must be >= 1: $value" }
+    private fun deserializePos(long: Long): IslandPos {
+        require(long >= 1L) { "value must be >= 1: $long" }
 
-        val id0 = value - 1L
+        val id0 = long - 1L
         val x = (id0 % POS_WIDTH).toInt()
         val zLong = id0 / POS_WIDTH
 
@@ -111,29 +111,29 @@ internal class DatabaseIslandRepository(private val database: Database) : Island
         return IslandPos(x, z)
     }
 
-    private fun ResultRow.toIslandInfo(): IslandInfo = object : IslandInfo {
-        override val pos: IslandPos = deserializePos(get(IslandsTable.id).value)
-        override val ownerUuid: Uuid = get(IslandsTable.owner)
-        override val settings: IslandSettings = IslandSettings(
+    private fun ResultRow.toIslandInfo(): IslandSummary = IslandSummary(
+        deserializePos(get(IslandsTable.id).value),
+        get(IslandsTable.owner),
+        PrimaryIslandData.Snapshot(
             get(IslandsTable.displayName),
             Vector3d(
                 get(IslandsTable.spawnOffsetX),
                 get(IslandsTable.spawnOffsetY),
-                get(IslandsTable.spawnOffsetZ)
+                get(IslandsTable.spawnOffsetZ),
             ),
             Vector2f(
                 get(IslandsTable.spawnRotationYaw),
                 get(IslandsTable.spawnRotationPitch),
             )
         )
-    }
+    )
 
     private companion object {
         const val POS_WIDTH: Long = 4096L
     }
 
     object IslandsTable : LongIdTable(name = "islands", columnName = "pos") {
-        val owner: Column<Uuid> = uuid("owner").uniqueIndex()
+        val owner: Column<UUID> = javaUUID("owner").uniqueIndex()
         val displayName: Column<Component?> = component("display_name").nullable()
         val spawnOffsetX: Column<Double> = double("spawn_offset_x").default(0.0)
         val spawnOffsetY: Column<Double> = double("spawn_offset_y").default(0.0)

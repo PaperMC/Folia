@@ -2,10 +2,16 @@ package net.azisaba.vanilife.islands
 
 import net.azisaba.packed.font.PackFont
 import net.azisaba.packed.font.provider.PackBitmapFontProvider
+import net.azisaba.packed.util.CharCodeFactory
 import net.azisaba.packed.util.dsl.packed
 import net.azisaba.packed.util.ktor.ResourcePackRequestSender
 import net.azisaba.packed.util.ktor.launchKtor
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
+import org.bukkit.plugin.Plugin
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+import kotlin.getValue
 
 internal fun Main.setupPacked() {
     val pack = packed {
@@ -21,12 +27,12 @@ internal fun Main.setupPacked() {
 
         namespace(this@setupPacked) {
             font {
-                HousingFonts.WAVES(
+                PluginFonts.WAVES(
                     PackFont(
                         listOf(
                             PackBitmapFontProvider(
                                 key("large_0.png"),
-                                listOf("${HousingFonts.WavesCharCodes.LARGE_0}"),
+                                listOf("${PluginFonts.WavesCharCodes.LARGE_0}"),
                                 767,
                                 768,
                             )
@@ -42,4 +48,14 @@ internal fun Main.setupPacked() {
         port = 8081,
         resourcePackRequestSender = ResourcePackRequestSender.Simple(),
     )
+}
+
+internal object PluginFonts : KoinComponent {
+    private val plugin: Plugin by inject()
+
+    val WAVES: Key = Key.key(plugin, "waves")
+
+    object WavesCharCodes : CharCodeFactory() {
+        val LARGE_0: Char = nextChar()
+    }
 }

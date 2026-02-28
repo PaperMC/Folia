@@ -9,7 +9,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPa
 import me.tofaa.entitylib.container.EntityContainer
 import me.tofaa.entitylib.meta.display.TextDisplayMeta
 import me.tofaa.entitylib.wrapper.WrapperEntity
-import net.azisaba.vanilife.islands.HousingFonts
+import net.azisaba.vanilife.islands.PluginFonts
 import net.azisaba.vanilife.islands.IslandDefaults
 import net.kyori.adventure.text.Component
 import kotlin.math.PI
@@ -25,7 +25,7 @@ internal class WrapperWave(val pos: WavePos) : WrapperEntity(EntityTypes.TEXT_DI
     override fun spawn(location: Location, parent: EntityContainer): Boolean {
         if (!super.spawn(location, parent)) return false
         consumeEntityMeta(TextDisplayMeta::class.java) { meta ->
-            meta.text = Component.text(HousingFonts.WavesCharCodes.LARGE_0).font(HousingFonts.WAVES)
+            meta.text = Component.text(PluginFonts.WavesCharCodes.LARGE_0).font(PluginFonts.WAVES)
             meta.backgroundColor = 0
             meta.brightnessOverride = 0x00f000f0
             meta.leftRotation = pos.coastSide.rotation
