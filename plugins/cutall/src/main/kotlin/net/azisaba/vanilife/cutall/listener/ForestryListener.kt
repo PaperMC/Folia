@@ -1,27 +1,34 @@
 package net.azisaba.vanilife.cutall.listener
 
+import io.papermc.paper.registry.RegistryAccess
+import io.papermc.paper.registry.RegistryKey
+import net.azisaba.vanilife.cutall.CutAllEnchantments
 import net.azisaba.vanilife.cutall.cutdown.CutDownAnimator
 import net.azisaba.vanilife.cutall.cutdown.CutDownContext
 import net.azisaba.vanilife.cutall.finder.TreeFinderRouter
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
-import org.bukkit.plugin.Plugin
+import org.bukkit.inventory.EquipmentSlot
 
-internal class ForestryListener(private val plugin: Plugin, private val finderRouter: TreeFinderRouter) : Listener {
+internal class ForestryListener(
+    private val finderRouter: TreeFinderRouter,
+    private val animator: CutDownAnimator,
+) : Listener {
     @EventHandler
     suspend fun onBlockBreak(event: BlockBreakEvent) {
-        val player = event.player
-        if (player.gameMode.isInvulnerable) return
+        val itemStack = event.player.equipment.getItem(EquipmentSlot.HAND)
 
-        val block = event.block
-        if (finderRouter.findApplicableFinders(block).isNotEmpty()) {
-            event.isCancelled = true
-            val detected = finderRouter.find(block) ?: return
+        val enchantment = RegistryAccess.registryAccess()
+            .getRegistry(RegistryKey.ENCHANTMENT)
+            .getOrThrow(CutAllEnchantments.CUT_ALL)
 
-            val context = CutDownContext(player, block, detected)
-
-            CutDownAnimator().animate(context)
+        if (itemStack.containsEnchantment(enchantment) && finderRouter.findApplicableFinders(event.block).isNotEmpty()) {
+            val blockData = event.block.blockData
+            val detected = finderRouter.find(event.block) ?: return
+            event.block.blockData = blockData
+            val context = CutDownContext(event.player, event.block, detected)
+            animator.animate(context)
         }
     }
 }

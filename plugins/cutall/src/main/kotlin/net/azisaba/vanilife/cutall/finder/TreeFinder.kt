@@ -47,7 +47,7 @@ abstract class TreeFinder(private val plugin: Plugin) {
         while (queue.isNotEmpty()) {
             val currentBlock = queue.removeFirst()
             if (!visitedBlocks.add(currentBlock)) continue
-            if (!isTrunkBlock(start, currentBlock)) continue
+            if (!isTrunkBlock(start, currentBlock) && currentBlock != start) continue
 
             trunkSet.add(currentBlock)
 

@@ -8,7 +8,7 @@ import org.koin.core.Koin
 
 internal fun Main.setupEventListeners(koin: Koin) {
     server.pluginManager.registerSuspendingEvents(
-        ForestryListener(this, koin.get()),
+        ForestryListener(koin.get(), koin.get()),
         this,
         mapOf(
             BlockBreakEvent::class.java to {
