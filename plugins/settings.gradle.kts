@@ -1,4 +1,5 @@
-include("housing")
+include("cutall")
+include("islands")
 include("npc")
 include("portal")
 includeBuild("../")

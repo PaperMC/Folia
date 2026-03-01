@@ -15,6 +15,7 @@ val tomlkt = libs.tomlkt
 val mccoroutine = libs.mccoroutine
 val packetevents = libs.packetevents
 val entitylib = libs.entitylib
+val bettermodel = libs.bettermodel
 val packed = libs.packed
 
 subprojects {
@@ -34,6 +35,7 @@ subprojects {
     dependencies {
         compileOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
         compileOnly(packetevents)
+        compileOnly(bettermodel.bukkit.api)
         implementation(kotlinx.coroutines.core)
         implementation(koin.core)
         implementation(tomlkt)
