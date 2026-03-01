@@ -7,7 +7,7 @@ data class TreeFinderRouter(val finders: List<TreeFinder>) {
     suspend fun find(start: Block): DetectedTree? =
         findApplicableFinders(start).firstNotNullOfOrNull { finder -> finder.find(start) }
 
-    fun findApplicableFinders(block: Block) = finders.filter { it.isTrunkBlock(block) }
+    fun findApplicableFinders(block: Block) = finders.filter { it.isTrunkBlock(block, block) }
 
     companion object {
         fun build(plugin: Plugin): TreeFinderRouter = TreeFinderRouter(listOf(

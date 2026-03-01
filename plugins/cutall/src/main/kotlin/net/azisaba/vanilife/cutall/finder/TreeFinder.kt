@@ -10,6 +10,7 @@ import org.bukkit.block.data.type.Leaves
 import org.bukkit.plugin.Plugin
 import org.joml.Vector3i
 import org.joml.Vector3ic
+import kotlin.math.abs
 
 abstract class TreeFinder(private val plugin: Plugin) {
     suspend fun find(start: Block): DetectedTree? = withContext(plugin.regionDispatcher(start.location)) {
@@ -18,7 +19,7 @@ abstract class TreeFinder(private val plugin: Plugin) {
             return@withContext null
         }
 
-        val expandedLeavesBlocks = leavesBlocks + expandLeaves(leavesBlocks)
+        val expandedLeavesBlocks = leavesBlocks + expandLeaves(start, leavesBlocks)
         if (trunkBlocks.isEmpty() || expandedLeavesBlocks.isEmpty()) {
             return@withContext null
         }
@@ -26,9 +27,9 @@ abstract class TreeFinder(private val plugin: Plugin) {
         DetectedTree(trunkBlocks, expandedLeavesBlocks)
     }
 
-    abstract fun isTrunkBlock(block: Block): Boolean
+    abstract fun isTrunkBlock(source: Block, block: Block): Boolean
 
-    abstract fun isLeavesBlock(block: Block): Boolean
+    abstract fun isLeavesBlock(source: Block, block: Block): Boolean
 
     protected abstract fun isOverTrunkLimit(trunkBlocks: Set<Block>): Boolean
 
@@ -46,7 +47,7 @@ abstract class TreeFinder(private val plugin: Plugin) {
         while (queue.isNotEmpty()) {
             val currentBlock = queue.removeFirst()
             if (!visitedBlocks.add(currentBlock)) continue
-            if (!isTrunkBlock(currentBlock)) continue
+            if (!isTrunkBlock(start, currentBlock)) continue
 
             trunkSet.add(currentBlock)
 
@@ -55,9 +56,9 @@ abstract class TreeFinder(private val plugin: Plugin) {
             }
 
             for (adjacentBlock in fetchAdjacentBlocks(currentBlock)) {
-                if (isTrunkBlock(adjacentBlock)) {
+                if (isTrunkBlock(start, adjacentBlock)) {
                     queue.add(adjacentBlock)
-                } else if (isLeavesBlock(adjacentBlock)) {
+                } else if (isLeavesBlock(start, adjacentBlock)) {
                     leavesSet.add(adjacentBlock)
                 }
             }
@@ -66,7 +67,7 @@ abstract class TreeFinder(private val plugin: Plugin) {
         return trunkSet.toSet() to leavesSet.toSet()
     }
 
-    protected open suspend fun expandLeaves(sourceBlocks: Set<Block>): Set<Block> {
+    protected open suspend fun expandLeaves(start: Block, sourceBlocks: Set<Block>): Set<Block> {
         val resultSet = mutableSetOf<Block>()
 
         val queue = ArrayDeque(sourceBlocks)
@@ -78,7 +79,7 @@ abstract class TreeFinder(private val plugin: Plugin) {
             if (isOverLeavesLimit(resultSet)) return emptySet()
 
             for (adjacentBlock in fetchAdjacentBlocks(currentBlock)) {
-                if (adjacentBlock in visitedBlocks || !isLeavesBlock(adjacentBlock)) continue
+                if (adjacentBlock in visitedBlocks || !isLeavesBlock(start, adjacentBlock)) continue
 
                 resultSet.add(adjacentBlock)
 
@@ -90,11 +91,12 @@ abstract class TreeFinder(private val plugin: Plugin) {
         return resultSet.toSet()
     }
 
-    protected open suspend fun fetchBlockAt(location: Location) = if (Bukkit.isOwnedByCurrentRegion(location)) location.block else {
-        withContext(plugin.regionDispatcher(location)) {
-            location.block
+    protected suspend fun fetchBlockAt(location: Location): Block =
+        if (Bukkit.isOwnedByCurrentRegion(location)) location.block else {
+            withContext(plugin.regionDispatcher(location)) {
+                location.block
+            }
         }
-    }
 
     protected open suspend fun fetchAdjacentBlocks(block: Block): Set<Block> = buildSet {
         for (offset in ADJACENT_OFFSETS) {
@@ -111,43 +113,55 @@ abstract class TreeFinder(private val plugin: Plugin) {
             Vector3i(1, 0, 0), Vector3i(-1, 0, 0),
         )
 
-        fun oak(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.OAK_LOG, Material.OAK_LEAVES, 240, 450, plugin)
+        fun oak(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.OAK_LOG, Material.OAK_LEAVES, 240, 450, 3, plugin)
 
         fun fancyOak(plugin: Plugin): TreeFinder = FancyOakTreeFinder(plugin)
 
-        fun spruce(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.SPRUCE_LOG, Material.SPRUCE_LEAVES, 240, 450, plugin)
+        fun spruce(plugin: Plugin): TreeFinder =
+            SimpleTreeFinder(Material.SPRUCE_LOG, Material.SPRUCE_LEAVES, 240, 450, 3, plugin)
 
-        fun birch(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.BIRCH_LOG, Material.BIRCH_LEAVES, 240, 450, plugin)
+        fun birch(plugin: Plugin): TreeFinder =
+            SimpleTreeFinder(Material.BIRCH_LOG, Material.BIRCH_LEAVES, 240, 450, 3, plugin)
 
-        fun jungle(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.JUNGLE_LOG, Material.JUNGLE_LEAVES, 640, 720, plugin)
+        fun jungle(plugin: Plugin): TreeFinder =
+            SimpleTreeFinder(Material.JUNGLE_LOG, Material.JUNGLE_LEAVES, 640, 720, 8, plugin)
 
-        fun acacia(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.ACACIA_LOG, Material.ACACIA_LEAVES, 240, 450, plugin)
+        fun acacia(plugin: Plugin): TreeFinder =
+            SimpleTreeFinder(Material.ACACIA_LOG, Material.ACACIA_LEAVES, 240, 450, 6, plugin)
 
-        fun darkOak(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, 240, 450, plugin)
+        fun darkOak(plugin: Plugin): TreeFinder =
+            SimpleTreeFinder(Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, 240, 450, 6, plugin)
 
-        fun paleOak(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, 240, 450, plugin)
+        fun paleOak(plugin: Plugin): TreeFinder =
+            SimpleTreeFinder(Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, 240, 450, 6, plugin)
     }
 }
 
 private class SimpleTreeFinder(
     private val trunk: Material, private val leaves: Material,
     private val maxTrunkBlocks: Int, private val maxLeavesBlocks: Int,
+    private val maxDeltaXZ: Int,
     plugin: Plugin,
 ) : TreeFinder(plugin) {
-    override fun isTrunkBlock(block: Block): Boolean = block.type == trunk
+    override fun isTrunkBlock(source: Block, block: Block): Boolean =
+        isWithinBounds(source, block) && block.type == trunk
 
-    override fun isLeavesBlock(block: Block): Boolean =
-        block.type == leaves && (block.blockData as? Leaves)?.isPersistent == false
+    override fun isLeavesBlock(source: Block, block: Block): Boolean =
+        isWithinBounds(source, block) && block.type == leaves && (block.blockData as? Leaves)?.isPersistent == false
 
     override fun isOverTrunkLimit(trunkBlocks: Set<Block>): Boolean = trunkBlocks.size > maxTrunkBlocks
 
     override fun isOverLeavesLimit(leavesBlocks: Set<Block>): Boolean = leavesBlocks.size > maxLeavesBlocks
+
+    private fun isWithinBounds(source: Block, block: Block): Boolean =
+        abs(block.x - source.x) <= maxDeltaXZ && abs(block.z - source.z) <= maxDeltaXZ
 }
 
 private class FancyOakTreeFinder(plugin: Plugin) : TreeFinder(plugin) {
-    override fun isTrunkBlock(block: Block): Boolean = block.type == Material.OAK_LOG
+    override fun isTrunkBlock(source: Block, block: Block): Boolean = block.type == Material.OAK_LOG
 
-    override fun isLeavesBlock(block: Block): Boolean = block.type == Material.OAK_LEAVES && (block.blockData as? Leaves)?.isPersistent == false
+    override fun isLeavesBlock(source: Block, block: Block): Boolean =
+        block.type == Material.OAK_LEAVES && (block.blockData as? Leaves)?.isPersistent == false
 
     override fun isOverTrunkLimit(trunkBlocks: Set<Block>): Boolean = trunkBlocks.size > 360
 
