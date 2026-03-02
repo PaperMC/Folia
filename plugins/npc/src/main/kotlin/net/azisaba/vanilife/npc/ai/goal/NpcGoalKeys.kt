@@ -11,4 +11,5 @@ object NpcGoalKeys : KoinComponent {
     private val plugin: Plugin by inject()
 
     val SIT: GoalKey<Mob> = GoalKey.of(Mob::class.java, NamespacedKey(plugin, "sit"))
+    val TRADING: GoalKey<Mob> = GoalKey.of(Mob::class.java, NamespacedKey(plugin, "trading"))
 }
