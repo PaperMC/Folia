@@ -10,9 +10,11 @@ import io.papermc.paper.command.brigadier.Commands
 import kr.toxicity.model.api.BetterModel
 import kr.toxicity.model.api.bukkit.platform.BukkitEntity
 import kr.toxicity.model.api.entity.BaseEntity
+import net.azisaba.vanilife.npc.Npc
+import net.azisaba.vanilife.npc.ai.goal.SitGoal
 import org.bukkit.Bukkit
 import org.bukkit.Material
-import org.bukkit.entity.Cow
+import org.bukkit.entity.Chicken
 import org.bukkit.inventory.ItemStack
 
 object NpcTestCommand {
@@ -27,13 +29,16 @@ object NpcTestCommand {
         val plugin = Bukkit.getPluginManager().getPlugin("AzisabaNetwork.Vanilife.Npc")!!
         val location = context.source.location
         plugin.launch(plugin.regionDispatcher(location)) {
-            val cow = location.world.spawn(location, Cow::class.java) {
+            val chicken = location.world.spawn(location, Chicken::class.java) {
                 it.isSilent = true
                 it.equipment.setItemInMainHand(ItemStack.of(Material.WHEAT))
             }
-            BetterModel.model("npc")
+            val tracker = BetterModel.model("npc")
                 .orElseThrow()
-                .create(BaseEntity.of(BukkitEntity(cow)))
+                .create(BaseEntity.of(BukkitEntity(chicken)))
+
+            val npc = Npc(chicken, tracker)
+            Bukkit.getMobGoals().addGoal(chicken, 2, SitGoal(npc))
         }
     }
 }
