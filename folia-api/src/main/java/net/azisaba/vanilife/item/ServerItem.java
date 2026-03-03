@@ -11,5 +11,5 @@ import org.jspecify.annotations.NullMarked;
 public interface ServerItem extends DataComponentView, Keyed {
     Component displayName();
 
-    Set<Season.Sub> peakSeasons();
+    Set<Season.Sub> peakSeason();
 }

@@ -33,7 +33,7 @@ public class VanilifeServerItem extends HolderableBase<ServerItemRegistryEntry> 
     }
 
     @Override
-    public Set<Season.Sub> peakSeasons() {
+    public Set<Season.Sub> peakSeason() {
         return this.getHandle().peakSeason();
     }
 
