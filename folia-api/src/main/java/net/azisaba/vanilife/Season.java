@@ -1,15 +1,12 @@
 package net.azisaba.vanilife;
 
+import java.time.LocalDate;
+import java.time.Month;
+import java.util.*;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.translation.Translatable;
 import org.jspecify.annotations.NullMarked;
-
-import java.time.LocalDate;
-import java.time.Month;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public enum Season implements Translatable {
@@ -18,7 +15,7 @@ public enum Season implements Translatable {
     FALL(TextColor.color(224, 126, 16), Month.SEPTEMBER, Month.OCTOBER, Month.NOVEMBER),
     WINTER(TextColor.color(114, 134, 161), Month.DECEMBER, Month.JANUARY, Month.FEBRUARY);
 
-    public static Season current() {
+    public static Season now() {
         final Month month = LocalDate.now().getMonth();
         return Arrays.stream(Season.values())
                 .filter(season -> season.months().contains(month))
@@ -39,7 +36,19 @@ public enum Season implements Translatable {
     }
 
     public Set<Month> months() {
-        return this.months;
+        return Collections.unmodifiableSet(this.months);
+    }
+
+    public Season next() {
+        return values()[(this.ordinal() + 1) % values().length];
+    }
+
+    public Season previous() {
+        return values()[(this.ordinal() - 1 + values().length) % values().length];
+    }
+
+    public Sub withStage(final Stage stage) {
+        return new Sub(this, stage);
     }
 
     @Override
@@ -47,14 +56,27 @@ public enum Season implements Translatable {
         return "season." + this.name().toLowerCase(Locale.ROOT);
     }
 
-    public Sub withStage(final Stage stage) {
-        return new Sub(this, stage);
-    }
-
     @NullMarked
     public record Sub(Season season, Stage stage) implements Comparable<Sub>, Translatable {
-        public static Sub current() {
-            return new Sub(Season.current(), Stage.current());
+        public static Sub now() {
+            return new Sub(Season.now(), Stage.now());
+        }
+
+        public Sub next() {
+            final Stage nextStage = this.stage.next();
+            if (nextStage != null) {
+                return this.season.withStage(nextStage);
+            } else {
+                return this.season.next().withStage(Stage.EARLY);
+            }
+        }
+
+        public Sub previous() {
+            final Stage previousStage = this.stage.previous();
+            if (previousStage != null) {
+                return this.season.withStage(previousStage);
+            }
+            return this.season.previous().withStage(Stage.LATE);
         }
 
         @Override
@@ -77,7 +99,7 @@ public enum Season implements Translatable {
     public enum Stage {
         EARLY, MID, LATE;
 
-        public static Stage current() {
+        public static Stage now() {
             final int dayOfMonth = LocalDate.now().getDayOfMonth();
             if (dayOfMonth <= 10) {
                 return EARLY;
@@ -86,6 +108,16 @@ public enum Season implements Translatable {
             } else {
                 return LATE;
             }
+        }
+
+        public @Nullable Stage next() {
+            final int nextOrdinal = this.ordinal() + 1;
+            return nextOrdinal < values().length ? values()[nextOrdinal] : null;
+        }
+
+        public @Nullable Stage previous() {
+            final int previousOrdinal = this.ordinal() - 1;
+            return previousOrdinal >= 0 ? values()[previousOrdinal] : null;
         }
     }
 }

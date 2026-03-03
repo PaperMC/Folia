@@ -31,3 +31,52 @@ index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..bcae618f4d17578a9918dceb81b1cf92
          );
          final Map<RegistryKey<?>, RegistryEntry<?, ?>> byRegistryKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
          final Map<ResourceKey<?>, RegistryEntry<?, ?>> byResourceKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
+diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
+index 002682049fe890333794072e1e2717004f2ad0cf..3d3b3d4ff124faf90e7e19fcf0590368c91aadd2 100644
+--- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
++++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
+@@ -1,13 +1,17 @@
+ package org.bukkit.craftbukkit.inventory;
+ 
+ import com.google.common.base.Preconditions;
+-import com.google.common.collect.ImmutableMap;
+ import io.papermc.paper.adventure.PaperAdventure;
+ import java.util.Collections;
+ import java.util.Map;
+ import java.util.Optional;
+ import java.util.function.Consumer;
+ import java.util.function.Predicate;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.item.ServerItemType;
++import net.azisaba.vanilife.server.item.VanilifeServerItemType;
++import net.kyori.adventure.key.Key;
+ import net.kyori.adventure.text.Component;
+ import net.minecraft.advancements.criterion.DataComponentMatchers;
+ import net.minecraft.advancements.criterion.ItemPredicate;
+@@ -35,7 +39,9 @@ import org.bukkit.inventory.ItemStack;
+ import org.bukkit.inventory.meta.ItemMeta;
+ import org.bukkit.material.MaterialData;
+ import org.bukkit.persistence.PersistentDataContainer;
++import org.bukkit.persistence.PersistentDataType;
+ import org.jetbrains.annotations.NotNull;
++import org.jspecify.annotations.NonNull;
+ 
+ @DelegateDeserialization(ItemStack.class)
+ public final class CraftItemStack extends ItemStack {
+@@ -482,6 +488,15 @@ public final class CraftItemStack extends ItemStack {
+     }
+     // Paper end
+ 
++    @Modified(Op.ADD_METHOD)
++    @Override
++    public boolean isOf(final @NonNull ServerItemType type) {
++        final Key key = Optional.ofNullable(getPersistentDataContainer().get(VanilifeServerItemType.TYPE_KEY, PersistentDataType.STRING))
++                .map(Key::key)
++                .orElse(null);
++        return key != null && type.key().equals(key);
++    }
++
+     public static final String PDC_CUSTOM_DATA_KEY = "PublicBukkitValues";
+     private net.minecraft.nbt.CompoundTag getPdcTag() {
+         if (this.handle == null) {

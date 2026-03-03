@@ -8,10 +8,13 @@ import org.bukkit.Keyed;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public interface ServerItemType extends DataComponentView, Keyed {
     Component displayName();
+
+    @Nullable Component flavorText();
 
     Set<Season.Sub> peakSeason();
 

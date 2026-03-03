@@ -17,13 +17,16 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 @ApiStatus.Experimental
 @ApiStatus.NonExtendable
 public interface ServerItemTypeRegistryEntry {
     @Contract(pure = true)
     Component displayName();
+
+    @Contract(pure = true)
+    @Nullable Component flavorText();
 
     @Contract(pure = true)
     Set<Season.Sub> peakSeason();
@@ -40,10 +43,13 @@ public interface ServerItemTypeRegistryEntry {
     @ApiStatus.NonExtendable
     interface Builder extends RegistryBuilder<ServerItemType> {
         @Contract(value = "_ -> this", mutates = "this")
-        Builder displayName(Component displayName);
+        Builder displayName(final Component displayName);
 
         @Contract(value = "_ -> this", mutates = "this")
-        Builder peakSeason(Season.Sub... subSeasons);
+        Builder flavorText(final Component flavorText);
+
+        @Contract(value = "_ -> this", mutates = "this")
+        Builder peakSeason(final Season.Sub... subSeasons);
 
         @Contract(value = "_, _ -> this", mutates = "this")
         <T> Builder withComponent(final DataComponentType.Valued<T> type, T value);

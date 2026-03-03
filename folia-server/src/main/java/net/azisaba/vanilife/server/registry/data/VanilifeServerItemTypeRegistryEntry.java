@@ -6,14 +6,15 @@ import io.papermc.paper.datacomponent.DataComponentType;
 import io.papermc.paper.datacomponent.PaperDataComponentType;
 import io.papermc.paper.registry.PaperRegistryBuilder;
 import io.papermc.paper.registry.data.util.Conversions;
-import java.util.Collections;
-import java.util.Set;
+import java.util.*;
 import net.azisaba.vanilife.Season;
+import net.azisaba.vanilife.item.PeakSeasonRenderer;
 import net.azisaba.vanilife.item.ServerItemType;
 import net.azisaba.vanilife.registry.data.ServerItemTypeRegistryEntry;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.component.ItemLore;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.inventory.ItemStack;
 import org.jspecify.annotations.NullMarked;
@@ -24,11 +25,13 @@ import static io.papermc.paper.registry.data.util.Checks.asConfigured;
 @NullMarked
 public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegistryEntry {
     protected final Component displayName;
+    protected final @Nullable Component flavorText;
     protected final Set<Season.Sub> peakSeason;
     protected final DataComponentMap components;
 
-    public VanilifeServerItemTypeRegistryEntry(final Component displayName, final Set<Season.Sub> peakSeason, final DataComponentMap components) {
+    public VanilifeServerItemTypeRegistryEntry(final Component displayName, final @Nullable Component flavorText, final Set<Season.Sub> peakSeason, final DataComponentMap components) {
         this.displayName = displayName;
+        this.flavorText = flavorText;
         this.peakSeason = peakSeason;
         this.components = DataComponentMap.composite(components, this.createBaseComponents());
     }
@@ -36,6 +39,11 @@ public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegist
     @Override
     public net.kyori.adventure.text.Component displayName() {
         return PaperAdventure.asAdventure(this.displayName);
+    }
+
+    @Override
+    public net.kyori.adventure.text.@Nullable Component flavorText() {
+        return Optional.ofNullable(this.flavorText).map(PaperAdventure::asAdventure).orElse(null);
     }
 
     @Override
@@ -61,7 +69,19 @@ public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegist
     private DataComponentMap createBaseComponents() {
         final DataComponentMap.Builder componentsBuilder = DataComponentMap.builder();
         componentsBuilder.set(DataComponents.ITEM_NAME, displayName);
+        componentsBuilder.set(DataComponents.LORE, this.createItemLore());
         return componentsBuilder.build();
+    }
+
+    private ItemLore createItemLore() {
+        final List<Component> lines = new ArrayList<>();
+        if (this.flavorText != null) {
+            lines.add(this.flavorText);
+        }
+        if (!this.peakSeason.isEmpty()) {
+            lines.add(PaperAdventure.asVanilla(PeakSeasonRenderer.render(this.peakSeason)));
+        }
+        return new ItemLore(lines, lines);
     }
 
     @NullMarked
@@ -69,6 +89,7 @@ public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegist
         private final Conversions conversions;
 
         private @Nullable Component displayName;
+        private @Nullable Component flavorText;
         private Set<Season.Sub> peakSeason = Collections.emptySet();
         private final DataComponentMap.Builder componentsBuilder = DataComponentMap.builder();
 
@@ -85,6 +106,12 @@ public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegist
         @Override
         public Builder displayName(final net.kyori.adventure.text.Component displayName) {
             this.displayName = conversions.asVanilla(displayName);
+            return this;
+        }
+
+        @Override
+        public Builder flavorText(net.kyori.adventure.text.Component flavorText) {
+            this.flavorText = conversions.asVanilla(flavorText);
             return this;
         }
 
@@ -110,6 +137,7 @@ public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegist
         public ServerItemTypeRegistryEntry build() {
             return new VanilifeServerItemTypeRegistryEntry(
                     asConfigured(this.displayName, "displayName"),
+                    this.flavorText,
                     this.peakSeason,
                     this.componentsBuilder.build()
             );

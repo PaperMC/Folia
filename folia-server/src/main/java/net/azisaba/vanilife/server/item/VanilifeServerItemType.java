@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public class VanilifeServerItemType extends HolderableBase<ServerItemTypeRegistryEntry> implements ServerItemType {
-    private static final NamespacedKey TYPE_KEY = new NamespacedKey(Vanilife.NAMESPACE, "item");
+    public static final NamespacedKey TYPE_KEY = new NamespacedKey(Vanilife.NAMESPACE, "item");
 
     public static VanilifeServerItemType minecraftToBukkit(final Holder<ServerItemTypeRegistryEntry> minecraft) {
         return CraftRegistry.minecraftHolderToBukkit(minecraft, Registries.SERVER_ITEM);
@@ -37,6 +37,11 @@ public class VanilifeServerItemType extends HolderableBase<ServerItemTypeRegistr
     @Override
     public Component displayName() {
         return this.getHandle().displayName();
+    }
+
+    @Override
+    public @Nullable Component flavorText() {
+        return this.getHandle().flavorText();
     }
 
     @Override
