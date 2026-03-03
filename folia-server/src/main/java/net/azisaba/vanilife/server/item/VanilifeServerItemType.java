@@ -4,26 +4,33 @@ import io.papermc.paper.datacomponent.DataComponentType;
 import io.papermc.paper.registry.HolderableBase;
 import java.util.Set;
 import net.azisaba.vanilife.Season;
-import net.azisaba.vanilife.item.ServerItem;
-import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
+import net.azisaba.vanilife.Vanilife;
+import net.azisaba.vanilife.item.ServerItemType;
+import net.azisaba.vanilife.registry.data.ServerItemTypeRegistryEntry;
 import net.kyori.adventure.text.Component;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.craftbukkit.CraftRegistry;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 @NullMarked
-public class VanilifeServerItem extends HolderableBase<ServerItemRegistryEntry> implements ServerItem {
-    public static VanilifeServerItem minecraftToBukkit(final Holder<ServerItemRegistryEntry> minecraft) {
+public class VanilifeServerItemType extends HolderableBase<ServerItemTypeRegistryEntry> implements ServerItemType {
+    private static final NamespacedKey TYPE_KEY = new NamespacedKey(Vanilife.NAMESPACE, "item");
+
+    public static VanilifeServerItemType minecraftToBukkit(final Holder<ServerItemTypeRegistryEntry> minecraft) {
         return CraftRegistry.minecraftHolderToBukkit(minecraft, Registries.SERVER_ITEM);
     }
 
-    public static Holder<ServerItemRegistryEntry> bukkitToMinecraft(final ServerItem bukkit) {
+    public static Holder<ServerItemTypeRegistryEntry> bukkitToMinecraft(final ServerItemType bukkit) {
         return CraftRegistry.bukkitToMinecraftHolder(bukkit);
     }
 
-    public VanilifeServerItem(final Holder<ServerItemRegistryEntry> holder) {
+    public VanilifeServerItemType(final Holder<ServerItemTypeRegistryEntry> holder) {
         super(holder);
     }
 
@@ -51,5 +58,15 @@ public class VanilifeServerItem extends HolderableBase<ServerItemRegistryEntry> 
     @Override
     public boolean hasData(final DataComponentType type) {
         return this.getHandle().hasComponent(type);
+    }
+
+    @Override
+    public ItemStack createItemStack(final int amount) {
+        final ItemStack itemStack = ItemStack.of(Material.STICK, amount);
+        this.getHandle().applyComponents(itemStack);
+        itemStack.editPersistentDataContainer((pdc) -> {
+            pdc.set(TYPE_KEY, PersistentDataType.STRING, this.key().asString());
+        });
+        return itemStack;
     }
 }

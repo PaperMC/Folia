@@ -9,25 +9,28 @@ import io.papermc.paper.registry.data.util.Conversions;
 import java.util.Collections;
 import java.util.Set;
 import net.azisaba.vanilife.Season;
-import net.azisaba.vanilife.item.ServerItem;
-import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
+import net.azisaba.vanilife.item.ServerItemType;
+import net.azisaba.vanilife.registry.data.ServerItemTypeRegistryEntry;
 import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
+import org.bukkit.craftbukkit.inventory.CraftItemStack;
+import org.bukkit.inventory.ItemStack;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import static io.papermc.paper.registry.data.util.Checks.asConfigured;
 
 @NullMarked
-public class VanilifeServerItemRegistryEntry implements ServerItemRegistryEntry {
+public class VanilifeServerItemTypeRegistryEntry implements ServerItemTypeRegistryEntry {
     protected final Component displayName;
     protected final Set<Season.Sub> peakSeason;
     protected final DataComponentMap components;
 
-    public VanilifeServerItemRegistryEntry(final Component displayName, final Set<Season.Sub> peakSeason, final DataComponentMap components) {
+    public VanilifeServerItemTypeRegistryEntry(final Component displayName, final Set<Season.Sub> peakSeason, final DataComponentMap components) {
         this.displayName = displayName;
         this.peakSeason = peakSeason;
-        this.components = components;
+        this.components = DataComponentMap.composite(components, this.createBaseComponents());
     }
 
     @Override
@@ -41,27 +44,38 @@ public class VanilifeServerItemRegistryEntry implements ServerItemRegistryEntry 
     }
 
     @Override
-    public @Nullable <T> T component(DataComponentType.Valued<T> type) {
+    public @Nullable <T> T component(final DataComponentType.Valued<T> type) {
         return PaperDataComponentType.convertDataComponentValue(this.components, (PaperDataComponentType.ValuedImpl<T, ?>) type);
     }
 
     @Override
-    public boolean hasComponent(DataComponentType type) {
+    public boolean hasComponent(final DataComponentType type) {
         return this.components.has(PaperDataComponentType.bukkitToMinecraft(type));
     }
 
+    @Override
+    public void applyComponents(final ItemStack itemStack) {
+        ((CraftItemStack) itemStack).handle.applyComponents(this.components);
+    }
+
+    private DataComponentMap createBaseComponents() {
+        final DataComponentMap.Builder componentsBuilder = DataComponentMap.builder();
+        componentsBuilder.set(DataComponents.ITEM_NAME, displayName);
+        return componentsBuilder.build();
+    }
+
     @NullMarked
-    public static class VanilifeBuilder implements ServerItemRegistryEntry.Builder, PaperRegistryBuilder<ServerItemRegistryEntry, ServerItem> {
+    public static class VanilifeBuilder implements ServerItemTypeRegistryEntry.Builder, PaperRegistryBuilder<ServerItemTypeRegistryEntry, ServerItemType> {
         private final Conversions conversions;
 
         private @Nullable Component displayName;
         private Set<Season.Sub> peakSeason = Collections.emptySet();
         private final DataComponentMap.Builder componentsBuilder = DataComponentMap.builder();
 
-        public VanilifeBuilder(final Conversions conversions, final @Nullable ServerItemRegistryEntry initial) {
+        public VanilifeBuilder(final Conversions conversions, final @Nullable ServerItemTypeRegistryEntry initial) {
             this.conversions = conversions;
 
-            if (initial instanceof VanilifeServerItemRegistryEntry entry) {
+            if (initial instanceof VanilifeServerItemTypeRegistryEntry entry) {
                 this.displayName = entry.displayName;
                 this.peakSeason = entry.peakSeason;
                 this.componentsBuilder.addAll(entry.components);
@@ -93,8 +107,8 @@ public class VanilifeServerItemRegistryEntry implements ServerItemRegistryEntry 
         }
 
         @Override
-        public ServerItemRegistryEntry build() {
-            return new VanilifeServerItemRegistryEntry(
+        public ServerItemTypeRegistryEntry build() {
+            return new VanilifeServerItemTypeRegistryEntry(
                     asConfigured(this.displayName, "displayName"),
                     this.peakSeason,
                     this.componentsBuilder.build()

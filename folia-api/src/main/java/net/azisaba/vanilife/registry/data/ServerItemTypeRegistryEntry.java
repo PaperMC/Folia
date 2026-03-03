@@ -9,7 +9,8 @@ import io.papermc.paper.registry.keys.SoundEventKeys;
 import io.papermc.paper.registry.keys.tags.DamageTypeTagKeys;
 import java.util.Set;
 import net.azisaba.vanilife.Season;
-import net.azisaba.vanilife.item.ServerItem;
+import net.azisaba.vanilife.item.ServerItemType;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import org.bukkit.JukeboxSong;
 import org.bukkit.inventory.EquipmentSlot;
@@ -20,7 +21,7 @@ import org.jetbrains.annotations.Nullable;
 
 @ApiStatus.Experimental
 @ApiStatus.NonExtendable
-public interface ServerItemRegistryEntry {
+public interface ServerItemTypeRegistryEntry {
     @Contract(pure = true)
     Component displayName();
 
@@ -33,9 +34,11 @@ public interface ServerItemRegistryEntry {
     @Contract(pure = true)
     boolean hasComponent(final DataComponentType type);
 
+    void applyComponents(final ItemStack itemStack);
+
     @ApiStatus.Experimental
     @ApiStatus.NonExtendable
-    interface Builder extends RegistryBuilder<ServerItem> {
+    interface Builder extends RegistryBuilder<ServerItemType> {
         @Contract(value = "_ -> this", mutates = "this")
         Builder displayName(Component displayName);
 
@@ -47,6 +50,11 @@ public interface ServerItemRegistryEntry {
 
         @Contract(value = "_ -> this", mutates = "this")
         Builder withComponent(final DataComponentType.NonValued type);
+
+        @Contract(value = "_ -> this", mutates = "this")
+        default Builder itemModel(final Key itemModel) {
+            return this.withComponent(DataComponentTypes.ITEM_MODEL, itemModel);
+        }
 
         @Contract(value = "_ -> this", mutates = "this")
         default Builder food(final FoodProperties food) {
