@@ -1,12 +1,13 @@
-package net.azisaba.vanilife.islands;
+package net.azisaba.vanilife.server.islands;
 
 import com.mojang.serialization.MapCodec;
 import de.articdive.jnoise.core.api.functions.Interpolation;
 import de.articdive.jnoise.generators.noise_parameters.fade_functions.FadeFunction;
 import de.articdive.jnoise.modules.octavation.fractal_functions.FractalFunction;
 import de.articdive.jnoise.pipeline.JNoise;
-import net.azisaba.vanilife.islands.noise.IslandNoise;
-import net.azisaba.vanilife.islands.river.RiverMap;
+import net.azisaba.vanilife.islands.IslandPos;
+import net.azisaba.vanilife.server.islands.noise.IslandNoise;
+import net.azisaba.vanilife.server.islands.river.RiverMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;

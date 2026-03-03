@@ -1,7 +1,7 @@
-package net.azisaba.vanilife.world.height;
+package net.azisaba.vanilife.server.world.height;
 
-import net.azisaba.vanilife.world.AetheriaLayer;
-import net.azisaba.vanilife.world.AetheriaLayout;
+import net.azisaba.vanilife.server.world.AetheriaLayer;
+import net.azisaba.vanilife.server.world.AetheriaLayout;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.NullMarked;

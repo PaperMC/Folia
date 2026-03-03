@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.world.height;
+package net.azisaba.vanilife.server.world.height;
 
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.NullMarked;

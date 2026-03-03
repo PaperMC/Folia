@@ -1,12 +1,13 @@
-package net.azisaba.vanilife;
+package net.azisaba.vanilife.server;
 
 import io.papermc.paper.adventure.PaperAdventure;
+import net.azisaba.vanilife.Vanilife;
 import net.azisaba.vanilife.islands.IslandDefaults;
-import net.azisaba.vanilife.islands.IslandsChunkGenerator;
-import net.azisaba.vanilife.islands.IslandsGeneratorSettings;
-import net.azisaba.vanilife.world.AetheriaChunkGenerator;
-import net.azisaba.vanilife.world.AetheriaLayer;
-import net.azisaba.vanilife.world.AetheriaLayout;
+import net.azisaba.vanilife.server.islands.IslandsChunkGenerator;
+import net.azisaba.vanilife.server.islands.IslandsGeneratorSettings;
+import net.azisaba.vanilife.server.world.AetheriaChunkGenerator;
+import net.azisaba.vanilife.server.world.AetheriaLayer;
+import net.azisaba.vanilife.server.world.AetheriaLayout;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.WritableRegistry;

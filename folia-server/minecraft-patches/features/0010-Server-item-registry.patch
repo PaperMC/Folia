@@ -1,0 +1,358 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tksimeji <tksimeji@outlook.com>
+Date: Tue, 3 Mar 2026 17:49:56 +0900
+Subject: [PATCH] Server item registry
+
+
+diff --git a/net/minecraft/core/registries/BuiltInRegistries.java b/net/minecraft/core/registries/BuiltInRegistries.java
+index d3822f1713f588e9c7a41ecb408db99689f3d2ba..00d89f0cb74392227fb6e49251f8b71c368c0b9d 100644
+--- a/net/minecraft/core/registries/BuiltInRegistries.java
++++ b/net/minecraft/core/registries/BuiltInRegistries.java
+@@ -8,6 +8,9 @@ import java.util.Map;
+ import java.util.Objects;
+ import java.util.function.Consumer;
+ import java.util.function.Supplier;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
+ import net.minecraft.advancements.CriteriaTriggers;
+ import net.minecraft.advancements.CriterionTrigger;
+ import net.minecraft.advancements.criterion.EntitySubPredicate;
+@@ -355,6 +358,8 @@ public class BuiltInRegistries {
+     public static final Registry<AttributeType<?>> ATTRIBUTE_TYPE = registerSimple(Registries.ATTRIBUTE_TYPE, AttributeTypes::bootstrap);
+     public static final Registry<MapCodec<? extends SlotSource>> SLOT_SOURCE_TYPE = registerSimple(Registries.SLOT_SOURCE_TYPE, SlotSources::bootstrap);
+     public static final Registry<Consumer<GameTestHelper>> TEST_FUNCTION = registerSimple(Registries.TEST_FUNCTION, BuiltinTestFunctions::bootstrap);
++    @Modified(Op.ADD_FIELD)
++    public static final Registry<ServerItemRegistryEntry> SERVER_ITEM = registerSimple(Registries.SERVER_ITEM, (registry) -> new Object());
+     public static final Registry<? extends Registry<?>> REGISTRY = WRITABLE_REGISTRY;
+     // Paper start - add built-in registry conversions
+     public static final io.papermc.paper.registry.data.util.Conversions STATIC_ACCESS_CONVERSIONS = new io.papermc.paper.registry.data.util.Conversions(
+diff --git a/net/minecraft/core/registries/Registries.java b/net/minecraft/core/registries/Registries.java
+index ab7f29272be21d2815ccb5add96def059442f250..7b443c0b0b8cef92ab001ebdc785cdaf6ca25c2c 100644
+--- a/net/minecraft/core/registries/Registries.java
++++ b/net/minecraft/core/registries/Registries.java
+@@ -2,6 +2,10 @@ package net.minecraft.core.registries;
+ 
+ import com.mojang.serialization.MapCodec;
+ import java.util.function.Consumer;
++import net.azisaba.vanilife.Vanilife;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
+ import net.minecraft.advancements.Advancement;
+ import net.minecraft.advancements.CriterionTrigger;
+ import net.minecraft.advancements.criterion.EntitySubPredicate;
+@@ -295,6 +299,8 @@ public class Registries {
+     public static final ResourceKey<Registry<LootItemCondition>> PREDICATE = createRegistryKey("predicate");
+     public static final ResourceKey<Registry<Advancement>> ADVANCEMENT = createRegistryKey("advancement");
+     public static final ResourceKey<Registry<Recipe<?>>> RECIPE = createRegistryKey("recipe");
++    @Modified(Op.ADD_FIELD)
++    public static final ResourceKey<Registry<ServerItemRegistryEntry>> SERVER_ITEM = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "server_item"));
+ 
+     public static ResourceKey<Level> levelStemToLevel(ResourceKey<LevelStem> levelStem) {
+         return ResourceKey.create(DIMENSION, levelStem.identifier());
+diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
+index 4a700aa0e68044bb950710be679861230ab5223d..b7b9d7807334bab6b8ad934b441aa18bd168c8eb 100644
+--- a/net/minecraft/resources/RegistryDataLoader.java
++++ b/net/minecraft/resources/RegistryDataLoader.java
+@@ -22,9 +22,9 @@ import java.util.function.BiConsumer;
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
+ 
+-import net.azisaba.vanilife.VanilifeBiomes;
+-import net.azisaba.vanilife.VanilifeDimensionTypes;
+-import net.azisaba.vanilife.VanilifeLevelStems;
++import net.azisaba.vanilife.server.VanilifeBiomes;
++import net.azisaba.vanilife.server.VanilifeDimensionTypes;
++import net.azisaba.vanilife.server.VanilifeLevelStems;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+ import net.minecraft.CrashReport;
+diff --git a/net/minecraft/world/level/biome/BiomeManager.java b/net/minecraft/world/level/biome/BiomeManager.java
+index 1ee7b32ae9dc579337520edfbf337ffaeaeebf00..82d79c6e2a7d5c56992e9558befc7ccfbc45b312 100644
+--- a/net/minecraft/world/level/biome/BiomeManager.java
++++ b/net/minecraft/world/level/biome/BiomeManager.java
+@@ -1,8 +1,8 @@
+ package net.minecraft.world.level.biome;
+ 
+ import com.google.common.hash.Hashing;
+-import net.azisaba.vanilife.world.AetheriaLayer;
+-import net.azisaba.vanilife.world.AetheriaLayout;
++import net.azisaba.vanilife.server.world.AetheriaLayer;
++import net.azisaba.vanilife.server.world.AetheriaLayout;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.QuartPos;
+diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
+index fd92282bb1cbe7051258f6d239e8dc0ce191baba..5d0d04f21e46d58c20badd2127fcd95c202d25c3 100644
+--- a/net/minecraft/world/level/chunk/ChunkGenerator.java
++++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
+@@ -11,7 +11,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
+ import it.unimi.dsi.fastutil.objects.ObjectArraySet;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+ import net.minecraft.ReportedException;
+diff --git a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
+index f12520f990d28c28e8ce8d4c3c182da266f159b6..4e289e473205b2df162314aad2ef45b1d35a14eb 100644
+--- a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
+@@ -3,7 +3,7 @@ package net.minecraft.world.level.levelgen.feature;
+ import com.mojang.serialization.Codec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.HolderSet;
+diff --git a/net/minecraft/world/level/levelgen/feature/Feature.java b/net/minecraft/world/level/levelgen/feature/Feature.java
+index cf41eaeec0eea4e320dfc1d820772ef63217bebb..c2b5c5cb381954e3cabe5d48679da5494d9964f3 100644
+--- a/net/minecraft/world/level/levelgen/feature/Feature.java
++++ b/net/minecraft/world/level/levelgen/feature/Feature.java
+@@ -4,7 +4,7 @@ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Registry;
+diff --git a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
+index a544df25b1167084a8f898463da68ffb3377f05e..6c893e94d70e5549e0ba9c93f40d53371820370d 100644
+--- a/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
++++ b/net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java
+@@ -2,7 +2,7 @@ package net.minecraft.world.level.levelgen.feature;
+ 
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.WorldGenLevel;
+diff --git a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
+index ecb573ca0521d86bfda9ea793c391c01ae71f5e6..05588383b6dff2ce95ba60fac27ca6b35a8988c8 100644
+--- a/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java
+@@ -4,7 +4,7 @@ import java.util.Optional;
+ import com.mojang.serialization.Codec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+diff --git a/net/minecraft/world/level/levelgen/placement/BiomeFilter.java b/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
+index 4e07c03af2f117634477db3de54fa5a046d04bac..b06a8a634740b39e39079a1324d9b65ecadff3e5 100644
+--- a/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/BiomeFilter.java
+@@ -3,7 +3,7 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.util.RandomSource;
+diff --git a/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java b/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
+index 7aed7a8c3a67ab03b93469e0e7b875c1df1543b4..8ed12dc2b9991088f48513128c9825f25e46704a 100644
+--- a/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java
+@@ -4,7 +4,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+diff --git a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
+index 4c5c8659a77606acb412bd9fc26aae9b8ec9e175..611b17270c3ffe90de7f05e80bd7875f4859a054 100644
+--- a/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java
+@@ -3,7 +3,7 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.valueproviders.ConstantInt;
+diff --git a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
+index cd9e90a0b3da965e691c594b5297451c320a8b14..cd4fc90154e28e5054730943b92d4faf0a21aa64 100644
+--- a/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java
+@@ -5,7 +5,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+diff --git a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
+index f24f6b81f9df5aa85534ad6da2794dda072fdfdf..fd4a2073023d678ed58eb0a5878087e97365c3c5 100644
+--- a/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/FixedPlacement.java
+@@ -4,7 +4,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.util.RandomSource;
+diff --git a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
+index 30925091a3b1dfeb47992ee93c95b5e24ca566a9..1c4ed9be9c0a20b470282aef45ae9fc804e09f1b 100644
+--- a/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java
+@@ -4,7 +4,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.VerticalAnchor;
+diff --git a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
+index 2cdafec2c0cfa4c700e3cabd664442d5d49efcba..3043dc001b447b5589d86041d560871aab82faa3 100644
+--- a/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java
+@@ -4,7 +4,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.Heightmap;
+diff --git a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
+index 1d8e98c381a0d805db68d29beb5bb7570e8ad317..eaaeeb25798f3d469033ed1b46df5e281a0bc07c 100644
+--- a/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/InSquarePlacement.java
+@@ -3,7 +3,7 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
+index 5ec2bea9751d4f4a1e1c968555dc7901603d1f8f..11f26a2e241766746b587f63c5285b16e5612bf6 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacedFeature.java
+@@ -8,7 +8,7 @@ import java.util.stream.Stream;
+ 
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
+index 44a2d1086f0212d6c066a754e8c6bbc00f4ce3c8..c8bb615bf1383a1d5c6e28365203a8d8eb8dfd2b 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacementFilter.java
+@@ -2,7 +2,7 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
+index 2fe1113e8ae2a85d151953ac60084aeadecb5359..216ec569479b9feab9c760cad99c8da607cc2666 100644
+--- a/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
++++ b/net/minecraft/world/level/levelgen/placement/PlacementModifier.java
+@@ -5,7 +5,7 @@ import java.util.stream.Stream;
+ 
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.util.RandomSource;
+diff --git a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
+index 9df3f4ace9fbd54055bdd14b8d886987f910e9c3..ec1f3659da013d3170db04eda3d26fc5c1e81e29 100644
+--- a/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java
+@@ -4,7 +4,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.valueproviders.ConstantInt;
+diff --git a/net/minecraft/world/level/levelgen/placement/RarityFilter.java b/net/minecraft/world/level/levelgen/placement/RarityFilter.java
+index d09e0bfea96e3d9093361cbdebe3064d3e83ee92..226a15ba7051b841702460f7dd73989f37d1f1bd 100644
+--- a/net/minecraft/world/level/levelgen/placement/RarityFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/RarityFilter.java
+@@ -3,7 +3,7 @@ package net.minecraft.world.level.levelgen.placement;
+ import com.mojang.serialization.MapCodec;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.ExtraCodecs;
+ import net.minecraft.util.RandomSource;
+diff --git a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
+index 1ab1edfe58426f806496be816ffdfe0f98404bd3..9b3c9bc3cef82171602bda394dfbab68d64a8e3f 100644
+--- a/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
++++ b/net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java
+@@ -2,7 +2,7 @@ package net.minecraft.world.level.levelgen.placement;
+ 
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 
+diff --git a/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java b/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
+index 5d00477ad63ba7cc843674c3e423f98d70e3ea34..92b4f8c907f933b78f75ae360515556d3b20bade 100644
+--- a/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java
+@@ -5,7 +5,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.levelgen.Heightmap;
+diff --git a/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java b/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
+index 51e0290e9d1b0e81174260d9b5470ce5d2e2db54..85b32eafcd45dc5c9e881c328ca8670e21e8926a 100644
+--- a/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
++++ b/net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java
+@@ -5,7 +5,7 @@ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+ import net.azisaba.vanilife.annotations.Modified;
+ import net.azisaba.vanilife.annotations.Op;
+-import net.azisaba.vanilife.world.height.HeightContext;
++import net.azisaba.vanilife.server.world.height.HeightContext;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.util.RandomSource;
+ 

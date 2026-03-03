@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.world.noise;
+package net.azisaba.vanilife.server.world.noise;
 
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.registries.Registries;

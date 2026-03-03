@@ -1,8 +1,8 @@
-package net.azisaba.vanilife.world;
+package net.azisaba.vanilife.server.world;
 
-import net.azisaba.vanilife.VanilifeBiomes;
-import net.azisaba.vanilife.world.height.HeightmapSet;
-import net.azisaba.vanilife.world.noise.AetheriaNoiseGeneratorSettings;
+import net.azisaba.vanilife.server.VanilifeBiomes;
+import net.azisaba.vanilife.server.world.height.HeightmapSet;
+import net.azisaba.vanilife.server.world.noise.AetheriaNoiseGeneratorSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;

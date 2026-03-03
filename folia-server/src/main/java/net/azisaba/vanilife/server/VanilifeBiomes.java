@@ -1,5 +1,6 @@
-package net.azisaba.vanilife;
+package net.azisaba.vanilife.server;
 
+import net.azisaba.vanilife.Vanilife;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.WritableRegistry;

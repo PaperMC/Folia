@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tksimeji <tksimeji@outlook.com>
+Date: Tue, 3 Mar 2026 17:50:15 +0900
+Subject: [PATCH] Server item registry
+
+
+diff --git a/src/main/java/io/papermc/paper/registry/RegistryKey.java b/src/main/java/io/papermc/paper/registry/RegistryKey.java
+index dcee3d88f5b77cdd5c7cbc07f73f54cc548d2f94..572b91fddcecf27c2a1b34ca27765d3173261f58 100644
+--- a/src/main/java/io/papermc/paper/registry/RegistryKey.java
++++ b/src/main/java/io/papermc/paper/registry/RegistryKey.java
+@@ -3,6 +3,10 @@ package io.papermc.paper.registry;
+ import io.papermc.paper.datacomponent.DataComponentType;
+ import io.papermc.paper.dialog.Dialog;
+ import io.papermc.paper.registry.tag.TagKey;
++import net.azisaba.vanilife.Vanilife;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.item.ServerItem;
+ import net.kyori.adventure.key.Key;
+ import net.kyori.adventure.key.KeyPattern;
+ import net.kyori.adventure.key.Keyed;
+@@ -241,6 +245,9 @@ public sealed interface RegistryKey<T> extends Keyed permits RegistryKeyImpl {
+     RegistryKey<PotionType> POTION = create("potion");
+     RegistryKey<MemoryKey<?>> MEMORY_MODULE_TYPE = create("memory_module_type");
+ 
++    @Modified(Op.ADD_FIELD)
++    RegistryKey<ServerItem> SERVER_ITEM = create(Key.key(Vanilife.NAMESPACE, "server_item"));
++
+     /**
+      * Constructs a new {@link TypedKey} for this registry given the typed key's key.
+      *
+diff --git a/src/main/java/io/papermc/paper/registry/RegistryKeyImpl.java b/src/main/java/io/papermc/paper/registry/RegistryKeyImpl.java
+index ac68dfce754dc7e014bb31bba32d9b246ffd411c..084a31cec9720c409b3e814723509ea952c5a620 100644
+--- a/src/main/java/io/papermc/paper/registry/RegistryKeyImpl.java
++++ b/src/main/java/io/papermc/paper/registry/RegistryKeyImpl.java
+@@ -2,6 +2,8 @@ package io.papermc.paper.registry;
+ 
+ import com.google.common.collect.Sets;
+ import java.util.Set;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import net.kyori.adventure.key.Key;
+ import org.intellij.lang.annotations.Subst;
+ import org.jspecify.annotations.NullMarked;
+@@ -29,6 +31,13 @@ record RegistryKeyImpl<T>(Key key) implements RegistryKey<T> {
+         return registryKey;
+     }
+ 
++    @Modified(Op.ADD_METHOD)
++    static <T> RegistryKey<T> create(final Key key) {
++        final RegistryKey<T> registryKey = new RegistryKeyImpl<>(key);
++        REGISTRY_KEYS.add(registryKey);
++        return registryKey;
++    }
++
+     // creates the key without adding to the internal set of keys
+     static <T> RegistryKey<T> createInternal(@Subst("some_key") final String key) {
+         return new RegistryKeyImpl<>(Key.key(Key.MINECRAFT_NAMESPACE, key));
+diff --git a/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java b/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
+index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..72bd14f2e30a25f1d86e4c09fcd07e755c095e11 100644
+--- a/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
++++ b/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
+@@ -17,6 +17,10 @@ import io.papermc.paper.registry.data.PigVariantRegistryEntry;
+ import io.papermc.paper.registry.data.WolfVariantRegistryEntry;
+ import io.papermc.paper.registry.data.ZombieNautilusVariantRegistryEntry;
+ import io.papermc.paper.registry.data.dialog.DialogRegistryEntry;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.item.ServerItem;
++import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
+ import org.bukkit.Art;
+ import org.bukkit.GameEvent;
+ import org.bukkit.JukeboxSong;
+@@ -57,6 +61,8 @@ public final class RegistryEvents {
+     public static final RegistryEventProvider<ZombieNautilus.Variant, ZombieNautilusVariantRegistryEntry.Builder> ZOMBIE_NAUTILUS_VARIANT = create(RegistryKey.ZOMBIE_NAUTILUS_VARIANT);
+     public static final RegistryEventProvider<Dialog, DialogRegistryEntry.Builder> DIALOG = create(RegistryKey.DIALOG);
+     // End generate - RegistryEvents
++    @Modified(Op.ADD_FIELD)
++    public static final RegistryEventProvider<ServerItem, ServerItemRegistryEntry.Builder> SERVER_ITEM = create(RegistryKey.SERVER_ITEM);
+ 
+     private RegistryEvents() {
+     }

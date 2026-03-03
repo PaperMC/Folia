@@ -1,6 +1,6 @@
-package net.azisaba.vanilife.world;
+package net.azisaba.vanilife.server.world;
 
-import net.azisaba.vanilife.world.height.HeightContext;
+import net.azisaba.vanilife.server.world.height.HeightContext;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 

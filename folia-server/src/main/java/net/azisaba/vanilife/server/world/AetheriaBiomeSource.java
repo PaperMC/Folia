@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.world;
+package net.azisaba.vanilife.server.world;
 
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.Holder;

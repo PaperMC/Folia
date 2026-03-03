@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.world.height;
+package net.azisaba.vanilife.server.world.height;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;

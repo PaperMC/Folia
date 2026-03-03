@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.islands.river;
+package net.azisaba.vanilife.server.islands.river;
 
 import net.minecraft.util.valueproviders.IntProvider;
 import net.minecraft.util.valueproviders.UniformInt;

@@ -1,7 +1,7 @@
-package net.azisaba.vanilife.world;
+package net.azisaba.vanilife.server.world;
 
 import com.mojang.serialization.MapCodec;
-import net.azisaba.vanilife.world.height.HeightContext;
+import net.azisaba.vanilife.server.world.height.HeightContext;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;

@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.world;
+package net.azisaba.vanilife.server.world;
 
 import net.minecraft.core.HolderGetter;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;

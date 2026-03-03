@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.islands;
+package net.azisaba.vanilife.server.islands;
 
 public record IslandsGeneratorSettings(
         int seaLevel,
