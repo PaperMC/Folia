@@ -1,3 +1,4 @@
+include("cooking")
 include("cutall")
 include("islands")
 include("npc")
