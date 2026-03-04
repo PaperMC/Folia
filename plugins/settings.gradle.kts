@@ -1,6 +1,0 @@
-include("cooking")
-include("cutall")
-include("islands")
-include("npc")
-include("portal")
-includeBuild("../")

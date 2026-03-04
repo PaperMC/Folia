@@ -1,0 +1,15 @@
+dependencies {
+    compileOnly(libs.bettermodel.bukkit.api)
+    compileOnly(libs.packed)
+    compileOnly(libs.packetevents)
+    compileOnly(project(":plugins:plugin-pack-host"))
+    implementation(libs.entitylib)
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.jdbc)
+    implementation(libs.hikaricp)
+    implementation(libs.koin.core)
+    implementation(libs.mccoroutine.folia.api)
+    implementation(libs.mccoroutine.folia.core)
+    implementation(libs.postgresql)
+    implementation(libs.tomlkt)
+}

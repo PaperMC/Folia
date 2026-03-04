@@ -1,10 +1,14 @@
+import io.papermc.paperweight.tasks.RebuildGitPatches
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-import io.papermc.paperweight.tasks.RebuildGitPatches
 
 plugins {
     java // TODO java launcher tasks
+    alias(libs.plugins.kotlin)
     alias(libs.plugins.paperweight.patcher)
+    alias(libs.plugins.serialization) apply false
+    alias(libs.plugins.shadow) apply false
 }
 
 paperweight {
@@ -30,11 +34,24 @@ paperweight {
     }
 }
 
+val kotlinx = libs.kotlinx
+val koin = libs.koin
+val bettermodel = libs.bettermodel
+val entitylib = libs.entitylib
+val mccoroutine = libs.mccoroutine
+val packed = libs.packed
+val packetevents = libs.packetevents
+val exposed = libs.exposed
+val hikaricp = libs.hikaricp
+val postgresql = libs.postgresql
 val jnoise = libs.jnoise
+val tomlkt = libs.tomlkt
 
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "maven-publish")
+    apply(plugin = "org.jetbrains.kotlin.jvm")
+    apply(plugin = "org.jetbrains.kotlin.plugin.serialization")
 
     extensions.configure<JavaPluginExtension> {
         toolchain {
@@ -44,12 +61,15 @@ subprojects {
 
     repositories {
         mavenCentral()
+        maven("https://repo.azisaba.net/repository/maven-public/")
         maven("https://repo.papermc.io/repository/maven-public/")
+        maven("https://repo.codemc.io/repository/maven-releases/")
+        maven("https://maven.pvphub.me/tofaa")
     }
 
     dependencies {
-        "implementation"(jnoise.pipeline)
-        "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+        compileOnly(kotlin("stdlib"))
+        compileOnly(kotlinx.coroutines.core)
     }
 
     tasks.withType<AbstractArchiveTask>().configureEach {
@@ -91,6 +111,26 @@ allprojects {
     }
 }
 
+project(":folia-server") {
+    dependencies {
+        implementation(kotlin("stdlib"))
+        implementation(kotlinx.coroutines.core)
+        implementation(jnoise.pipeline)
+    }
+}
+
+configure(subprojects.filter { it.path.startsWith(":plugins:") }) {
+    apply(plugin = "com.gradleup.shadow")
+
+    dependencies {
+        compileOnly(project(":folia-api"))
+    }
+
+    tasks.named<ShadowJar>("shadowJar") {
+        archiveClassifier.set("")
+    }
+}
+
 tasks.register("printMinecraftVersion") {
     doLast {
         println(providers.gradleProperty("mcVersion").get().trim())
@@ -103,44 +143,18 @@ tasks.register("printPaperVersion") {
     }
 }
 
-val runWorkDir = providers.gradleProperty("paper.runWorkDir").orElse("run")
-
-val preparePlugins = tasks.register<Sync>("preparePlugins") {
-    group = "runs"
-    description = "Build and install plugins into 'run/plugins' (prefixed with module-)"
-
-    if (gradle.includedBuilds.any { it.name == "plugins" }) {
-        dependsOn(gradle.includedBuild("plugins").task(":buildAllPluginJars"))
-    }
-
-    preserve {
-        exclude("module-*.jar")
-        include("**/*")
-    }
-
-    from(layout.projectDirectory.dir("plugins")) {
-        include("**/build/libs/*.jar")
-        exclude("**/*-sources.jar", "**/*-javadoc.jar")
-
-        eachFile {
-            val newName = "module-$name"
-            relativePath = RelativePath(true, newName)
-        }
-
-        includeEmptyDirs = false
-    }
-
-    into(runWorkDir.map { layout.projectDirectory.dir("$it/plugins") })
-}
-
 gradle.projectsEvaluated {
-    findProject(":folia-server")
-        ?.tasks
-        ?.findByName("runServer")
-        ?.dependsOn(preparePlugins)
+    val pluginProjects = subprojects.filter { it.path.startsWith(":plugins:") }
+    val pluginShadowJarTasks = pluginProjects.map { it.tasks.named<ShadowJar>("shadowJar") }
 
-    findProject(":folia-server")
-        ?.tasks
-        ?.findByName("runDevServer")
-        ?.dependsOn(preparePlugins)
+    listOf("runServer", "runDevServer").forEach { taskName ->
+        (findProject(":folia-server")?.tasks?.findByName(taskName) as? JavaExec)?.apply {
+            dependsOn(pluginShadowJarTasks)
+            doFirst {
+                pluginShadowJarTasks.forEach { shadowJarTask ->
+                    args("--add-plugin", shadowJarTask.get().archiveFile.get().asFile.absolutePath)
+                }
+            }
+        }
+    }
 }

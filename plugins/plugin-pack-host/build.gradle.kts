@@ -1,0 +1,3 @@
+dependencies {
+    implementation(libs.packed)
+}
