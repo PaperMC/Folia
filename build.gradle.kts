@@ -1,5 +1,5 @@
-import io.papermc.paperweight.tasks.RebuildGitPatches
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import io.papermc.paperweight.tasks.RebuildGitPatches
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
@@ -9,6 +9,10 @@ plugins {
     alias(libs.plugins.paperweight.patcher)
     alias(libs.plugins.serialization) apply false
     alias(libs.plugins.shadow) apply false
+}
+
+repositories {
+    mavenCentral()
 }
 
 paperweight {
@@ -35,17 +39,8 @@ paperweight {
 }
 
 val kotlinx = libs.kotlinx
-val koin = libs.koin
-val bettermodel = libs.bettermodel
-val entitylib = libs.entitylib
-val mccoroutine = libs.mccoroutine
 val packed = libs.packed
-val packetevents = libs.packetevents
-val exposed = libs.exposed
-val hikaricp = libs.hikaricp
-val postgresql = libs.postgresql
 val jnoise = libs.jnoise
-val tomlkt = libs.tomlkt
 
 subprojects {
     apply(plugin = "java-library")
@@ -62,6 +57,7 @@ subprojects {
     repositories {
         mavenCentral()
         maven("https://repo.azisaba.net/repository/maven-public/")
+        maven("https://repo.azisaba.net/repository/maven-snapshots/")
         maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://repo.codemc.io/repository/maven-releases/")
         maven("https://maven.pvphub.me/tofaa")
@@ -116,6 +112,9 @@ project(":folia-server") {
         implementation(kotlin("stdlib"))
         implementation(kotlinx.coroutines.core)
         implementation(jnoise.pipeline)
+        implementation(packed.core)
+        implementation(packed.resource)
+        implementation(packed.server)
     }
 }
 

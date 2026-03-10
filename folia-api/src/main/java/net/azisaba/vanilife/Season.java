@@ -51,6 +51,10 @@ public enum Season implements Translatable {
         return new Sub(this, stage);
     }
 
+    public Sub[] subSeasons() {
+        return new Sub[]{withStage(Stage.EARLY), withStage(Stage.MID), withStage(Stage.LATE)};
+    }
+
     @Override
     public String translationKey() {
         return "season." + this.name().toLowerCase(Locale.ROOT);

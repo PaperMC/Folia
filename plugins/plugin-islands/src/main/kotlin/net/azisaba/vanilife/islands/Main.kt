@@ -5,10 +5,8 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
-import net.azisaba.packed.util.dsl.NamespaceScope
 import net.azisaba.vanilife.islands.storage.DatabaseIslandRepository
 import net.azisaba.vanilife.islands.storage.IslandRepository
-import net.azisaba.vanilife.packhost.ResourcePlugin
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
@@ -16,7 +14,7 @@ import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
 
-class Main : JavaPlugin(), ResourcePlugin {
+class Main : JavaPlugin() {
     private lateinit var koinApp: KoinApplication
 
     override fun onLoad() {
@@ -47,13 +45,5 @@ class Main : JavaPlugin(), ResourcePlugin {
     override fun onDisable() {
         koinApp.close()
         PacketEvents.getAPI().terminate()
-    }
-
-    override fun NamespaceScope.pack() {
-        font {
-            with(IslandsFonts) {
-                bootstrap()
-            }
-        }
     }
 }

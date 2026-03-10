@@ -1,8 +1,8 @@
 dependencies {
     compileOnly(libs.bettermodel.bukkit.api)
-    compileOnly(libs.packed)
     compileOnly(libs.packetevents)
-    compileOnly(project(":plugins:plugin-pack-host"))
+    compileOnly(libs.packed.core)
+    compileOnly(libs.packed.resource)
     implementation(libs.entitylib)
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
