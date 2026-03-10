@@ -6,7 +6,8 @@ import java.util.List;
 import net.azisaba.vanilife.Season;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.format.NamedTextColor;import org.jspecify.annotations.NullMarked;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class PeakSeasonRenderer {
@@ -18,7 +19,6 @@ public final class PeakSeasonRenderer {
         final List<Season.Sub> sorted = peakSeason.stream().distinct().sorted().toList();
 
         final List<Range> ranges = buildRanges(sorted);
-        mergeCycleIfNeeded(ranges);
 
         final TextComponent.Builder builder = Component.text();
 
@@ -42,7 +42,7 @@ public final class PeakSeasonRenderer {
             final Season.Sub current = sorted.get(i);
 
             if (!previous.next().equals(current)) {
-                ranges.add(new Range(previous, current));
+                ranges.add(new Range(rangeStart, previous));
                 rangeStart = current;
             }
 
@@ -51,19 +51,6 @@ public final class PeakSeasonRenderer {
 
         ranges.add(new Range(rangeStart, previous));
         return ranges;
-    }
-
-    private static void mergeCycleIfNeeded(final List<Range> ranges) {
-        if (ranges.size() <= 1) return;
-
-        final Range first = ranges.getFirst();
-        final Range last = ranges.getLast();
-
-        if (last.end().next().equals(first.start())) {
-            final Range merged = new Range(last.start(), first.end());
-            ranges.set(0, merged);
-            ranges.removeLast();
-        }
     }
 
     private static void appendRange(final TextComponent.Builder builder, final Range range) {
