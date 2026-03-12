@@ -5,6 +5,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kr.toxicity.model.api.BetterModel
+import kr.toxicity.model.api.bukkit.platform.BukkitEntity
 import net.azisaba.vanilife.fishing.FishingContext
 import org.bukkit.entity.FishHook
 import org.bukkit.entity.Player
@@ -36,6 +38,11 @@ class FishingGameManager(private val plugin: Plugin) {
 
     fun startWaiting(context: FishingContext) {
         cancelWaiting(context.fishHook)
+
+        BetterModel.model("fishing_bobber")
+            .orElseThrow()
+            .create(BukkitEntity(context.fishHook))
+
         waitingJobsByFishHook[context.fishHook.uniqueId] = plugin.launch {
             while (isActive && context.fishHook.isValid) {
                 if (!currentCoroutineContext().isActive || !context.fishHook.isValid) {
