@@ -12,7 +12,6 @@ class DirectEscapeFightingBehavior(val configuration: Configuration = Configurat
         time: Long,
         position: FinePosition,
         fishHookPosition: FinePosition,
-        playerPullStrength: Double,
     ): FinePosition {
         val deltaX = position.x() - fishHookPosition.x()
         val deltaY = position.y() - fishHookPosition.y()
@@ -20,16 +19,16 @@ class DirectEscapeFightingBehavior(val configuration: Configuration = Configurat
 
         val distance = computeDistance(deltaX, deltaY, deltaZ)
         val direction = computeDirection(time, deltaX, deltaY, deltaZ, distance)
-        val speed = computeSpeed(playerPullStrength)
+        val stepDistance = computeStepDistance(distance)
 
-        return position.offset(direction.x() * speed, direction.y() * speed, direction.z() * speed)
+        return position.offset(direction.x() * stepDistance, direction.y() * stepDistance, direction.z() * stepDistance)
     }
 
     private fun computeDistance(deltaX: Double, deltaY: Double, deltaZ: Double): Double =
         sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ)
 
-    private fun computeSpeed(playerPullStrength: Double): Double =
-        (configuration.speed - playerPullStrength * configuration.pullResistance).coerceAtLeast(configuration.minSpeed)
+    private fun computeStepDistance(distance: Double): Double =
+        minOf(configuration.baseLeadDistance + configuration.speed * configuration.leadDistanceFactor, maxOf(distance, configuration.minSpeed))
 
     private fun computeDirection(
         time: Long,
@@ -48,7 +47,8 @@ class DirectEscapeFightingBehavior(val configuration: Configuration = Configurat
         val speed: Double = 0.14,
         val minSpeed: Double = 0.04,
         val minDistance: Double = 0.02,
-        val pullResistance: Double = 0.35,
+        val baseLeadDistance: Double = 0.18,
+        val leadDistanceFactor: Double = 1.35,
         val fallbackPhaseStep: Double = 0.35,
     )
 }

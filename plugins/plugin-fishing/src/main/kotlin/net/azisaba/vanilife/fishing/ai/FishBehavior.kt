@@ -16,7 +16,6 @@ data class FishBehavior(val approach: ApproachBehavior, val fighting: FightingBe
             time: Long,
             position: FinePosition,
             fishHookPosition: FinePosition,
-            playerPullStrength: Double,
         ): FinePosition
     }
 }

@@ -14,21 +14,16 @@ object CookingTranslations {
     const val ITEM_VANILIFE_CHEESE: String = "item.vanilife.cheese"
     const val ITEM_VANILIFE_CHERRY: String = "item.vanilife.cherry"
     const val ITEM_VANILIFE_CHILI_PEPPER: String = "item.vanilife.chili_pepper"
-    const val ITEM_VANILIFE_CLAM: String = "item.vanilife.clam"
     const val ITEM_VANILIFE_COFFEE: String = "item.vanilife.coffee"
     const val ITEM_VANILIFE_COFFEE_BEANS: String = "item.vanilife.coffee_beans"
     const val ITEM_VANILIFE_CORN: String = "item.vanilife.corn"
     const val ITEM_VANILIFE_COTTON_CANDY: String = "item.vanilife.cotton_candy"
-    const val ITEM_VANILIFE_CRUCIAN_CARP: String = "item.vanilife.crucian_carp"
     const val ITEM_VANILIFE_CUCUMBER: String = "item.vanilife.cucumber"
     const val ITEM_VANILIFE_CURRY_RICE: String = "item.vanilife.curry_rice"
     const val ITEM_VANILIFE_DRIED_PERSIMMON: String = "item.vanilife.dried_persimmon"
-    const val ITEM_VANILIFE_EEL: String = "item.vanilife.eel"
     const val ITEM_VANILIFE_EEL_RICE_BOWL: String = "item.vanilife.eel_rice_bowl"
     const val ITEM_VANILIFE_EGGPLANT: String = "item.vanilife.eggplant"
     const val ITEM_VANILIFE_FIREFLY_SQUID: String = "item.vanilife.firefly_squid"
-    const val ITEM_VANILIFE_FLATFISH: String = "item.vanilife.flatfish"
-    const val ITEM_VANILIFE_FLOUNDER: String = "item.vanilife.flounder"
     const val ITEM_VANILIFE_FRIED_HORSE_MACKEREL: String = "item.vanilife.fried_horse_mackerel"
     const val ITEM_VANILIFE_GRAPE: String = "item.vanilife.grape"
     const val ITEM_VANILIFE_GREEN_ONION: String = "item.vanilife.green_onion"
@@ -37,21 +32,17 @@ object CookingTranslations {
     const val ITEM_VANILIFE_GRILLED_PACIFIC_SAURY: String = "item.vanilife.grilled_pacific_saury"
     const val ITEM_VANILIFE_GRILLED_SQUID: String = "item.vanilife.grilled_squid"
     const val ITEM_VANILIFE_HAMBURG_STEAK: String = "item.vanilife.hamburg_steak"
-    const val ITEM_VANILIFE_HORSE_MACKEREL: String = "item.vanilife.horse_mackerel"
     const val ITEM_VANILIFE_JAPANESE_RADISH: String = "item.vanilife.japanese_radish"
     const val ITEM_VANILIFE_KIWI: String = "item.vanilife.kiwi"
     const val ITEM_VANILIFE_LETTUCE: String = "item.vanilife.lettuce"
     const val ITEM_VANILIFE_LOTUS_ROOT: String = "item.vanilife.lotus_root"
-    const val ITEM_VANILIFE_MACKEREL: String = "item.vanilife.mackerel"
     const val ITEM_VANILIFE_MARINATED_EGGPLANT: String = "item.vanilife.marinated_eggplant"
     const val ITEM_VANILIFE_MELON: String = "item.vanilife.melon"
     const val ITEM_VANILIFE_MISO: String = "item.vanilife.miso"
     const val ITEM_VANILIFE_MISO_MACKEREL: String = "item.vanilife.miso_mackerel"
     const val ITEM_VANILIFE_MISO_SOUP: String = "item.vanilife.miso_soup"
-    const val ITEM_VANILIFE_MONKFISH: String = "item.vanilife.monkfish"
     const val ITEM_VANILIFE_NAPPA_CABBAGE: String = "item.vanilife.nappa_cabbage"
     const val ITEM_VANILIFE_NIKUJAGA: String = "item.vanilife.nikujaga"
-    const val ITEM_VANILIFE_OCTOPUS: String = "item.vanilife.octopus"
     const val ITEM_VANILIFE_ODEN: String = "item.vanilife.oden"
     const val ITEM_VANILIFE_ONION: String = "item.vanilife.onion"
     const val ITEM_VANILIFE_ORANGE: String = "item.vanilife.orange"
@@ -62,14 +53,10 @@ object CookingTranslations {
     const val ITEM_VANILIFE_PIKE_CONGER: String = "item.vanilife.pike_conger"
     const val ITEM_VANILIFE_RICE: String = "item.vanilife.rice"
     const val ITEM_VANILIFE_SALAD: String = "item.vanilife.salad"
-    const val ITEM_VANILIFE_SALMON: String = "item.vanilife.salmon"
     const val ITEM_VANILIFE_SALMON_ROE: String = "item.vanilife.salmon_roe"
     const val ITEM_VANILIFE_SALMON_ROE_SUSHI: String = "item.vanilife.salmon_roe_sushi"
     const val ITEM_VANILIFE_SARDINE: String = "item.vanilife.sardine"
     const val ITEM_VANILIFE_SAUSAGE: String = "item.vanilife.sausage"
-    const val ITEM_VANILIFE_SEA_BASS: String = "item.vanilife.sea_bass"
-    const val ITEM_VANILIFE_SEA_BREAM: String = "item.vanilife.sea_bream"
-    const val ITEM_VANILIFE_SEA_URCHIN: String = "item.vanilife.sea_urchin"
     const val ITEM_VANILIFE_SEA_URCHIN_SUSHI: String = "item.vanilife.sea_urchin_sushi"
     const val ITEM_VANILIFE_SEAFOOD_RICE_FOWL: String = "item.vanilife.seafood_rice_fowl"
     const val ITEM_VANILIFE_SHAVED_ICE: String = "item.vanilife.shaved_ice"
@@ -77,24 +64,19 @@ object CookingTranslations {
     const val ITEM_VANILIFE_SOBA: String = "item.vanilife.soba"
     const val ITEM_VANILIFE_SOFT_SERVE_ICE_CREAM: String = "item.vanilife.soft_serve_ice_cream"
     const val ITEM_VANILIFE_SOYBEANS: String = "item.vanilife.soybeans"
-    const val ITEM_VANILIFE_SPANISH_MACKEREL: String = "item.vanilife.spanish_mackerel"
     const val ITEM_VANILIFE_SPINACH: String = "item.vanilife.spinach"
-    const val ITEM_VANILIFE_SQUID: String = "item.vanilife.squid"
     const val ITEM_VANILIFE_SQUID_SUSHI: String = "item.vanilife.squid_sushi"
     const val ITEM_VANILIFE_STEAMED_RICE: String = "item.vanilife.steamed_rice"
     const val ITEM_VANILIFE_STRAWBERRY: String = "item.vanilife.strawberry"
     const val ITEM_VANILIFE_SWEET_POTATO: String = "item.vanilife.sweet_potato"
-    const val ITEM_VANILIFE_SWEETFISH: String = "item.vanilife.sweetfish"
     const val ITEM_VANILIFE_TAKOYAKI: String = "item.vanilife.takoyaki"
     const val ITEM_VANILIFE_TAMAGO_SUSHI: String = "item.vanilife.tamago_sushi"
     const val ITEM_VANILIFE_TERIYAKI_YELLOWTAIL: String = "item.vanilife.teriyaki_yellowtail"
     const val ITEM_VANILIFE_TOMATO: String = "item.vanilife.tomato"
     const val ITEM_VANILIFE_TONKATSU: String = "item.vanilife.tonkatsu"
-    const val ITEM_VANILIFE_TUNA: String = "item.vanilife.tuna"
     const val ITEM_VANILIFE_TUNA_SUSHI: String = "item.vanilife.tuna_sushi"
     const val ITEM_VANILIFE_UDON: String = "item.vanilife.udon"
     const val ITEM_VANILIFE_YAKISOBA: String = "item.vanilife.yakisoba"
-    const val ITEM_VANILIFE_YELLOWTAIL: String = "item.vanilife.yellowtail"
 
     fun us(): PackLanguage = mapOf(
         ITEM_VANILIFE_BAMBOO_SHOOT to Translation.literal("Bamboo Shoot"),
@@ -107,21 +89,16 @@ object CookingTranslations {
         ITEM_VANILIFE_CHEESE to Translation.literal("Cheese"),
         ITEM_VANILIFE_CHERRY to Translation.literal("Cherry"),
         ITEM_VANILIFE_CHILI_PEPPER to Translation.literal("Chili Pepper"),
-        ITEM_VANILIFE_CLAM to Translation.literal("Clam"),
         ITEM_VANILIFE_COFFEE to Translation.literal("Coffee"),
         ITEM_VANILIFE_COFFEE_BEANS to Translation.literal("Coffee Beans"),
         ITEM_VANILIFE_CORN to Translation.literal("Corn"),
         ITEM_VANILIFE_COTTON_CANDY to Translation.literal("Cotton Candy"),
-        ITEM_VANILIFE_CRUCIAN_CARP to Translation.literal("Crucian Carp"),
         ITEM_VANILIFE_CUCUMBER to Translation.literal("Cucumber"),
         ITEM_VANILIFE_CURRY_RICE to Translation.literal("Curry Rice"),
         ITEM_VANILIFE_DRIED_PERSIMMON to Translation.literal("Dried Persimmon"),
-        ITEM_VANILIFE_EEL to Translation.literal("Eel"),
         ITEM_VANILIFE_EEL_RICE_BOWL to Translation.literal("Eel Rice Bowl"),
         ITEM_VANILIFE_EGGPLANT to Translation.literal("Eggplant"),
         ITEM_VANILIFE_FIREFLY_SQUID to Translation.literal("Firefly Squid"),
-        ITEM_VANILIFE_FLATFISH to Translation.literal("Flatfish"),
-        ITEM_VANILIFE_FLOUNDER to Translation.literal("Flounder"),
         ITEM_VANILIFE_FRIED_HORSE_MACKEREL to Translation.literal("Fried Horse Mackerel"),
         ITEM_VANILIFE_GRAPE to Translation.literal("Grape"),
         ITEM_VANILIFE_GREEN_ONION to Translation.literal("Green Onion"),
@@ -130,21 +107,17 @@ object CookingTranslations {
         ITEM_VANILIFE_GRILLED_PACIFIC_SAURY to Translation.literal("Grilled Pacific Saury"),
         ITEM_VANILIFE_GRILLED_SQUID to Translation.literal("Grilled Squid"),
         ITEM_VANILIFE_HAMBURG_STEAK to Translation.literal("Hamburg Steak"),
-        ITEM_VANILIFE_HORSE_MACKEREL to Translation.literal("Horse Mackerel"),
         ITEM_VANILIFE_JAPANESE_RADISH to Translation.literal("Japanese Radish"),
         ITEM_VANILIFE_KIWI to Translation.literal("Kiwi"),
         ITEM_VANILIFE_LETTUCE to Translation.literal("Lettuce"),
         ITEM_VANILIFE_LOTUS_ROOT to Translation.literal("Lotus Root"),
-        ITEM_VANILIFE_MACKEREL to Translation.literal("Mackerel"),
         ITEM_VANILIFE_MARINATED_EGGPLANT to Translation.literal("Marinated Eggplant"),
         ITEM_VANILIFE_MELON to Translation.literal("Melon"),
         ITEM_VANILIFE_MISO to Translation.literal("Miso"),
         ITEM_VANILIFE_MISO_MACKEREL to Translation.literal("Miso Mackerel"),
         ITEM_VANILIFE_MISO_SOUP to Translation.literal("Miso Soup"),
-        ITEM_VANILIFE_MONKFISH to Translation.literal("Monkfish"),
         ITEM_VANILIFE_NAPPA_CABBAGE to Translation.literal("Napa Cabbage"),
         ITEM_VANILIFE_NIKUJAGA to Translation.literal("Nikujaga"),
-        ITEM_VANILIFE_OCTOPUS to Translation.literal("Octopus"),
         ITEM_VANILIFE_ODEN to Translation.literal("Oden"),
         ITEM_VANILIFE_ONION to Translation.literal("Onion"),
         ITEM_VANILIFE_ORANGE to Translation.literal("Orange"),
@@ -155,14 +128,10 @@ object CookingTranslations {
         ITEM_VANILIFE_PIKE_CONGER to Translation.literal("Pike Conger"),
         ITEM_VANILIFE_RICE to Translation.literal("Rice"),
         ITEM_VANILIFE_SALAD to Translation.literal("Salad"),
-        ITEM_VANILIFE_SALMON to Translation.literal("Salmon"),
         ITEM_VANILIFE_SALMON_ROE to Translation.literal("Salmon Roe"),
         ITEM_VANILIFE_SALMON_ROE_SUSHI to Translation.literal("Salmon Roe Sushi"),
         ITEM_VANILIFE_SARDINE to Translation.literal("Sardine"),
         ITEM_VANILIFE_SAUSAGE to Translation.literal("Sausage"),
-        ITEM_VANILIFE_SEA_BASS to Translation.literal("Sea Bass"),
-        ITEM_VANILIFE_SEA_BREAM to Translation.literal("Sea Bream"),
-        ITEM_VANILIFE_SEA_URCHIN to Translation.literal("Sea Urchin"),
         ITEM_VANILIFE_SEA_URCHIN_SUSHI to Translation.literal("Sea Urchin Sushi"),
         ITEM_VANILIFE_SEAFOOD_RICE_FOWL to Translation.literal("Seafood Rice Bowl"),
         ITEM_VANILIFE_SHAVED_ICE to Translation.literal("Shaved Ice"),
@@ -170,24 +139,19 @@ object CookingTranslations {
         ITEM_VANILIFE_SOBA to Translation.literal("Soba"),
         ITEM_VANILIFE_SOFT_SERVE_ICE_CREAM to Translation.literal("Soft Serve Ice Cream"),
         ITEM_VANILIFE_SOYBEANS to Translation.literal("Soybeans"),
-        ITEM_VANILIFE_SPANISH_MACKEREL to Translation.literal("Spanish Mackerel"),
         ITEM_VANILIFE_SPINACH to Translation.literal("Spinach"),
-        ITEM_VANILIFE_SQUID to Translation.literal("Squid"),
         ITEM_VANILIFE_SQUID_SUSHI to Translation.literal("Squid Sushi"),
         ITEM_VANILIFE_STEAMED_RICE to Translation.literal("Steamed Rice"),
         ITEM_VANILIFE_STRAWBERRY to Translation.literal("Strawberry"),
         ITEM_VANILIFE_SWEET_POTATO to Translation.literal("Sweet Potato"),
-        ITEM_VANILIFE_SWEETFISH to Translation.literal("Sweetfish"),
         ITEM_VANILIFE_TAKOYAKI to Translation.literal("Takoyaki"),
         ITEM_VANILIFE_TAMAGO_SUSHI to Translation.literal("Tamago Sushi"),
         ITEM_VANILIFE_TERIYAKI_YELLOWTAIL to Translation.literal("Teriyaki Yellowtail"),
         ITEM_VANILIFE_TOMATO to Translation.literal("Tomato"),
         ITEM_VANILIFE_TONKATSU to Translation.literal("Tonkatsu"),
-        ITEM_VANILIFE_TUNA to Translation.literal("Tuna"),
         ITEM_VANILIFE_TUNA_SUSHI to Translation.literal("Tuna Sushi"),
         ITEM_VANILIFE_UDON to Translation.literal("Udon"),
         ITEM_VANILIFE_YAKISOBA to Translation.literal("Yakisoba"),
-        ITEM_VANILIFE_YELLOWTAIL to Translation.literal("Yellowtail"),
     )
 
     fun jp(): PackLanguage = mapOf(
@@ -201,21 +165,16 @@ object CookingTranslations {
         ITEM_VANILIFE_CHEESE to Translation.literal("チーズ"),
         ITEM_VANILIFE_CHERRY to Translation.literal("さくらんぼ"),
         ITEM_VANILIFE_CHILI_PEPPER to Translation.literal("唐辛子"),
-        ITEM_VANILIFE_CLAM to Translation.literal("アサリ"),
         ITEM_VANILIFE_COFFEE to Translation.literal("コーヒー"),
         ITEM_VANILIFE_COFFEE_BEANS to Translation.literal("コーヒー豆"),
         ITEM_VANILIFE_CORN to Translation.literal("とうもろこし"),
         ITEM_VANILIFE_COTTON_CANDY to Translation.literal("わたあめ"),
-        ITEM_VANILIFE_CRUCIAN_CARP to Translation.literal("フナ"),
         ITEM_VANILIFE_CUCUMBER to Translation.literal("きゅうり"),
         ITEM_VANILIFE_CURRY_RICE to Translation.literal("カレーライス"),
         ITEM_VANILIFE_DRIED_PERSIMMON to Translation.literal("干し柿"),
-        ITEM_VANILIFE_EEL to Translation.literal("うなぎ"),
         ITEM_VANILIFE_EEL_RICE_BOWL to Translation.literal("うな丼"),
         ITEM_VANILIFE_EGGPLANT to Translation.literal("なす"),
         ITEM_VANILIFE_FIREFLY_SQUID to Translation.literal("ホタルイカ"),
-        ITEM_VANILIFE_FLATFISH to Translation.literal("カレイ"),
-        ITEM_VANILIFE_FLOUNDER to Translation.literal("ヒラメ"),
         ITEM_VANILIFE_FRIED_HORSE_MACKEREL to Translation.literal("アジフライ"),
         ITEM_VANILIFE_GRAPE to Translation.literal("ぶどう"),
         ITEM_VANILIFE_GREEN_ONION to Translation.literal("ねぎ"),
@@ -224,21 +183,17 @@ object CookingTranslations {
         ITEM_VANILIFE_GRILLED_PACIFIC_SAURY to Translation.literal("焼きさんま"),
         ITEM_VANILIFE_GRILLED_SQUID to Translation.literal("焼きイカ"),
         ITEM_VANILIFE_HAMBURG_STEAK to Translation.literal("ハンバーグ"),
-        ITEM_VANILIFE_HORSE_MACKEREL to Translation.literal("アジ"),
         ITEM_VANILIFE_JAPANESE_RADISH to Translation.literal("だいこん"),
         ITEM_VANILIFE_KIWI to Translation.literal("キウイ"),
         ITEM_VANILIFE_LETTUCE to Translation.literal("レタス"),
         ITEM_VANILIFE_LOTUS_ROOT to Translation.literal("れんこん"),
-        ITEM_VANILIFE_MACKEREL to Translation.literal("さば"),
         ITEM_VANILIFE_MARINATED_EGGPLANT to Translation.literal("茄子の煮びたし"),
         ITEM_VANILIFE_MELON to Translation.literal("メロン"),
         ITEM_VANILIFE_MISO to Translation.literal("味噌"),
         ITEM_VANILIFE_MISO_MACKEREL to Translation.literal("鯖の味噌煮"),
         ITEM_VANILIFE_MISO_SOUP to Translation.literal("味噌汁"),
-        ITEM_VANILIFE_MONKFISH to Translation.literal("あんこう"),
         ITEM_VANILIFE_NAPPA_CABBAGE to Translation.literal("白菜"),
         ITEM_VANILIFE_NIKUJAGA to Translation.literal("肉じゃが"),
-        ITEM_VANILIFE_OCTOPUS to Translation.literal("たこ"),
         ITEM_VANILIFE_ODEN to Translation.literal("おでん"),
         ITEM_VANILIFE_ONION to Translation.literal("たまねぎ"),
         ITEM_VANILIFE_ORANGE to Translation.literal("みかん"),
@@ -249,14 +204,10 @@ object CookingTranslations {
         ITEM_VANILIFE_PIKE_CONGER to Translation.literal("はも"),
         ITEM_VANILIFE_RICE to Translation.literal("米"),
         ITEM_VANILIFE_SALAD to Translation.literal("サラダ"),
-        ITEM_VANILIFE_SALMON to Translation.literal("鮭"),
         ITEM_VANILIFE_SALMON_ROE to Translation.literal("いくら"),
         ITEM_VANILIFE_SALMON_ROE_SUSHI to Translation.literal("いくら寿司"),
         ITEM_VANILIFE_SARDINE to Translation.literal("いわし"),
         ITEM_VANILIFE_SAUSAGE to Translation.literal("ソーセージ"),
-        ITEM_VANILIFE_SEA_BASS to Translation.literal("スズキ"),
-        ITEM_VANILIFE_SEA_BREAM to Translation.literal("たい"),
-        ITEM_VANILIFE_SEA_URCHIN to Translation.literal("ウニ"),
         ITEM_VANILIFE_SEA_URCHIN_SUSHI to Translation.literal("ウニ寿司"),
         ITEM_VANILIFE_SEAFOOD_RICE_FOWL to Translation.literal("海鮮丼"),
         ITEM_VANILIFE_SHAVED_ICE to Translation.literal("かき氷"),
@@ -264,23 +215,18 @@ object CookingTranslations {
         ITEM_VANILIFE_SOBA to Translation.literal("そば"),
         ITEM_VANILIFE_SOFT_SERVE_ICE_CREAM to Translation.literal("ソフトクリーム"),
         ITEM_VANILIFE_SOYBEANS to Translation.literal("大豆"),
-        ITEM_VANILIFE_SPANISH_MACKEREL to Translation.literal("サワラ"),
         ITEM_VANILIFE_SPINACH to Translation.literal("ほうれん草"),
-        ITEM_VANILIFE_SQUID to Translation.literal("イカ"),
         ITEM_VANILIFE_SQUID_SUSHI to Translation.literal("イカ寿司"),
         ITEM_VANILIFE_STEAMED_RICE to Translation.literal("白ごはん"),
         ITEM_VANILIFE_STRAWBERRY to Translation.literal("いちご"),
         ITEM_VANILIFE_SWEET_POTATO to Translation.literal("さつまいも"),
-        ITEM_VANILIFE_SWEETFISH to Translation.literal("鮎"),
         ITEM_VANILIFE_TAKOYAKI to Translation.literal("たこ焼き"),
         ITEM_VANILIFE_TAMAGO_SUSHI to Translation.literal("卵寿司"),
         ITEM_VANILIFE_TERIYAKI_YELLOWTAIL to Translation.literal("ぶりの照り焼き"),
         ITEM_VANILIFE_TOMATO to Translation.literal("トマト"),
         ITEM_VANILIFE_TONKATSU to Translation.literal("とんかつ"),
-        ITEM_VANILIFE_TUNA to Translation.literal("マグロ"),
         ITEM_VANILIFE_TUNA_SUSHI to Translation.literal("マグロ寿司"),
         ITEM_VANILIFE_UDON to Translation.literal("うどん"),
         ITEM_VANILIFE_YAKISOBA to Translation.literal("焼きそば"),
-        ITEM_VANILIFE_YELLOWTAIL to Translation.literal("ぶり"),
     )
 }

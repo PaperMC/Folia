@@ -11,7 +11,7 @@ import net.kyori.adventure.key.Key
 object IslandsFonts {
     val WAVES: PackedKey<PackFont> = PackedKey.font(Vanilife.NAMESPACE, "waves")
 
-    fun waves() = PackFont(
+    fun waves(): PackFont = PackFont(
         listOf(
             PackBitmapFontProvider(
                 Key.key(Vanilife.NAMESPACE, "large_0.png"),
