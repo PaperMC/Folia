@@ -2,6 +2,7 @@ package net.azisaba.vanilife.registry.data;
 
 import io.papermc.paper.datacomponent.DataComponentType;
 import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.DataComponentView;
 import io.papermc.paper.datacomponent.item.*;
 import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation;
 import io.papermc.paper.registry.RegistryBuilder;
@@ -9,47 +10,55 @@ import io.papermc.paper.registry.keys.SoundEventKeys;
 import io.papermc.paper.registry.keys.tags.DamageTypeTagKeys;
 import java.util.Set;
 import net.azisaba.vanilife.Season;
-import net.azisaba.vanilife.item.ServerItemType;
+import net.azisaba.vanilife.item.ServerItem;
 import net.kyori.adventure.key.Key;
-import net.kyori.adventure.text.Component;
+import net.kyori.adventure.translation.Translatable;
 import org.bukkit.JukeboxSong;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
 
-@ApiStatus.Experimental
 @ApiStatus.NonExtendable
-public interface ServerItemTypeRegistryEntry {
+@NullMarked
+public interface ServerItemRegistryEntry extends DataComponentView, Translatable {
     @Contract(pure = true)
-    Component displayName();
+    boolean described();
 
     @Contract(pure = true)
-    @Nullable Component flavorText();
+    ServerItemCategory category();
 
     @Contract(pure = true)
     Set<Season.Sub> peakSeason();
 
-    @Contract(pure = true)
-    <T> @Nullable T component(final DataComponentType.Valued<T> type);
+    @Contract(mutates = "param1")
+    void applyData(final ItemStack itemStack);
 
-    @Contract(pure = true)
-    boolean hasComponent(final DataComponentType type);
+    @Contract(mutates = "param1")
+    void applyItemName(final ItemStack itemStack);
 
-    void applyComponents(final ItemStack itemStack);
+    @Contract(mutates = "param1")
+    void applyItemLore(final ItemStack itemStack);
 
-    @ApiStatus.Experimental
+    default boolean hasPeakSeason() {
+        return !peakSeason().isEmpty();
+    }
+
     @ApiStatus.NonExtendable
-    interface Builder extends RegistryBuilder<ServerItemType> {
+    @NullMarked
+    interface Builder extends RegistryBuilder<ServerItem> {
         @Contract(value = "_ -> this", mutates = "this")
-        Builder displayName(final Component displayName);
+        Builder translationKey(final String translationKey);
+
+        @Contract(value = "-> this", mutates = "this")
+        Builder describe();
 
         @Contract(value = "_ -> this", mutates = "this")
-        Builder flavorText(final Component flavorText);
+        Builder category(final ServerItemCategory category);
 
         @Contract(value = "_ -> this", mutates = "this")
-        Builder peakSeason(final Season.Sub... subSeasons);
+        Builder peakSeason(final Season.Sub... peakSeason);
 
         @Contract(value = "_, _ -> this", mutates = "this")
         <T> Builder withComponent(final DataComponentType.Valued<T> type, T value);

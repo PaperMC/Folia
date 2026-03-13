@@ -15,7 +15,7 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
-import net.azisaba.vanilife.item.ServerItemType
+import net.azisaba.vanilife.item.ServerItem
 import net.kyori.adventure.key.InvalidKeyException
 import net.kyori.adventure.key.Key
 import org.bukkit.NamespacedKey
@@ -77,7 +77,7 @@ object VGiveCommand {
         return Command.SINGLE_SUCCESS
     }
 
-    private fun resolveItem(input: String): ServerItemType {
+    private fun resolveItem(input: String): ServerItem {
         val key = parseKey(input)
         return registry().get(key) ?: throw UNKNOWN_ITEM.create()
     }
@@ -109,7 +109,7 @@ object VGiveCommand {
         return builder.buildFuture()
     }
 
-    private fun sendFeedback(sender: CommandSender, players: List<Player>, item: ServerItemType, amount: Int) {
+    private fun sendFeedback(sender: CommandSender, players: List<Player>, item: ServerItem, amount: Int) {
         val itemName = item.key.toString()
         val message = if (players.size == 1) {
             "Gave $amount of $itemName to ${players.single().name}"
@@ -119,6 +119,6 @@ object VGiveCommand {
         sender.sendMessage(message)
     }
 
-    private fun registry(): Registry<ServerItemType> =
+    private fun registry(): Registry<ServerItem> =
         RegistryAccess.registryAccess().getRegistry(RegistryKey.SERVER_ITEM)
 }

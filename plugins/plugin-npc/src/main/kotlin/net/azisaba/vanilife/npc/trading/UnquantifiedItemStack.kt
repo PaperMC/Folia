@@ -3,7 +3,7 @@ package net.azisaba.vanilife.npc.trading
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
 import io.papermc.paper.registry.TypedKey
-import net.azisaba.vanilife.item.ServerItemType
+import net.azisaba.vanilife.item.ServerItem
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import kotlin.random.Random
@@ -14,9 +14,9 @@ sealed interface UnquantifiedItemStack {
     companion object {
         fun of(type: Material, quantity: QuantityProvider): UnquantifiedItemStack = M(type, quantity)
 
-        fun of(type: ServerItemType, quantity: QuantityProvider): UnquantifiedItemStack = S(type, quantity)
+        fun of(type: ServerItem, quantity: QuantityProvider): UnquantifiedItemStack = S(type, quantity)
 
-        fun of(type: TypedKey<ServerItemType>, quantity: QuantityProvider): UnquantifiedItemStack {
+        fun of(type: TypedKey<ServerItem>, quantity: QuantityProvider): UnquantifiedItemStack {
             val registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SERVER_ITEM)
             val unwrappedType = registry.getOrThrow(type)
             return of(unwrappedType, quantity)
@@ -27,7 +27,7 @@ sealed interface UnquantifiedItemStack {
         override fun resolve(random: Random): ItemStack = ItemStack.of(type, quantity.provide(random))
     }
 
-    private data class S(val type: ServerItemType, val quantity: QuantityProvider) : UnquantifiedItemStack {
+    private data class S(val type: ServerItem, val quantity: QuantityProvider) : UnquantifiedItemStack {
         override fun resolve(random: Random): ItemStack = ItemStack.of(type, quantity.provide(random))
     }
 }

@@ -5,7 +5,7 @@ Subject: [PATCH] Server item registry
 
 
 diff --git a/src/main/java/io/papermc/paper/registry/RegistryKey.java b/src/main/java/io/papermc/paper/registry/RegistryKey.java
-index dcee3d88f5b77cdd5c7cbc07f73f54cc548d2f94..d877bda2d5a556a4ce09c9c8bfb85def2b9d8f47 100644
+index dcee3d88f5b77cdd5c7cbc07f73f54cc548d2f94..572b91fddcecf27c2a1b34ca27765d3173261f58 100644
 --- a/src/main/java/io/papermc/paper/registry/RegistryKey.java
 +++ b/src/main/java/io/papermc/paper/registry/RegistryKey.java
 @@ -3,6 +3,10 @@ package io.papermc.paper.registry;
@@ -15,7 +15,7 @@ index dcee3d88f5b77cdd5c7cbc07f73f54cc548d2f94..d877bda2d5a556a4ce09c9c8bfb85def
 +import net.azisaba.vanilife.Vanilife;
 +import net.azisaba.vanilife.annotations.Modified;
 +import net.azisaba.vanilife.annotations.Op;
-+import net.azisaba.vanilife.item.ServerItemType;
++import net.azisaba.vanilife.item.ServerItem;
  import net.kyori.adventure.key.Key;
  import net.kyori.adventure.key.KeyPattern;
  import net.kyori.adventure.key.Keyed;
@@ -24,7 +24,7 @@ index dcee3d88f5b77cdd5c7cbc07f73f54cc548d2f94..d877bda2d5a556a4ce09c9c8bfb85def
      RegistryKey<MemoryKey<?>> MEMORY_MODULE_TYPE = create("memory_module_type");
  
 +    @Modified(Op.ADD_FIELD)
-+    RegistryKey<ServerItemType> SERVER_ITEM = create(Key.key(Vanilife.NAMESPACE, "server_item"));
++    RegistryKey<ServerItem> SERVER_ITEM = create(Key.key(Vanilife.NAMESPACE, "server_item"));
 +
      /**
       * Constructs a new {@link TypedKey} for this registry given the typed key's key.
@@ -57,7 +57,7 @@ index ac68dfce754dc7e014bb31bba32d9b246ffd411c..084a31cec9720c409b3e814723509ea9
      static <T> RegistryKey<T> createInternal(@Subst("some_key") final String key) {
          return new RegistryKeyImpl<>(Key.key(Key.MINECRAFT_NAMESPACE, key));
 diff --git a/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java b/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
-index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..719998951b5fb0aeb3d195efdcdfa902ad94d951 100644
+index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..72bd14f2e30a25f1d86e4c09fcd07e755c095e11 100644
 --- a/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
 +++ b/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
 @@ -17,6 +17,10 @@ import io.papermc.paper.registry.data.PigVariantRegistryEntry;
@@ -66,8 +66,8 @@ index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..719998951b5fb0aeb3d195efdcdfa902
  import io.papermc.paper.registry.data.dialog.DialogRegistryEntry;
 +import net.azisaba.vanilife.annotations.Modified;
 +import net.azisaba.vanilife.annotations.Op;
-+import net.azisaba.vanilife.item.ServerItemType;
-+import net.azisaba.vanilife.registry.data.ServerItemTypeRegistryEntry;
++import net.azisaba.vanilife.item.ServerItem;
++import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
  import org.bukkit.Art;
  import org.bukkit.GameEvent;
  import org.bukkit.JukeboxSong;
@@ -76,54 +76,95 @@ index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..719998951b5fb0aeb3d195efdcdfa902
      public static final RegistryEventProvider<Dialog, DialogRegistryEntry.Builder> DIALOG = create(RegistryKey.DIALOG);
      // End generate - RegistryEvents
 +    @Modified(Op.ADD_FIELD)
-+    public static final RegistryEventProvider<ServerItemType, ServerItemTypeRegistryEntry.Builder> SERVER_ITEM = create(RegistryKey.SERVER_ITEM);
++    public static final RegistryEventProvider<ServerItem, ServerItemRegistryEntry.Builder> SERVER_ITEM = create(RegistryKey.SERVER_ITEM);
  
      private RegistryEvents() {
      }
 diff --git a/src/main/java/org/bukkit/inventory/ItemStack.java b/src/main/java/org/bukkit/inventory/ItemStack.java
-index f20f072b0978b3ef4b3f36c952d469e0d8d5cd22..8651674a76acc53141cd2bf9e0751319cfbeed5d 100644
+index f20f072b0978b3ef4b3f36c952d469e0d8d5cd22..9158537e058298d005a4361d23b56b5ea7445262 100644
 --- a/src/main/java/org/bukkit/inventory/ItemStack.java
 +++ b/src/main/java/org/bukkit/inventory/ItemStack.java
-@@ -3,13 +3,14 @@ package org.bukkit.inventory;
+@@ -2,14 +2,17 @@ package org.bukkit.inventory;
+ 
  import com.google.common.base.Preconditions;
  import io.papermc.paper.datacomponent.DataComponentHolder;
++import io.papermc.paper.registry.RegistryAccess;
  import io.papermc.paper.registry.RegistryKey;
 -import java.util.LinkedHashMap;
++import io.papermc.paper.registry.TypedKey;
  import java.util.Locale;
  import java.util.Map;
  import java.util.function.Consumer;
  import java.util.function.Predicate;
 +import net.azisaba.vanilife.annotations.Modified;
 +import net.azisaba.vanilife.annotations.Op;
-+import net.azisaba.vanilife.item.ServerItemType;
++import net.azisaba.vanilife.item.ServerItem;
  import net.kyori.adventure.text.Component;
 -import net.kyori.adventure.text.event.HoverEvent;
  import org.bukkit.Bukkit;
  import org.bukkit.Material;
  import org.bukkit.NamespacedKey;
-@@ -66,6 +67,16 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+@@ -22,6 +25,7 @@ import org.bukkit.inventory.meta.Damageable;
+ import org.bukkit.inventory.meta.ItemMeta;
+ import org.bukkit.material.MaterialData;
+ import org.bukkit.persistence.PersistentDataContainer;
++import org.bukkit.persistence.PersistentDataType;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ 
+@@ -66,6 +70,36 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
      }
      // Paper end
  
 +    @Modified(Op.ADD_METHOD)
-+    public static @NotNull ItemStack of(final @NotNull ServerItemType type) {
++    public static @NotNull ItemStack of(final @NotNull TypedKey<ServerItem> type) {
++        return of(RegistryAccess.registryAccess().getRegistry(RegistryKey.SERVER_ITEM).getOrThrow(type), 1);
++    }
++
++    @Modified(Op.ADD_METHOD)
++    public static @NotNull ItemStack of(final @NotNull TypedKey<ServerItem> type, final int amount) {
++        return of(RegistryAccess.registryAccess().getRegistry(RegistryKey.SERVER_ITEM).getOrThrow(type), amount);
++    }
++
++    @Modified(Op.ADD_METHOD)
++    public static @NotNull ItemStack of(final @NotNull ServerItem type) {
 +        return of(type, 1);
 +    }
 +
 +    @Modified(Op.ADD_METHOD)
-+    public static @NotNull ItemStack of(final @NotNull ServerItemType type, final int amount) {
-+        return type.createItemStack(amount);
++    public static @NotNull ItemStack of(final @NotNull ServerItem type, final int amount) {
++        final ItemStack itemStack = of(ServerItem.NATIVE_ITEM, amount);
++
++        type.applyItemName(itemStack);
++        type.applyItemLore(itemStack);
++        type.applyData(itemStack);
++
++        itemStack.editPersistentDataContainer((pdc) -> {
++            pdc.set(ServerItem.TYPE_KEY, PersistentDataType.STRING, type.key().asString());
++        });
++
++        return itemStack;
 +    }
 +
      // Paper start - pdc
      /**
       * @see #editPersistentDataContainer(Consumer)
-@@ -233,6 +244,11 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+@@ -233,6 +267,21 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
      }
      // Paper end
  
 +    @Modified(Op.ADD_METHOD)
-+    public boolean isOf(final @NotNull ServerItemType type) {
++    public @Nullable ServerItem serverItem() {
++        return this.craftDelegate.serverItem();
++    }
++
++    @Modified(Op.ADD_METHOD)
++    public @Nullable TypedKey<ServerItem> serverItemKey() {
++        return this.craftDelegate.serverItemKey();
++    }
++
++    @Modified(Op.ADD_METHOD)
++    public boolean isOf(final @NotNull ServerItem type) {
 +        return this.craftDelegate.isOf(type);
 +    }
 +

@@ -5,32 +5,32 @@ import io.papermc.paper.registry.RegistryKey
 import io.papermc.paper.registry.TypedKey
 import io.papermc.paper.registry.event.RegistryComposeEvent
 import net.azisaba.vanilife.Vanilife
-import net.azisaba.vanilife.item.ServerItemType
-import net.azisaba.vanilife.registry.data.ServerItemTypeRegistryEntry
+import net.azisaba.vanilife.item.ServerItem
+import net.azisaba.vanilife.registry.data.ServerItemCategory
+import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry
 import net.kyori.adventure.key.Key
-import net.kyori.adventure.text.Component
 
 object FishItems {
-    val CLAM: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "clam"))
-    val CRUCIAN_CARP: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "crucian_carp"))
-    val EEL: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel"))
-    val FLATFISH: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "flatfish"))
-    val FLOUNDER: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "flounder"))
-    val HORSE_MACKEREL: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "horse_mackerel"))
-    val MACKEREL: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "mackerel"))
-    val MONKFISH: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "monkfish"))
-    val OCTOPUS: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "octopus"))
-    val SALMON: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon"))
-    val SEA_BASS: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_bass"))
-    val SEA_BREAM: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_bream"))
-    val SEA_URCHIN: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_urchin"))
-    val SPANISH_MACKEREL: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "spanish_mackerel"))
-    val SQUID: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "squid"))
-    val SWEETFISH: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sweetfish"))
-    val TUNA: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tuna"))
-    val YELLOWTAIL: TypedKey<ServerItemType> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "yellowtail"))
+    val CLAM: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "clam"))
+    val CRUCIAN_CARP: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "crucian_carp"))
+    val EEL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel"))
+    val FLATFISH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "flatfish"))
+    val FLOUNDER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "flounder"))
+    val HORSE_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "horse_mackerel"))
+    val MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "mackerel"))
+    val MONKFISH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "monkfish"))
+    val OCTOPUS: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "octopus"))
+    val SALMON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon"))
+    val SEA_BASS: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_bass"))
+    val SEA_BREAM: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_bream"))
+    val SEA_URCHIN: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_urchin"))
+    val SPANISH_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "spanish_mackerel"))
+    val SQUID: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "squid"))
+    val SWEETFISH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sweetfish"))
+    val TUNA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tuna"))
+    val YELLOWTAIL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "yellowtail"))
 
-    fun bootstrap(event: RegistryComposeEvent<ServerItemType, ServerItemTypeRegistryEntry.Builder>) {
+    fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
         event.registry().register(CLAM, ::clam)
         event.registry().register(CRUCIAN_CARP, ::crucianCarp)
         event.registry().register(EEL, ::eel)
@@ -51,127 +51,145 @@ object FishItems {
         event.registry().register(YELLOWTAIL, ::yellowtail)
     }
 
-    private fun clam(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_CLAM))
+    private fun clam(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_CLAM)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.CLAM)
             .food(FoodProperties.food().nutrition(2).saturation(0.2f).build())
             .peakSeason(*FishType.CLAM.peakSeason.toTypedArray())
     }
 
-    private fun crucianCarp(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_CRUCIAN_CARP))
+    private fun crucianCarp(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_CRUCIAN_CARP)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.CRUCIAN_CARP)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.CRUCIAN_CARP.peakSeason.toTypedArray())
     }
 
-    private fun eel(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_EEL))
+    private fun eel(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_EEL)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.EEL)
             .food(FoodProperties.food().nutrition(3).saturation(0.3f).build())
             .peakSeason(*FishType.EEL.peakSeason.toTypedArray())
     }
 
-    private fun flatfish(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_FLATFISH))
+    private fun flatfish(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_FLATFISH)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.FLATFISH)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.FLATFISH.peakSeason.toTypedArray())
     }
 
-    private fun flounder(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_FLOUNDER))
+    private fun flounder(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_FLOUNDER)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.FLOUNDER)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.FLOUNDER.peakSeason.toTypedArray())
     }
 
-    private fun horseMackerel(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_HORSE_MACKEREL))
+    private fun horseMackerel(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_HORSE_MACKEREL)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.HORSE_MACKEREL)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.HORSE_MACKEREL.peakSeason.toTypedArray())
     }
 
-    private fun mackerel(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_MACKEREL))
+    private fun mackerel(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_MACKEREL)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.MACKEREL)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.MACKEREL.peakSeason.toTypedArray())
     }
 
-    private fun monkfish(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_MONKFISH))
+    private fun monkfish(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_MONKFISH)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.MONKFISH)
             .food(FoodProperties.food().nutrition(3).saturation(0.2f).build())
             .peakSeason(*FishType.MONKFISH.peakSeason.toTypedArray())
     }
 
-    private fun octopus(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_OCTOPUS))
+    private fun octopus(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_OCTOPUS)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.OCTOPUS)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.OCTOPUS.peakSeason.toTypedArray())
     }
 
-    private fun salmon(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SALMON))
+    private fun salmon(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SALMON)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SALMON)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SALMON.peakSeason.toTypedArray())
     }
 
-    private fun seaBass(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SEA_BASS))
+    private fun seaBass(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SEA_BASS)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SEA_BASS)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SEA_BASS.peakSeason.toTypedArray())
     }
 
-    private fun seaBream(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SEA_BREAM))
+    private fun seaBream(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SEA_BREAM)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SEA_BREAM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SEA_BREAM.peakSeason.toTypedArray())
     }
 
-    private fun seaUrchin(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SEA_URCHIN))
+    private fun seaUrchin(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SEA_URCHIN)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SEA_URCHIN)
             .food(FoodProperties.food().nutrition(2).saturation(0.2f).build())
             .peakSeason(*FishType.SEA_URCHIN.peakSeason.toTypedArray())
     }
 
-    private fun spanishMackerel(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SPANISH_MACKEREL))
+    private fun spanishMackerel(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SPANISH_MACKEREL)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SPANISH_MACKEREL)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SPANISH_MACKEREL.peakSeason.toTypedArray())
     }
 
-    private fun squid(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SQUID))
+    private fun squid(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SQUID)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SQUID)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SQUID.peakSeason.toTypedArray())
     }
 
-    private fun sweetfish(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_SWEETFISH))
+    private fun sweetfish(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_SWEETFISH)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.SWEETFISH)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SWEETFISH.peakSeason.toTypedArray())
     }
 
-    private fun tuna(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_TUNA))
+    private fun tuna(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_TUNA)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.TUNA)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.TUNA.peakSeason.toTypedArray())
     }
 
-    private fun yellowtail(builder: ServerItemTypeRegistryEntry.Builder) {
-        builder.displayName(Component.translatable(FishTranslations.ITEM_VANILIFE_YELLOWTAIL))
+    private fun yellowtail(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(FishTranslations.ITEM_VANILIFE_YELLOWTAIL)
+            .category(ServerItemCategory.FISH)
             .itemModel(FishItemModels.YELLOWTAIL)
             .food(FoodProperties.food().nutrition(3).saturation(0.2f).build())
             .peakSeason(*FishType.YELLOWTAIL.peakSeason.toTypedArray())

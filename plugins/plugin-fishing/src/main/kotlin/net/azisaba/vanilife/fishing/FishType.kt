@@ -8,19 +8,19 @@ import net.azisaba.vanilife.fishing.ai.DirectEscapeFightingBehavior
 import net.azisaba.vanilife.fishing.ai.FishBehavior
 import net.azisaba.vanilife.fishing.ai.StraightApproachBehavior
 import net.azisaba.vanilife.fishing.ai.WavyApproachBehavior
-import net.azisaba.vanilife.item.ServerItemType
+import net.azisaba.vanilife.item.ServerItem
 import net.kyori.adventure.translation.Translatable
 
 data class FishType(
     val translationKey: String,
-    val item: TypedKey<ServerItemType>,
+    val item: TypedKey<ServerItem>,
     val rarity: Float,
     val peakSeason: Set<Season.Sub>,
     val behavior: FishBehavior,
 ) : Translatable {
     override fun translationKey(): String = translationKey
 
-    fun unwrapItem(): ServerItemType {
+    fun unwrapItem(): ServerItem {
         val registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SERVER_ITEM)
         return registry.getOrThrow(item)
     }

@@ -5,16 +5,16 @@ Subject: [PATCH] Server item registry
 
 
 diff --git a/src/main/java/io/papermc/paper/registry/PaperRegistries.java b/src/main/java/io/papermc/paper/registry/PaperRegistries.java
-index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..bcae618f4d17578a9918dceb81b1cf92be6ea916 100644
+index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..a2993d01c9c83d8ff332312f3534c24d566c7b5d 100644
 --- a/src/main/java/io/papermc/paper/registry/PaperRegistries.java
 +++ b/src/main/java/io/papermc/paper/registry/PaperRegistries.java
 @@ -30,6 +30,9 @@ import java.util.IdentityHashMap;
  import java.util.List;
  import java.util.Map;
  import java.util.Objects;
-+import net.azisaba.vanilife.item.ServerItemType;
-+import net.azisaba.vanilife.server.item.VanilifeServerItemType;
-+import net.azisaba.vanilife.server.registry.data.VanilifeServerItemTypeRegistryEntry;
++import net.azisaba.vanilife.item.ServerItem;
++import net.azisaba.vanilife.server.item.ServerItemImpl;
++import net.azisaba.vanilife.server.registry.data.ServerItemRegistryEntryImpl;
  import net.minecraft.core.Registry;
  import net.minecraft.core.registries.Registries;
  import net.minecraft.resources.ResourceKey;
@@ -27,20 +27,23 @@ index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..bcae618f4d17578a9918dceb81b1cf92
              // End generate - RegistryDefinitions
 +
 +            // Vanilife Registries
-+            start(Registries.SERVER_ITEM, RegistryKey.SERVER_ITEM).craft(ServerItemType.class, VanilifeServerItemType::new).writable(VanilifeServerItemTypeRegistryEntry.VanilifeBuilder::new)
++            start(Registries.SERVER_ITEM, RegistryKey.SERVER_ITEM).craft(ServerItem.class, ServerItemImpl::new).writable(ServerItemRegistryEntryImpl.BuilderImpl::new)
          );
          final Map<RegistryKey<?>, RegistryEntry<?, ?>> byRegistryKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
          final Map<ResourceKey<?>, RegistryEntry<?, ?>> byResourceKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
 diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
-index 002682049fe890333794072e1e2717004f2ad0cf..3d3b3d4ff124faf90e7e19fcf0590368c91aadd2 100644
+index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c13486c39 100644
 --- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
 +++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
-@@ -1,13 +1,17 @@
+@@ -1,13 +1,18 @@
  package org.bukkit.craftbukkit.inventory;
  
  import com.google.common.base.Preconditions;
 -import com.google.common.collect.ImmutableMap;
  import io.papermc.paper.adventure.PaperAdventure;
++import io.papermc.paper.registry.RegistryAccess;
++import io.papermc.paper.registry.RegistryKey;
++import io.papermc.paper.registry.TypedKey;
  import java.util.Collections;
  import java.util.Map;
  import java.util.Optional;
@@ -48,33 +51,61 @@ index 002682049fe890333794072e1e2717004f2ad0cf..3d3b3d4ff124faf90e7e19fcf0590368
  import java.util.function.Predicate;
 +import net.azisaba.vanilife.annotations.Modified;
 +import net.azisaba.vanilife.annotations.Op;
-+import net.azisaba.vanilife.item.ServerItemType;
-+import net.azisaba.vanilife.server.item.VanilifeServerItemType;
-+import net.kyori.adventure.key.Key;
++import net.azisaba.vanilife.item.ServerItem;
  import net.kyori.adventure.text.Component;
  import net.minecraft.advancements.criterion.DataComponentMatchers;
  import net.minecraft.advancements.criterion.ItemPredicate;
-@@ -35,7 +39,9 @@ import org.bukkit.inventory.ItemStack;
+@@ -26,6 +31,7 @@ import net.minecraft.world.item.component.CustomData;
+ import net.minecraft.world.item.enchantment.EnchantmentHelper;
+ import net.minecraft.world.item.enchantment.ItemEnchantments;
+ import org.bukkit.Material;
++import org.bukkit.Registry;
+ import org.bukkit.configuration.serialization.DelegateDeserialization;
+ import org.bukkit.craftbukkit.enchantments.CraftEnchantment;
+ import org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer;
+@@ -35,7 +41,9 @@ import org.bukkit.inventory.ItemStack;
  import org.bukkit.inventory.meta.ItemMeta;
  import org.bukkit.material.MaterialData;
  import org.bukkit.persistence.PersistentDataContainer;
 +import org.bukkit.persistence.PersistentDataType;
  import org.jetbrains.annotations.NotNull;
-+import org.jspecify.annotations.NonNull;
++import org.jetbrains.annotations.Nullable;
  
  @DelegateDeserialization(ItemStack.class)
  public final class CraftItemStack extends ItemStack {
-@@ -482,6 +488,15 @@ public final class CraftItemStack extends ItemStack {
+@@ -482,6 +490,37 @@ public final class CraftItemStack extends ItemStack {
      }
      // Paper end
  
 +    @Modified(Op.ADD_METHOD)
 +    @Override
-+    public boolean isOf(final @NonNull ServerItemType type) {
-+        final Key key = Optional.ofNullable(getPersistentDataContainer().get(VanilifeServerItemType.TYPE_KEY, PersistentDataType.STRING))
-+                .map(Key::key)
++    public @Nullable ServerItem serverItem() {
++        final TypedKey<ServerItem> typedKey = this.serverItemKey();
++        if (typedKey == null) {
++            return null;
++        }
++
++        final Registry<ServerItem> registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SERVER_ITEM);
++        return registry.get(typedKey);
++    }
++
++    @Modified(Op.ADD_METHOD)
++    @Override
++    public @Nullable TypedKey<ServerItem> serverItemKey() {
++        return Optional.ofNullable(getPersistentDataContainer().get(ServerItem.TYPE_KEY, PersistentDataType.STRING))
++                .map(RegistryKey.SERVER_ITEM::typedKey)
 +                .orElse(null);
-+        return key != null && type.key().equals(key);
++    }
++
++    @Modified(Op.ADD_METHOD)
++    public boolean isOf(final @NotNull TypedKey<ServerItem> type) {
++        return serverItemKey() == type;
++    }
++
++    @Modified(Op.ADD_METHOD)
++    @Override
++    public boolean isOf(final @NotNull ServerItem type) {
++        return serverItem() == type;
 +    }
 +
      public static final String PDC_CUSTOM_DATA_KEY = "PublicBukkitValues";

@@ -133,8 +133,8 @@ internal class Main : JavaPlugin() {
             }
 
             lang {
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishTranslations.us() + PackHostTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishTranslations.jp() + PackHostTranslations.jp())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishTranslations.us() + GeneralTranslations.us())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
