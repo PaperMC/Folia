@@ -83,6 +83,10 @@ public enum Season implements Translatable {
             return this.season.previous().withStage(Stage.LATE);
         }
 
+        public int toIndex() {
+            return this.season.ordinal() * Stage.values().length + stage.ordinal();
+        }
+
         @Override
         public String translationKey() {
             return this.season.translationKey() + "." + this.stage.name().toLowerCase(Locale.ROOT);

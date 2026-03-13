@@ -41,5 +41,3 @@ private fun computeSeasonWeight(fishType: FishType, season: Season.Sub): Float {
 
     return (1f - distance / 6f).coerceAtLeast(0.1f)
 }
-
-private fun Season.Sub.toIndex(): Int = season.ordinal * 3 + stage.ordinal

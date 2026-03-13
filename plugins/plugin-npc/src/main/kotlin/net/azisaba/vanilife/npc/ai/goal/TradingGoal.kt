@@ -17,7 +17,7 @@ import java.util.*
 internal class TradingGoal(
     private val npc: Npc,
     private val mob: Mob,
-    private val tracker: Tracker,
+    tracker: Tracker,
 ) : Goal<Mob> {
     private var requestedTrader: Player? = null
     private var activeTrader: Player? = null
@@ -52,7 +52,7 @@ internal class TradingGoal(
         val trader = activeTrader ?: return
         val view = MenuType.MERCHANT.builder()
             .title(Component.text("NPC"))
-            .merchant(npc.npcType.merchantRecipeSource.createMerchant())
+            .merchant(npc.merchant)
             .build(trader)
         trader.openInventory(view)
         mob.pathfinder.stopPathfinding()

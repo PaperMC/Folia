@@ -18,6 +18,7 @@ import org.bukkit.RegionAccessor
 import org.bukkit.entity.Chicken
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
+import org.bukkit.inventory.Merchant
 
 fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
     val chicken = spawn(location, Chicken::class.java) { spawned ->
@@ -29,6 +30,10 @@ fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
 
 sealed interface Npc : Nameable {
     val npcType: NpcType
+
+    val merchant: Merchant
+
+    fun updateMerchantRecipes()
 
     fun remove()
 
@@ -53,11 +58,18 @@ sealed interface Npc : Nameable {
 }
 
 private abstract class AbstractNpcImpl(override val npcType: NpcType, protected val mob: Mob) : Npc {
+    override var merchant: Merchant = this.npcType.merchantConstructor.createMerchant()
+        protected set
+
     protected val tracker: Tracker = npcType.modelOrThrow().create(BukkitEntity(mob))
 
     init {
         Bukkit.getMobGoals().addGoal(mob, 2, TradingGoal(this, mob, tracker))
         Bukkit.getMobGoals().addGoal(mob, 1, SitGoal(mob, tracker))
+    }
+
+    override fun updateMerchantRecipes() {
+        merchant = npcType.merchantConstructor.createMerchant()
     }
 
     override fun remove() {

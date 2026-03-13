@@ -12,8 +12,10 @@ import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry
 import net.kyori.adventure.key.Key
 
 object CookingItems {
-    val BAMBOO_SHOOT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot"))
-    val BAMBOO_SHOOT_RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot_rice"))
+    val BAMBOO_SHOOT: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot"))
+    val BAMBOO_SHOOT_RICE: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot_rice"))
     val BANANA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "banana"))
     val BELL_PEPPER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bell_pepper"))
     val BLUEBERRY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "blueberry"))
@@ -21,35 +23,50 @@ object CookingItems {
     val BUCKWHEAT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "buckwheat"))
     val CHEESE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cheese"))
     val CHERRY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cherry"))
-    val CHILI_PEPPER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "chili_pepper"))
+    val CHILI_PEPPER: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "chili_pepper"))
     val COFFEE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "coffee"))
-    val COFFEE_BEANS: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "coffee_beans"))
+    val COFFEE_BEANS: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "coffee_beans"))
     val CORN: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "corn"))
-    val COTTON_CANDY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cotton_candy"))
+    val COTTON_CANDY: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cotton_candy"))
     val CUCUMBER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cucumber"))
     val CURRY_RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "curry_rice"))
-    val DRIED_PERSIMMON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "dried_persimmon"))
-    val EEL_RICE_BOWL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel_rice_bowl"))
+    val DRIED_PERSIMMON: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "dried_persimmon"))
+    val EEL_RICE_BOWL: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel_rice_bowl"))
     val EGGPLANT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eggplant"))
-    val FIREFLY_SQUID: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "firefly_squid"))
-    val FRIED_HORSE_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "fried_horse_mackerel"))
+    val FIREFLY_SQUID: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "firefly_squid"))
+    val FRIED_HORSE_MACKEREL: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "fried_horse_mackerel"))
     val GRAPE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grape"))
     val GREEN_ONION: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "green_onion"))
     val GRILLED_AYU: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_ayu"))
-    val GRILLED_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_mackerel"))
-    val GRILLED_PACIFIC_SAURY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_pacific_saury"))
-    val GRILLED_SQUID: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_squid"))
-    val HAMBURG_STEAK: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "hamburg_steak"))
-    val JAPANESE_RADISH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "japanese_radish"))
+    val GRILLED_MACKEREL: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_mackerel"))
+    val GRILLED_PACIFIC_SAURY: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_pacific_saury"))
+    val GRILLED_SQUID: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_squid"))
+    val HAMBURG_STEAK: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "hamburg_steak"))
+    val JAPANESE_RADISH: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "japanese_radish"))
     val KIWI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "kiwi"))
     val LETTUCE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "lettuce"))
     val LOTUS_ROOT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "lotus_root"))
-    val MARINATED_EGGPLANT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "marinated_eggplant"))
+    val MARINATED_EGGPLANT: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "marinated_eggplant"))
     val MELON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "melon"))
     val MISO: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso"))
-    val MISO_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso_mackerel"))
+    val MISO_MACKEREL: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso_mackerel"))
     val MISO_SOUP: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso_soup"))
-    val NAPPA_CABBAGE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "nappa_cabbage"))
+    val NAPPA_CABBAGE: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "nappa_cabbage"))
     val NIKUJAGA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "nikujaga"))
     val ODEN: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "oden"))
     val ONION: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "onion"))
@@ -62,24 +79,33 @@ object CookingItems {
     val RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "rice"))
     val SALAD: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salad"))
     val SALMON_ROE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon_roe"))
-    val SALMON_ROE_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon_roe_sushi"))
+    val SALMON_ROE_SUSHI: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon_roe_sushi"))
     val SARDINE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sardine"))
     val SAUSAGE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sausage"))
-    val SEA_URCHIN_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_urchin_sushi"))
-    val SEAFOOD_RICE_FOWL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "seafood_rice_fowl"))
+    val SEA_URCHIN_SUSHI: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_urchin_sushi"))
+    val SEAFOOD_RICE_FOWL: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "seafood_rice_fowl"))
     val SHAVED_ICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "shaved_ice"))
-    val SKIPJACK_TUNA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "skipjack_tuna"))
+    val SKIPJACK_TUNA: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "skipjack_tuna"))
     val SOBA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soba"))
-    val SOFT_SERVE_ICE_CREAM: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soft_serve_ice_cream"))
+    val SOFT_SERVE_ICE_CREAM: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soft_serve_ice_cream"))
     val SOYBEANS: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soybeans"))
     val SPINACH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "spinach"))
     val SQUID_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "squid_sushi"))
-    val STEAMED_RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "steamed_rice"))
+    val STEAMED_RICE: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "steamed_rice"))
     val STRAWBERRY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "strawberry"))
-    val SWEET_POTATO: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sweet_potato"))
+    val SWEET_POTATO: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sweet_potato"))
     val TAKOYAKI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "takoyaki"))
-    val TAMAGO_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tamago_sushi"))
-    val TERIYAKI_YELLOWTAIL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "teriyaki_yellowtail"))
+    val TAMAGO_SUSHI: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tamago_sushi"))
+    val TERIYAKI_YELLOWTAIL: TypedKey<ServerItem> =
+        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "teriyaki_yellowtail"))
     val TOMATO: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tomato"))
     val TONKATSU: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tonkatsu"))
     val TUNA_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tuna_sushi"))
@@ -165,22 +191,27 @@ object CookingItems {
     private fun bambooShoot(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_BAMBOO_SHOOT)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SPRING.subSeasons())
             .itemModel(CookingItemModels.BAMBOO_SHOOT_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.4f).build())
-            .peakSeason(*Season.SPRING.subSeasons())
     }
 
     private fun bambooShootRice(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_BAMBOO_SHOOT_RICE)
             .category(ServerItemCategory.FOOD)
+            .peakSeason(*Season.SPRING.subSeasons())
             .itemModel(CookingItemModels.BAMBOO_SHOOT_RICE_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.8f).build())
-            .peakSeason(*Season.SPRING.subSeasons())
     }
 
     private fun banana(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_BANANA)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(
+                Season.SUMMER.withStage(Season.Stage.MID),
+                Season.SUMMER.withStage(Season.Stage.LATE),
+                Season.FALL.withStage(Season.Stage.EARLY)
+            )
             .itemModel(CookingItemModels.BANANA_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.3f).build())
     }
@@ -188,17 +219,17 @@ object CookingItems {
     private fun bellPepper(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_BELL_PEPPER)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.BELL_PEPPER_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.4f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun blueberry(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_BLUEBERRY)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.BLUEBERRY_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun butter(builder: ServerItemRegistryEntry.Builder) {
@@ -225,14 +256,20 @@ object CookingItems {
     private fun cherry(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_CHERRY)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.SPRING.subSeasons())
             .itemModel(CookingItemModels.CHERRY_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(*Season.SPRING.subSeasons())
     }
 
     private fun chiliPepper(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_CHILI_PEPPER)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(
+                Season.SUMMER.withStage(Season.Stage.MID),
+                Season.SUMMER.withStage(Season.Stage.LATE),
+                Season.FALL.withStage(Season.Stage.EARLY),
+                Season.FALL.withStage(Season.Stage.MID)
+            )
             .itemModel(CookingItemModels.CHILI_PEPPER_ITEM)
             .food(FoodProperties.food().nutrition(1).saturation(0.1f).build())
     }
@@ -254,9 +291,9 @@ object CookingItems {
     private fun corn(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_CORN)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.CORN_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.6f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun cottonCandy(builder: ServerItemRegistryEntry.Builder) {
@@ -269,9 +306,9 @@ object CookingItems {
     private fun cucumber(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_CUCUMBER)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.CUCUMBER_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.3f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun curryRice(builder: ServerItemRegistryEntry.Builder) {
@@ -286,7 +323,6 @@ object CookingItems {
             .category(ServerItemCategory.FRUIT)
             .itemModel(CookingItemModels.DRIED_PERSIMMON_ITEM)
             .food(FoodProperties.food().nutrition(4).saturation(0.5f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun eelRiceBowl(builder: ServerItemRegistryEntry.Builder) {
@@ -294,15 +330,14 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.EEL_RICE_BOWL_ITEM)
             .food(FoodProperties.food().nutrition(10).saturation(0.8f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.MID), Season.SUMMER.withStage(Season.Stage.LATE))
     }
 
     private fun eggplant(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_EGGPLANT)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.EGGPLANT_ITEM)
             .food(FoodProperties.food().nutrition(1).saturation(0.3f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun fireflySquid(builder: ServerItemRegistryEntry.Builder) {
@@ -310,7 +345,6 @@ object CookingItems {
             .category(ServerItemCategory.FISH)
             .itemModel(CookingItemModels.FIREFLY_SQUID_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(Season.SPRING.withStage(Season.Stage.EARLY), Season.SPRING.withStage(Season.Stage.MID))
     }
 
     private fun friedHorseMackerel(builder: ServerItemRegistryEntry.Builder) {
@@ -318,20 +352,24 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.FRIED_HORSE_MACKEREL_ITEM)
             .food(FoodProperties.food().nutrition(6).saturation(0.7f).build())
-            .peakSeason(Season.SPRING.withStage(Season.Stage.LATE), Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID))
     }
 
     private fun grape(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_GRAPE)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.FALL.subSeasons())
             .itemModel(CookingItemModels.GRAPE_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun greenOnion(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_GREEN_ONION)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(
+                Season.FALL.withStage(Season.Stage.LATE),
+                *Season.WINTER.subSeasons(),
+                Season.SPRING.withStage(Season.Stage.EARLY)
+            )
             .itemModel(CookingItemModels.GREEN_ONION_ITEM)
             .food(FoodProperties.food().nutrition(1).saturation(0.1f).build())
     }
@@ -341,7 +379,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.GRILLED_AYU_ITEM)
             .food(FoodProperties.food().nutrition(5).saturation(0.6f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID), Season.SUMMER.withStage(Season.Stage.LATE))
     }
 
     private fun grilledMackerel(builder: ServerItemRegistryEntry.Builder) {
@@ -349,7 +386,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.GRILLED_MACKEREL_ITEM)
             .food(FoodProperties.food().nutrition(6).saturation(0.8f).build())
-            .peakSeason(Season.FALL.withStage(Season.Stage.EARLY), Season.FALL.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.LATE))
     }
 
     private fun grilledPacificSaury(builder: ServerItemRegistryEntry.Builder) {
@@ -357,7 +393,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.GRILLED_PACIFIC_SAURY_ITEM)
             .food(FoodProperties.food().nutrition(6).saturation(0.8f).build())
-            .peakSeason(Season.FALL.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.LATE))
     }
 
     private fun grilledSquid(builder: ServerItemRegistryEntry.Builder) {
@@ -365,7 +400,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.GRILLED_SQUID_ITEM)
             .food(FoodProperties.food().nutrition(5).saturation(0.6f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID))
     }
 
     private fun hamburgSteak(builder: ServerItemRegistryEntry.Builder) {
@@ -378,6 +412,7 @@ object CookingItems {
     private fun japaneseRadish(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_JAPANESE_RADISH)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.WINTER.subSeasons())
             .itemModel(CookingItemModels.JAPANESE_RADISH_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.4f).build())
     }
@@ -385,14 +420,15 @@ object CookingItems {
     private fun kiwi(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_KIWI)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.WINTER.subSeasons())
             .itemModel(CookingItemModels.KIWI_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.2f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun lettuce(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_LETTUCE)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SPRING.subSeasons(), *Season.FALL.subSeasons())
             .itemModel(CookingItemModels.LETTUCE_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.3f).build())
     }
@@ -400,9 +436,9 @@ object CookingItems {
     private fun lotusRoot(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_LOTUS_ROOT)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.WINTER.subSeasons())
             .itemModel(CookingItemModels.LOTUS_ROOT_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.4f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun marinatedEggplant(builder: ServerItemRegistryEntry.Builder) {
@@ -410,15 +446,14 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.MARINATED_EGGPLANT_ITEM)
             .food(FoodProperties.food().nutrition(4).saturation(0.5f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun melon(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_MELON)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.MELON_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.3f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun miso(builder: ServerItemRegistryEntry.Builder) {
@@ -433,7 +468,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.MISO_MACKEREL_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.8f).build())
-            .peakSeason(Season.FALL.withStage(Season.Stage.EARLY), Season.FALL.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.LATE))
     }
 
     private fun misoSoup(builder: ServerItemRegistryEntry.Builder) {
@@ -441,15 +475,14 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.MISO_SOUP_ITEM)
             .food(FoodProperties.food().nutrition(5).saturation(0.6f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun nappaCabbage(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_NAPPA_CABBAGE)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.WINTER.subSeasons())
             .itemModel(CookingItemModels.NAPPA_CABBAGE_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.3f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun nikujaga(builder: ServerItemRegistryEntry.Builder) {
@@ -457,7 +490,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.NIKUJAGA_ITEM)
             .food(FoodProperties.food().nutrition(8).saturation(0.8f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun oden(builder: ServerItemRegistryEntry.Builder) {
@@ -465,23 +497,22 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.ODEN_ITEM)
             .food(FoodProperties.food().nutrition(8).saturation(0.8f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun onion(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_ONION)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SPRING.subSeasons())
             .itemModel(CookingItemModels.ONION_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.3f).build())
-            .peakSeason(*Season.SPRING.subSeasons())
     }
 
     private fun orange(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_ORANGE)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.WINTER.subSeasons())
             .itemModel(CookingItemModels.ORANGE_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.3f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun paperFan(builder: ServerItemRegistryEntry.Builder) {
@@ -500,33 +531,33 @@ object CookingItems {
     private fun peach(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_PEACH)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.PEACH_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.3f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun persimmon(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_PERSIMMON)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.FALL.subSeasons())
             .itemModel(CookingItemModels.PERSIMMON_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.3f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun pikeConger(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_PIKE_CONGER)
             .category(ServerItemCategory.FISH)
+            .peakSeason(Season.SUMMER.withStage(Season.Stage.MID), Season.SUMMER.withStage(Season.Stage.LATE))
             .itemModel(CookingItemModels.PIKE_CONGER_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.2f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.MID), Season.SUMMER.withStage(Season.Stage.LATE))
     }
 
     private fun rice(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_RICE)
             .category(ServerItemCategory.MATERIAL)
+            .peakSeason(*Season.FALL.subSeasons())
             .itemModel(CookingItemModels.RICE_ITEM)
             .food(FoodProperties.food().nutrition(1).saturation(0.2f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun salad(builder: ServerItemRegistryEntry.Builder) {
@@ -539,9 +570,9 @@ object CookingItems {
     private fun salmonRoe(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_SALMON_ROE)
             .category(ServerItemCategory.FISH)
+            .peakSeason(Season.FALL.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.LATE))
             .itemModel(CookingItemModels.SALMON_ROE_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.2f).build())
-            .peakSeason(Season.FALL.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.LATE))
     }
 
     private fun salmonRoeSushi(builder: ServerItemRegistryEntry.Builder) {
@@ -549,15 +580,14 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.SALMON_ROE_SUSHI_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.7f).build())
-            .peakSeason(Season.FALL.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.LATE))
     }
 
     private fun sardine(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_SARDINE)
             .category(ServerItemCategory.FISH)
+            .peakSeason(Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID))
             .itemModel(CookingItemModels.SARDINE_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID))
     }
 
     private fun sausage(builder: ServerItemRegistryEntry.Builder) {
@@ -572,7 +602,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.SEA_URCHIN_SUSHI_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.7f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID))
     }
 
     private fun seafoodRiceFowl(builder: ServerItemRegistryEntry.Builder) {
@@ -580,7 +609,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.SEAFOOD_RICE_FOWL_ITEM)
             .food(FoodProperties.food().nutrition(9).saturation(0.8f).build())
-            .peakSeason(Season.WINTER.withStage(Season.Stage.EARLY), Season.WINTER.withStage(Season.Stage.MID))
     }
 
     private fun shavedIce(builder: ServerItemRegistryEntry.Builder) {
@@ -593,9 +621,14 @@ object CookingItems {
     private fun skipjackTuna(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_SKIPJACK_TUNA)
             .category(ServerItemCategory.FISH)
+            .peakSeason(
+                Season.SPRING.withStage(Season.Stage.EARLY),
+                Season.SPRING.withStage(Season.Stage.MID),
+                Season.FALL.withStage(Season.Stage.EARLY),
+                Season.FALL.withStage(Season.Stage.MID)
+            )
             .itemModel(CookingItemModels.SKIPJACK_TUNA_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(Season.SPRING.withStage(Season.Stage.EARLY), Season.SPRING.withStage(Season.Stage.MID), Season.FALL.withStage(Season.Stage.EARLY), Season.FALL.withStage(Season.Stage.MID))
     }
 
     private fun soba(builder: ServerItemRegistryEntry.Builder) {
@@ -603,7 +636,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.SOBA_ITEM)
             .food(FoodProperties.food().nutrition(6).saturation(0.6f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun softServeIceCream(builder: ServerItemRegistryEntry.Builder) {
@@ -623,9 +655,9 @@ object CookingItems {
     private fun spinach(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_SPINACH)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.WINTER.subSeasons())
             .itemModel(CookingItemModels.SPINACH_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.4f).build())
-            .peakSeason(*Season.WINTER.subSeasons())
     }
 
     private fun squidSushi(builder: ServerItemRegistryEntry.Builder) {
@@ -633,7 +665,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.SQUID_SUSHI_ITEM)
             .food(FoodProperties.food().nutrition(6).saturation(0.7f).build())
-            .peakSeason(Season.SUMMER.withStage(Season.Stage.EARLY), Season.SUMMER.withStage(Season.Stage.MID))
     }
 
     private fun steamedRice(builder: ServerItemRegistryEntry.Builder) {
@@ -641,23 +672,22 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.STEAMED_RICE_ITEM)
             .food(FoodProperties.food().nutrition(5).saturation(0.6f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun strawberry(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_STRAWBERRY)
             .category(ServerItemCategory.FRUIT)
+            .peakSeason(*Season.SPRING.subSeasons())
             .itemModel(CookingItemModels.STRAWBERRY_ITEM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
-            .peakSeason(*Season.SPRING.subSeasons())
     }
 
     private fun sweetPotato(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_SWEET_POTATO)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.FALL.subSeasons())
             .itemModel(CookingItemModels.SWEET_POTATO_ITEM)
             .food(FoodProperties.food().nutrition(3).saturation(0.6f).build())
-            .peakSeason(*Season.FALL.subSeasons())
     }
 
     private fun takoyaki(builder: ServerItemRegistryEntry.Builder) {
@@ -679,15 +709,14 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.TERIYAKI_YELLOWTAIL_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.8f).build())
-            .peakSeason(Season.WINTER.withStage(Season.Stage.EARLY), Season.WINTER.withStage(Season.Stage.MID), Season.WINTER.withStage(Season.Stage.LATE))
     }
 
     private fun tomato(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(CookingTranslations.ITEM_VANILIFE_TOMATO)
             .category(ServerItemCategory.VEGETABLE)
+            .peakSeason(*Season.SUMMER.subSeasons())
             .itemModel(CookingItemModels.TOMATO)
             .food(FoodProperties.food().nutrition(3).saturation(0.4f).build())
-            .peakSeason(*Season.SUMMER.subSeasons())
     }
 
     private fun tonkatsu(builder: ServerItemRegistryEntry.Builder) {
@@ -702,7 +731,6 @@ object CookingItems {
             .category(ServerItemCategory.FOOD)
             .itemModel(CookingItemModels.TUNA_SUSHI_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.7f).build())
-            .peakSeason(Season.WINTER.withStage(Season.Stage.EARLY), Season.WINTER.withStage(Season.Stage.MID), Season.WINTER.withStage(Season.Stage.LATE))
     }
 
     private fun udon(builder: ServerItemRegistryEntry.Builder) {
@@ -718,5 +746,4 @@ object CookingItems {
             .itemModel(CookingItemModels.YAKISOBA_ITEM)
             .food(FoodProperties.food().nutrition(7).saturation(0.7f).build())
     }
-
 }
