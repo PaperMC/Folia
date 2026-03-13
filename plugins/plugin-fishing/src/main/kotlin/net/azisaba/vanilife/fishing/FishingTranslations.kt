@@ -3,7 +3,7 @@ package net.azisaba.vanilife.fishing
 import net.azisaba.packed.lang.PackLanguage
 import net.azisaba.packed.lang.Translation
 
-object FishTranslations {
+object FishingTranslations {
     const val FISH_VANILIFE_CLAM: String = "fish.vanilife.clam"
     const val FISH_VANILIFE_CRUCIAN_CARP: String = "fish.vanilife.crucian_carp"
     const val FISH_VANILIFE_EEL: String = "fish.vanilife.eel"

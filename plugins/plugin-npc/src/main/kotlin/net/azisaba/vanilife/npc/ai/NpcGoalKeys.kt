@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.npc.ai.goal
+package net.azisaba.vanilife.npc.ai
 
 import com.destroystokyo.paper.entity.ai.GoalKey
 import net.azisaba.vanilife.Vanilife
@@ -7,6 +7,7 @@ import org.bukkit.entity.Mob
 import org.koin.core.component.KoinComponent
 
 object NpcGoalKeys : KoinComponent {
+    val RESEARCHING: GoalKey<Mob> = GoalKey.of(Mob::class.java, NamespacedKey(Vanilife.NAMESPACE, "npc/researching"))
     val SIT: GoalKey<Mob> = GoalKey.of(Mob::class.java, NamespacedKey(Vanilife.NAMESPACE, "npc/sit"))
     val TRADING: GoalKey<Mob> = GoalKey.of(Mob::class.java, NamespacedKey(Vanilife.NAMESPACE, "npc/trading"))
 }

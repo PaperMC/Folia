@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.npc.ai.goal
+package net.azisaba.vanilife.npc.ai
 
 import com.destroystokyo.paper.entity.ai.Goal
 import com.destroystokyo.paper.entity.ai.GoalKey
@@ -7,6 +7,8 @@ import kr.toxicity.model.api.bukkit.platform.BukkitPlayer
 import kr.toxicity.model.api.event.hitbox.HitBoxInteractEvent
 import kr.toxicity.model.api.tracker.Tracker
 import net.azisaba.vanilife.npc.Npc
+import net.azisaba.vanilife.npc.NpcItems
+import net.azisaba.vanilife.npc.NpcType
 import net.kyori.adventure.text.Component
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
@@ -25,7 +27,7 @@ internal class TradingGoal(
     init {
         tracker.listenHitBox(HitBoxInteractEvent::class.java) { event ->
             val player = (event.who as? BukkitPlayer)?.source() ?: return@listenHitBox
-            if (!player.isSneaking) {
+            if (!player.isSneaking && !player.equipment.itemInMainHand.isOf(NpcItems.UNREADABLE_RECIPE)) {
                 requestedTrader = player
             }
         }

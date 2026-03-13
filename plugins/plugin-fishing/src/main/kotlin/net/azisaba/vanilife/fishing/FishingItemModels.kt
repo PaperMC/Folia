@@ -6,7 +6,7 @@ import net.azisaba.packed.items.PackItemModel
 import net.azisaba.packed.items.properties.PackModelItemModelProperties
 import net.azisaba.vanilife.Vanilife
 
-object FishItemModels {
+object FishingItemModels {
     val CLAM: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "clam")
     val CRUCIAN_CARP: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "crucian_carp")
     val EEL: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "eel")
@@ -26,39 +26,39 @@ object FishItemModels {
     val TUNA: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "tuna")
     val YELLOWTAIL: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "yellowtail")
 
-    fun clamItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.CLAM))
+    fun clamItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.CLAM))
 
-    fun crucianCarpItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.CRUCIAN_CARP))
+    fun crucianCarpItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.CRUCIAN_CARP))
 
-    fun eelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.EEL))
+    fun eelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.EEL))
 
-    fun flatfishItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.FLATFISH))
+    fun flatfishItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.FLATFISH))
 
-    fun flounderItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.FLOUNDER))
+    fun flounderItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.FLOUNDER))
 
-    fun horseMackerelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.HORSE_MACKEREL))
+    fun horseMackerelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.HORSE_MACKEREL))
 
-    fun mackerelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.MACKEREL))
+    fun mackerelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.MACKEREL))
 
-    fun monkfishItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.MONKFISH))
+    fun monkfishItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.MONKFISH))
 
-    fun octopusItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.OCTOPUS))
+    fun octopusItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.OCTOPUS))
 
-    fun salmonItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SALMON))
+    fun salmonItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SALMON))
 
-    fun seaBassItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SEA_BASS))
+    fun seaBassItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SEA_BASS))
 
-    fun seaBreamItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SEA_BREAM))
+    fun seaBreamItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SEA_BREAM))
 
-    fun seaUrchinItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SEA_URCHIN))
+    fun seaUrchinItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SEA_URCHIN))
 
-    fun spanishMackerelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SPANISH_MACKEREL))
+    fun spanishMackerelItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SPANISH_MACKEREL))
 
-    fun squidItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SQUID))
+    fun squidItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SQUID))
 
-    fun sweetfishItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.SWEETFISH))
+    fun sweetfishItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.SWEETFISH))
 
-    fun tunaItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.TUNA))
+    fun tunaItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.TUNA))
 
-    fun yellowtailItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishModels.YELLOWTAIL))
+    fun yellowtailItem(): PackItemModel = PackItemModel(PackModelItemModelProperties(FishingModels.YELLOWTAIL))
 }

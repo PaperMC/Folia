@@ -6,7 +6,7 @@ import net.azisaba.packed.models.PackModel
 import net.azisaba.vanilife.Vanilife
 import net.kyori.adventure.key.Key
 
-object FishModels {
+object FishingModels {
     val CLAM: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/clam")
     val CRUCIAN_CARP: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/crucian_carp")
     val EEL: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/eel")

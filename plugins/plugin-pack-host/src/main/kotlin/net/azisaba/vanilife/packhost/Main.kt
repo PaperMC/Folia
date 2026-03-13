@@ -13,10 +13,13 @@ import net.azisaba.vanilife.cooking.CookingItemModels
 import net.azisaba.vanilife.cooking.CookingModels
 import net.azisaba.vanilife.cooking.CookingTranslations
 import net.azisaba.vanilife.fishing.FishingFonts
-import net.azisaba.vanilife.fishing.FishItemModels
-import net.azisaba.vanilife.fishing.FishModels
-import net.azisaba.vanilife.fishing.FishTranslations
+import net.azisaba.vanilife.fishing.FishingItemModels
+import net.azisaba.vanilife.fishing.FishingModels
+import net.azisaba.vanilife.fishing.FishingTranslations
 import net.azisaba.vanilife.islands.IslandsFonts
+import net.azisaba.vanilife.npc.NpcItemModels
+import net.azisaba.vanilife.npc.NpcModels
+import net.azisaba.vanilife.npc.NpcTranslations
 import net.kyori.adventure.resource.ResourcePackInfo
 import net.kyori.adventure.text.Component
 import org.bukkit.plugin.java.JavaPlugin
@@ -112,29 +115,32 @@ internal class Main : JavaPlugin() {
                 CookingItemModels.TUNA_SUSHI_ITEM to CookingItemModels.tunaSushiItem()
                 CookingItemModels.UDON_ITEM to CookingItemModels.udonItem()
                 CookingItemModels.YAKISOBA_ITEM to CookingItemModels.yakisobaItem()
-                FishItemModels.CLAM to FishItemModels.clamItem()
-                FishItemModels.CRUCIAN_CARP to FishItemModels.crucianCarpItem()
-                FishItemModels.EEL to FishItemModels.eelItem()
-                FishItemModels.FLATFISH to FishItemModels.flatfishItem()
-                FishItemModels.FLOUNDER to FishItemModels.flounderItem()
-                FishItemModels.HORSE_MACKEREL to FishItemModels.horseMackerelItem()
-                FishItemModels.MACKEREL to FishItemModels.mackerelItem()
-                FishItemModels.MONKFISH to FishItemModels.monkfishItem()
-                FishItemModels.OCTOPUS to FishItemModels.octopusItem()
-                FishItemModels.SALMON to FishItemModels.salmonItem()
-                FishItemModels.SEA_BASS to FishItemModels.seaBassItem()
-                FishItemModels.SEA_BREAM to FishItemModels.seaBreamItem()
-                FishItemModels.SEA_URCHIN to FishItemModels.seaUrchinItem()
-                FishItemModels.SPANISH_MACKEREL to FishItemModels.spanishMackerelItem()
-                FishItemModels.SQUID to FishItemModels.squidItem()
-                FishItemModels.SWEETFISH to FishItemModels.sweetfishItem()
-                FishItemModels.TUNA to FishItemModels.tunaItem()
-                FishItemModels.YELLOWTAIL to FishItemModels.yellowtailItem()
+
+                FishingItemModels.CLAM to FishingItemModels.clamItem()
+                FishingItemModels.CRUCIAN_CARP to FishingItemModels.crucianCarpItem()
+                FishingItemModels.EEL to FishingItemModels.eelItem()
+                FishingItemModels.FLATFISH to FishingItemModels.flatfishItem()
+                FishingItemModels.FLOUNDER to FishingItemModels.flounderItem()
+                FishingItemModels.HORSE_MACKEREL to FishingItemModels.horseMackerelItem()
+                FishingItemModels.MACKEREL to FishingItemModels.mackerelItem()
+                FishingItemModels.MONKFISH to FishingItemModels.monkfishItem()
+                FishingItemModels.OCTOPUS to FishingItemModels.octopusItem()
+                FishingItemModels.SALMON to FishingItemModels.salmonItem()
+                FishingItemModels.SEA_BASS to FishingItemModels.seaBassItem()
+                FishingItemModels.SEA_BREAM to FishingItemModels.seaBreamItem()
+                FishingItemModels.SEA_URCHIN to FishingItemModels.seaUrchinItem()
+                FishingItemModels.SPANISH_MACKEREL to FishingItemModels.spanishMackerelItem()
+                FishingItemModels.SQUID to FishingItemModels.squidItem()
+                FishingItemModels.SWEETFISH to FishingItemModels.sweetfishItem()
+                FishingItemModels.TUNA to FishingItemModels.tunaItem()
+                FishingItemModels.YELLOWTAIL to FishingItemModels.yellowtailItem()
+
+                NpcItemModels.UNREADABLE_RECIPE to NpcItemModels.unreadableRecipe()
             }
 
             lang {
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishTranslations.us() + GeneralTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishTranslations.jp() + GeneralTranslations.jp())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
@@ -211,30 +217,36 @@ internal class Main : JavaPlugin() {
                 CookingModels.TUNA_SUSHI to CookingModels.tunaSushi()
                 CookingModels.UDON to CookingModels.udon()
                 CookingModels.YAKISOBA to CookingModels.yakisoba()
-                FishModels.CLAM to FishModels.clam()
-                FishModels.CRUCIAN_CARP to FishModels.crucianCarp()
-                FishModels.EEL to FishModels.eel()
-                FishModels.FLATFISH to FishModels.flatfish()
-                FishModels.FLOUNDER to FishModels.flounder()
-                FishModels.HORSE_MACKEREL to FishModels.horseMackerel()
-                FishModels.MACKEREL to FishModels.mackerel()
-                FishModels.MONKFISH to FishModels.monkfish()
-                FishModels.OCTOPUS to FishModels.octopus()
-                FishModels.SALMON to FishModels.salmon()
-                FishModels.SEA_BASS to FishModels.seaBass()
-                FishModels.SEA_BREAM to FishModels.seaBream()
-                FishModels.SEA_URCHIN to FishModels.seaUrchin()
-                FishModels.SPANISH_MACKEREL to FishModels.spanishMackerel()
-                FishModels.SQUID to FishModels.squid()
-                FishModels.SWEETFISH to FishModels.sweetfish()
-                FishModels.TUNA to FishModels.tuna()
-                FishModels.YELLOWTAIL to FishModels.yellowtail()
+
+                FishingModels.CLAM to FishingModels.clam()
+                FishingModels.CRUCIAN_CARP to FishingModels.crucianCarp()
+                FishingModels.EEL to FishingModels.eel()
+                FishingModels.FLATFISH to FishingModels.flatfish()
+                FishingModels.FLOUNDER to FishingModels.flounder()
+                FishingModels.HORSE_MACKEREL to FishingModels.horseMackerel()
+                FishingModels.MACKEREL to FishingModels.mackerel()
+                FishingModels.MONKFISH to FishingModels.monkfish()
+                FishingModels.OCTOPUS to FishingModels.octopus()
+                FishingModels.SALMON to FishingModels.salmon()
+                FishingModels.SEA_BASS to FishingModels.seaBass()
+                FishingModels.SEA_BREAM to FishingModels.seaBream()
+                FishingModels.SEA_URCHIN to FishingModels.seaUrchin()
+                FishingModels.SPANISH_MACKEREL to FishingModels.spanishMackerel()
+                FishingModels.SQUID to FishingModels.squid()
+                FishingModels.SWEETFISH to FishingModels.sweetfish()
+                FishingModels.TUNA to FishingModels.tuna()
+                FishingModels.YELLOWTAIL to FishingModels.yellowtail()
+
+                NpcModels.UNREADABLE_RECIPE to NpcModels.unreadableRecipe()
             }
 
             includeJavaResources(net.azisaba.vanilife.cooking.Main::class)
             includeJavaResources(net.azisaba.vanilife.fishing.Main::class)
             includeJavaResources(net.azisaba.vanilife.islands.Main::class)
+            includeJavaResources(net.azisaba.vanilife.npc.Main::class)
             includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "assets", "assets")
+            includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_legacy", "bettermodel_legacy")
+            includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_modern", "bettermodel_modern")
         }
 
         val configured = packed.configureEmbeddedServer(port = 8085)

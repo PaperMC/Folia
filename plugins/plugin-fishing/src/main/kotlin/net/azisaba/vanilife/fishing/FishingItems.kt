@@ -10,7 +10,7 @@ import net.azisaba.vanilife.registry.data.ServerItemCategory
 import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry
 import net.kyori.adventure.key.Key
 
-object FishItems {
+object FishingItems {
     val CLAM: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "clam"))
     val CRUCIAN_CARP: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "crucian_carp"))
     val EEL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel"))
@@ -52,145 +52,145 @@ object FishItems {
     }
 
     private fun clam(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_CLAM)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_CLAM)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.CLAM)
+            .itemModel(FishingItemModels.CLAM)
             .food(FoodProperties.food().nutrition(2).saturation(0.2f).build())
             .peakSeason(*FishType.CLAM.peakSeason.toTypedArray())
     }
 
     private fun crucianCarp(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_CRUCIAN_CARP)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_CRUCIAN_CARP)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.CRUCIAN_CARP)
+            .itemModel(FishingItemModels.CRUCIAN_CARP)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.CRUCIAN_CARP.peakSeason.toTypedArray())
     }
 
     private fun eel(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_EEL)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_EEL)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.EEL)
+            .itemModel(FishingItemModels.EEL)
             .food(FoodProperties.food().nutrition(3).saturation(0.3f).build())
             .peakSeason(*FishType.EEL.peakSeason.toTypedArray())
     }
 
     private fun flatfish(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_FLATFISH)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_FLATFISH)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.FLATFISH)
+            .itemModel(FishingItemModels.FLATFISH)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.FLATFISH.peakSeason.toTypedArray())
     }
 
     private fun flounder(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_FLOUNDER)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_FLOUNDER)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.FLOUNDER)
+            .itemModel(FishingItemModels.FLOUNDER)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.FLOUNDER.peakSeason.toTypedArray())
     }
 
     private fun horseMackerel(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_HORSE_MACKEREL)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_HORSE_MACKEREL)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.HORSE_MACKEREL)
+            .itemModel(FishingItemModels.HORSE_MACKEREL)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.HORSE_MACKEREL.peakSeason.toTypedArray())
     }
 
     private fun mackerel(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_MACKEREL)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_MACKEREL)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.MACKEREL)
+            .itemModel(FishingItemModels.MACKEREL)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.MACKEREL.peakSeason.toTypedArray())
     }
 
     private fun monkfish(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_MONKFISH)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_MONKFISH)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.MONKFISH)
+            .itemModel(FishingItemModels.MONKFISH)
             .food(FoodProperties.food().nutrition(3).saturation(0.2f).build())
             .peakSeason(*FishType.MONKFISH.peakSeason.toTypedArray())
     }
 
     private fun octopus(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_OCTOPUS)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_OCTOPUS)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.OCTOPUS)
+            .itemModel(FishingItemModels.OCTOPUS)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.OCTOPUS.peakSeason.toTypedArray())
     }
 
     private fun salmon(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SALMON)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SALMON)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SALMON)
+            .itemModel(FishingItemModels.SALMON)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SALMON.peakSeason.toTypedArray())
     }
 
     private fun seaBass(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SEA_BASS)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SEA_BASS)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SEA_BASS)
+            .itemModel(FishingItemModels.SEA_BASS)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SEA_BASS.peakSeason.toTypedArray())
     }
 
     private fun seaBream(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SEA_BREAM)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SEA_BREAM)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SEA_BREAM)
+            .itemModel(FishingItemModels.SEA_BREAM)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SEA_BREAM.peakSeason.toTypedArray())
     }
 
     private fun seaUrchin(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SEA_URCHIN)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SEA_URCHIN)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SEA_URCHIN)
+            .itemModel(FishingItemModels.SEA_URCHIN)
             .food(FoodProperties.food().nutrition(2).saturation(0.2f).build())
             .peakSeason(*FishType.SEA_URCHIN.peakSeason.toTypedArray())
     }
 
     private fun spanishMackerel(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SPANISH_MACKEREL)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SPANISH_MACKEREL)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SPANISH_MACKEREL)
+            .itemModel(FishingItemModels.SPANISH_MACKEREL)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SPANISH_MACKEREL.peakSeason.toTypedArray())
     }
 
     private fun squid(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SQUID)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SQUID)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SQUID)
+            .itemModel(FishingItemModels.SQUID)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SQUID.peakSeason.toTypedArray())
     }
 
     private fun sweetfish(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_SWEETFISH)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_SWEETFISH)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.SWEETFISH)
+            .itemModel(FishingItemModels.SWEETFISH)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.SWEETFISH.peakSeason.toTypedArray())
     }
 
     private fun tuna(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_TUNA)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_TUNA)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.TUNA)
+            .itemModel(FishingItemModels.TUNA)
             .food(FoodProperties.food().nutrition(2).saturation(0.1f).build())
             .peakSeason(*FishType.TUNA.peakSeason.toTypedArray())
     }
 
     private fun yellowtail(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(FishTranslations.ITEM_VANILIFE_YELLOWTAIL)
+        builder.translationKey(FishingTranslations.ITEM_VANILIFE_YELLOWTAIL)
             .category(ServerItemCategory.FISH)
-            .itemModel(FishItemModels.YELLOWTAIL)
+            .itemModel(FishingItemModels.YELLOWTAIL)
             .food(FoodProperties.food().nutrition(3).saturation(0.2f).build())
             .peakSeason(*FishType.YELLOWTAIL.peakSeason.toTypedArray())
     }

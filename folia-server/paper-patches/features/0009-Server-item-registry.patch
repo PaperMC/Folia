@@ -32,10 +32,10 @@ index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..a2993d01c9c83d8ff332312f3534c24d
          final Map<RegistryKey<?>, RegistryEntry<?, ?>> byRegistryKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
          final Map<ResourceKey<?>, RegistryEntry<?, ?>> byResourceKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
 diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
-index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c13486c39 100644
+index 002682049fe890333794072e1e2717004f2ad0cf..a13e672606c16ccb136adac06ef48d4a5aa0ac4e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
 +++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
-@@ -1,13 +1,18 @@
+@@ -1,13 +1,19 @@
  package org.bukkit.craftbukkit.inventory;
  
  import com.google.common.base.Preconditions;
@@ -46,6 +46,7 @@ index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c
 +import io.papermc.paper.registry.TypedKey;
  import java.util.Collections;
  import java.util.Map;
++import java.util.Objects;
  import java.util.Optional;
  import java.util.function.Consumer;
  import java.util.function.Predicate;
@@ -55,7 +56,7 @@ index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c
  import net.kyori.adventure.text.Component;
  import net.minecraft.advancements.criterion.DataComponentMatchers;
  import net.minecraft.advancements.criterion.ItemPredicate;
-@@ -26,6 +31,7 @@ import net.minecraft.world.item.component.CustomData;
+@@ -26,6 +32,7 @@ import net.minecraft.world.item.component.CustomData;
  import net.minecraft.world.item.enchantment.EnchantmentHelper;
  import net.minecraft.world.item.enchantment.ItemEnchantments;
  import org.bukkit.Material;
@@ -63,7 +64,7 @@ index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c
  import org.bukkit.configuration.serialization.DelegateDeserialization;
  import org.bukkit.craftbukkit.enchantments.CraftEnchantment;
  import org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer;
-@@ -35,7 +41,9 @@ import org.bukkit.inventory.ItemStack;
+@@ -35,7 +42,9 @@ import org.bukkit.inventory.ItemStack;
  import org.bukkit.inventory.meta.ItemMeta;
  import org.bukkit.material.MaterialData;
  import org.bukkit.persistence.PersistentDataContainer;
@@ -73,7 +74,7 @@ index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c
  
  @DelegateDeserialization(ItemStack.class)
  public final class CraftItemStack extends ItemStack {
-@@ -482,6 +490,37 @@ public final class CraftItemStack extends ItemStack {
+@@ -482,6 +491,38 @@ public final class CraftItemStack extends ItemStack {
      }
      // Paper end
  
@@ -98,14 +99,15 @@ index 002682049fe890333794072e1e2717004f2ad0cf..d4e1967aecc4d1f22eda073c1d26f13c
 +    }
 +
 +    @Modified(Op.ADD_METHOD)
-+    public boolean isOf(final @NotNull TypedKey<ServerItem> type) {
-+        return serverItemKey() == type;
++    @Override
++    public boolean isOf(final @NotNull ServerItem type) {
++        return this.isOf(RegistryKey.SERVER_ITEM.typedKey(type.key()));
 +    }
 +
 +    @Modified(Op.ADD_METHOD)
 +    @Override
-+    public boolean isOf(final @NotNull ServerItem type) {
-+        return serverItem() == type;
++    public boolean isOf(final @NotNull TypedKey<ServerItem> type) {
++        return Objects.equals(this.serverItemKey(), type);
 +    }
 +
      public static final String PDC_CUSTOM_DATA_KEY = "PublicBukkitValues";

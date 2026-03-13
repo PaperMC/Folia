@@ -30,8 +30,8 @@ data class FishType(
 
         val CLAM: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_CLAM,
-                FishItems.CLAM,
+                FishingTranslations.FISH_VANILIFE_CLAM,
+                FishingItems.CLAM,
                 0.18f,
                 setOf(
                     Season.WINTER.withStage(Season.Stage.LATE),
@@ -60,8 +60,8 @@ data class FishType(
 
         val CRUCIAN_CARP: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_CRUCIAN_CARP,
-                FishItems.CRUCIAN_CARP,
+                FishingTranslations.FISH_VANILIFE_CRUCIAN_CARP,
+                FishingItems.CRUCIAN_CARP,
                 0.22f,
                 setOf(
                     *Season.WINTER.subSeasons(),
@@ -95,8 +95,8 @@ data class FishType(
 
         val EEL: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_EEL,
-                FishItems.EEL,
+                FishingTranslations.FISH_VANILIFE_EEL,
+                FishingItems.EEL,
                 0.72f,
                 setOf(
                     Season.FALL.withStage(Season.Stage.LATE),
@@ -131,8 +131,8 @@ data class FishType(
 
         val FLATFISH: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_FLATFISH,
-                FishItems.FLATFISH,
+                FishingTranslations.FISH_VANILIFE_FLATFISH,
+                FishingItems.FLATFISH,
                 0.44f,
                 setOf(
                     Season.FALL.withStage(Season.Stage.LATE),
@@ -158,8 +158,8 @@ data class FishType(
 
         val FLOUNDER: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_FLOUNDER,
-                FishItems.FLOUNDER,
+                FishingTranslations.FISH_VANILIFE_FLOUNDER,
+                FishingItems.FLOUNDER,
                 0.58f,
                 setOf(
                     *Season.WINTER.subSeasons(),
@@ -184,8 +184,8 @@ data class FishType(
 
         val HORSE_MACKEREL: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_HORSE_MACKEREL,
-                FishItems.HORSE_MACKEREL,
+                FishingTranslations.FISH_VANILIFE_HORSE_MACKEREL,
+                FishingItems.HORSE_MACKEREL,
                 0.28f,
                 setOf(
                     Season.SPRING.withStage(Season.Stage.LATE),
@@ -218,8 +218,8 @@ data class FishType(
 
         val MACKEREL: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_MACKEREL,
-                FishItems.MACKEREL,
+                FishingTranslations.FISH_VANILIFE_MACKEREL,
+                FishingItems.MACKEREL,
                 0.34f,
                 setOf(
                     Season.FALL.withStage(Season.Stage.MID),
@@ -253,8 +253,8 @@ data class FishType(
 
         val MONKFISH: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_MONKFISH,
-                FishItems.MONKFISH,
+                FishingTranslations.FISH_VANILIFE_MONKFISH,
+                FishingItems.MONKFISH,
                 0.7f,
                 setOf(
                     *Season.WINTER.subSeasons(),
@@ -280,8 +280,8 @@ data class FishType(
 
         val OCTOPUS: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_OCTOPUS,
-                FishItems.OCTOPUS,
+                FishingTranslations.FISH_VANILIFE_OCTOPUS,
+                FishingItems.OCTOPUS,
                 0.62f,
                 setOf(
                     Season.SUMMER.withStage(Season.Stage.MID),
@@ -316,8 +316,8 @@ data class FishType(
 
         val SALMON: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SALMON,
-                FishItems.SALMON,
+                FishingTranslations.FISH_VANILIFE_SALMON,
+                FishingItems.SALMON,
                 0.48f,
                 setOf(
                     Season.SPRING.withStage(Season.Stage.MID),
@@ -345,8 +345,8 @@ data class FishType(
 
         val SEA_BASS: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SEA_BASS,
-                FishItems.SEA_BASS,
+                FishingTranslations.FISH_VANILIFE_SEA_BASS,
+                FishingItems.SEA_BASS,
                 0.52f,
                 setOf(
                     *Season.SUMMER.subSeasons(),
@@ -378,8 +378,8 @@ data class FishType(
 
         val SEA_BREAM: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SEA_BREAM,
-                FishItems.SEA_BREAM,
+                FishingTranslations.FISH_VANILIFE_SEA_BREAM,
+                FishingItems.SEA_BREAM,
                 0.66f,
                 setOf(
                     *Season.SPRING.subSeasons(),
@@ -413,8 +413,8 @@ data class FishType(
 
         val SEA_URCHIN: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SEA_URCHIN,
-                FishItems.SEA_URCHIN,
+                FishingTranslations.FISH_VANILIFE_SEA_URCHIN,
+                FishingItems.SEA_URCHIN,
                 0.74f,
                 setOf(
                     *Season.SUMMER.subSeasons(),
@@ -439,8 +439,8 @@ data class FishType(
 
         val SPANISH_MACKEREL: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SPANISH_MACKEREL,
-                FishItems.SPANISH_MACKEREL,
+                FishingTranslations.FISH_VANILIFE_SPANISH_MACKEREL,
+                FishingItems.SPANISH_MACKEREL,
                 0.54f,
                 setOf(
                     *Season.WINTER.subSeasons(),
@@ -466,8 +466,8 @@ data class FishType(
 
         val SQUID: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SQUID,
-                FishItems.SQUID,
+                FishingTranslations.FISH_VANILIFE_SQUID,
+                FishingItems.SQUID,
                 0.36f,
                 setOf(
                     *Season.SUMMER.subSeasons(),
@@ -501,8 +501,8 @@ data class FishType(
 
         val SWEETFISH: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_SWEETFISH,
-                FishItems.SWEETFISH,
+                FishingTranslations.FISH_VANILIFE_SWEETFISH,
+                FishingItems.SWEETFISH,
                 0.4f,
                 setOf(
                     *Season.SUMMER.subSeasons(),
@@ -528,8 +528,8 @@ data class FishType(
 
         val TUNA: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_TUNA,
-                FishItems.TUNA,
+                FishingTranslations.FISH_VANILIFE_TUNA,
+                FishingItems.TUNA,
                 0.9f,
                 setOf(
                     Season.WINTER.withStage(Season.Stage.EARLY),
@@ -555,8 +555,8 @@ data class FishType(
 
         val YELLOWTAIL: FishType = register(
             FishType(
-                FishTranslations.FISH_VANILIFE_YELLOWTAIL,
-                FishItems.YELLOWTAIL,
+                FishingTranslations.FISH_VANILIFE_YELLOWTAIL,
+                FishingItems.YELLOWTAIL,
                 0.78f,
                 setOf(
                     Season.FALL.withStage(Season.Stage.LATE),

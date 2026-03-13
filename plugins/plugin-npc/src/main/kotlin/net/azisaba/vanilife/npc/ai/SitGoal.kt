@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.npc.ai.goal
+package net.azisaba.vanilife.npc.ai
 
 import com.destroystokyo.paper.entity.ai.Goal
 import com.destroystokyo.paper.entity.ai.GoalKey

@@ -7,7 +7,7 @@ import io.papermc.paper.registry.event.RegistryEvents
 class Bootstrap : PluginBootstrap {
     override fun bootstrap(context: BootstrapContext) {
         context.lifecycleManager.registerEventHandler(
-            RegistryEvents.SERVER_ITEM.compose().newHandler(FishItems::bootstrap)
+            RegistryEvents.SERVER_ITEM.compose().newHandler(FishingItems::bootstrap)
         )
     }
 }

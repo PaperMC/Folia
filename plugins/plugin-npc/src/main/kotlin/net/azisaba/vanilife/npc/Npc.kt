@@ -8,8 +8,9 @@ import io.papermc.paper.registry.data.dialog.type.DialogType
 import kr.toxicity.model.api.bukkit.platform.BukkitEntity
 import kr.toxicity.model.api.tracker.Tracker
 import net.azisaba.vanilife.islands.Island
-import net.azisaba.vanilife.npc.ai.goal.SitGoal
-import net.azisaba.vanilife.npc.ai.goal.TradingGoal
+import net.azisaba.vanilife.npc.ai.ResearchingGoal
+import net.azisaba.vanilife.npc.ai.SitGoal
+import net.azisaba.vanilife.npc.ai.TradingGoal
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -18,12 +19,14 @@ import org.bukkit.RegionAccessor
 import org.bukkit.entity.Chicken
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.Merchant
 
 fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
     val chicken = spawn(location, Chicken::class.java) { spawned ->
         spawned.isSilent = true
         spawned.isPersistent = false
+        spawned.equipment.setItemInMainHand(ItemStack.of(NpcItems.UNREADABLE_RECIPE))
     }
     return WildNpcImpl(npcType, chicken)
 }
@@ -64,8 +67,9 @@ private abstract class AbstractNpcImpl(override val npcType: NpcType, protected 
     protected val tracker: Tracker = npcType.modelOrThrow().create(BukkitEntity(mob))
 
     init {
-        Bukkit.getMobGoals().addGoal(mob, 2, TradingGoal(this, mob, tracker))
-        Bukkit.getMobGoals().addGoal(mob, 1, SitGoal(mob, tracker))
+        Bukkit.getMobGoals().addGoal(mob, 1, ResearchingGoal(mob, tracker))
+        Bukkit.getMobGoals().addGoal(mob, 3, TradingGoal(this, mob, tracker))
+        Bukkit.getMobGoals().addGoal(mob, 2, SitGoal(mob, tracker))
     }
 
     override fun updateMerchantRecipes() {
