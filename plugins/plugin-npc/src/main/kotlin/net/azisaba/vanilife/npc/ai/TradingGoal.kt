@@ -7,9 +7,11 @@ import kr.toxicity.model.api.bukkit.platform.BukkitPlayer
 import kr.toxicity.model.api.event.hitbox.HitBoxInteractEvent
 import kr.toxicity.model.api.tracker.Tracker
 import net.azisaba.vanilife.npc.Npc
+import net.azisaba.vanilife.npc.NpcFonts
 import net.azisaba.vanilife.npc.NpcItems
 import net.azisaba.vanilife.npc.NpcType
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryType
@@ -53,7 +55,13 @@ internal class TradingGoal(
     override fun start() {
         val trader = activeTrader ?: return
         val view = MenuType.MERCHANT.builder()
-            .title(Component.text("NPC"))
+            .title(
+                Component.text()
+                    .append(Component.text(npc.npcType.icon, NamedTextColor.WHITE).font(NpcFonts.NPC_ICONS))
+                    .appendSpace()
+                    .append(npc.customName() ?: Component.text("ねこ"))
+                    .build()
+            )
             .merchant(npc.merchant)
             .build(trader)
         trader.openInventory(view)

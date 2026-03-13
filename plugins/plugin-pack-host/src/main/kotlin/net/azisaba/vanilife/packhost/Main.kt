@@ -17,6 +17,7 @@ import net.azisaba.vanilife.fishing.FishingItemModels
 import net.azisaba.vanilife.fishing.FishingModels
 import net.azisaba.vanilife.fishing.FishingTranslations
 import net.azisaba.vanilife.islands.IslandsFonts
+import net.azisaba.vanilife.npc.NpcFonts
 import net.azisaba.vanilife.npc.NpcItemModels
 import net.azisaba.vanilife.npc.NpcModels
 import net.azisaba.vanilife.npc.NpcTranslations
@@ -39,6 +40,7 @@ internal class Main : JavaPlugin() {
             font {
                 FishingFonts.FISH_SHADOWS to FishingFonts.fishShadows()
                 IslandsFonts.WAVES to IslandsFonts.waves()
+                NpcFonts.NPC_ICONS to NpcFonts.npcIcons()
             }
 
             items {

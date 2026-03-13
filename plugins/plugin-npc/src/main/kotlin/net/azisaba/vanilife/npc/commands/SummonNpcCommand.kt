@@ -23,7 +23,7 @@ internal object SummonNpcCommand : KoinComponent {
     private fun summon(context: CommandContext<CommandSourceStack>): Int {
         val spawnLocation = context.source.location
         plugin.launch(plugin.regionDispatcher(spawnLocation)) {
-            spawnLocation.world.spawn(spawnLocation, NpcType.PLAINS)
+            spawnLocation.world.spawn(spawnLocation, NpcType.NEKO)
         }
         return Command.SINGLE_SUCCESS
     }

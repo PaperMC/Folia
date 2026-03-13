@@ -5,13 +5,14 @@ import kr.toxicity.model.api.data.renderer.ModelRenderer
 import net.azisaba.vanilife.npc.trading.MerchantConstructor
 import net.azisaba.vanilife.npc.trading.MerchantConstructors
 
-data class NpcType(val modelName: String, val merchantConstructor: MerchantConstructor) {
+data class NpcType(val icon: Char, val modelName: String, val merchantConstructor: MerchantConstructor) {
     fun modelOrThrow(): ModelRenderer = BetterModel.model(modelName).orElseThrow()
 
     companion object {
-        val PLAINS: NpcType = NpcType(
+        val NEKO: NpcType = NpcType(
+            NpcFonts.NpcIcons.NEKO,
             "npc",
-            MerchantConstructors.PLAINS,
+            MerchantConstructors.NEKO,
         )
     }
 }

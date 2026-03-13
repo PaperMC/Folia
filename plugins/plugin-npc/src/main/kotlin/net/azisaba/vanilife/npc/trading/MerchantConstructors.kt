@@ -5,7 +5,7 @@ import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 
 object MerchantConstructors {
-    val PLAINS: MerchantConstructor = MerchantConstructor {
+    val NEKO: MerchantConstructor = MerchantConstructor {
         add(3, ItemStack.of(CookingItems.TOMATO, 2), ItemStack.of(Material.OAK_LOG, 14), 5)
         add(1, ItemStack.of(CookingItems.JAPANESE_RADISH, 1), ItemStack.of(Material.ICE, 10), 5)
         add(3, ItemStack.of(CookingItems.CUCUMBER, 2), ItemStack.of(Material.WHITE_WOOL, 6), 5)
