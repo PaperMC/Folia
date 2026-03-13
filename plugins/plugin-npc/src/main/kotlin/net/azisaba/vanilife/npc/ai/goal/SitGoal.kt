@@ -7,16 +7,16 @@ import kr.toxicity.model.api.animation.AnimationIterator
 import kr.toxicity.model.api.animation.AnimationModifier
 import kr.toxicity.model.api.bukkit.platform.BukkitPlayer
 import kr.toxicity.model.api.event.hitbox.HitBoxInteractEvent
-import net.azisaba.vanilife.npc.Npc
+import kr.toxicity.model.api.tracker.Tracker
 import org.bukkit.entity.Mob
 import java.util.*
 
-internal class SitGoal(private val npc: Npc) : Goal<Mob> {
+internal class SitGoal(private val mob: Mob, private val tracker: Tracker) : Goal<Mob> {
     private var orderedToSit: Boolean = false
     private var inSittingPose: Boolean = false
 
     init {
-        npc.tracker.listenHitBox(HitBoxInteractEvent::class.java) { event ->
+        tracker.listenHitBox(HitBoxInteractEvent::class.java) { event ->
             val player = (event.who as? BukkitPlayer)?.source() ?: return@listenHitBox
             if (player.isSneaking) {
                 orderedToSit = !orderedToSit
@@ -24,27 +24,28 @@ internal class SitGoal(private val npc: Npc) : Goal<Mob> {
         }
     }
 
+    override fun getKey(): GoalKey<Mob> = NpcGoalKeys.SIT
+
+    override fun getTypes(): EnumSet<GoalType> = EnumSet.of(GoalType.MOVE, GoalType.JUMP)
+
     override fun shouldActivate(): Boolean {
         if (!orderedToSit) return false
-        if (npc.mob.isInWater) return false
-        if (!npc.mob.isOnGround) return false
+        if (mob.isInWater) return false
+        if (!mob.isOnGround) return false
         return true
     }
 
     override fun shouldStayActive(): Boolean {
-        return orderedToSit && npc.mob.isOnGround && !npc.mob.isInWater
-    }
-
-    override fun tick() {
-        npc.mob.pathfinder.stopPathfinding()
+        return orderedToSit && mob.isOnGround && !mob.isInWater
     }
 
     override fun start() {
-        npc.mob.pathfinder.stopPathfinding()
+        mob.pathfinder.stopPathfinding()
         if (!inSittingPose) {
             inSittingPose = true
-            npc.tracker.animate(
-                "idle", AnimationModifier.builder()
+            tracker.animate(
+                "idle",
+                AnimationModifier.builder()
                     .type(AnimationIterator.Type.LOOP)
                     .build()
             )
@@ -54,11 +55,11 @@ internal class SitGoal(private val npc: Npc) : Goal<Mob> {
     override fun stop() {
         if (inSittingPose) {
             inSittingPose = false
-            npc.tracker.stopAnimation("idle")
+            tracker.stopAnimation("idle")
         }
     }
 
-    override fun getKey(): GoalKey<Mob> = NpcGoalKeys.SIT
-
-    override fun getTypes(): EnumSet<GoalType> = EnumSet.of(GoalType.MOVE, GoalType.JUMP)
+    override fun tick() {
+        mob.pathfinder.stopPathfinding()
+    }
 }
