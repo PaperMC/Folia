@@ -83,12 +83,11 @@ public record ServerItemLoreStyle(List<ConditionedPart> conditionedParts) {
 
                     builder.add(Component.translatable("item.vanilife.peak_season"));
 
-                    for (int i = 0; i < ranges.size(); i++) {
-                        if (i > 0) {
-                            builder.add(Component.empty());
-                        }
-                        builder.add(ranges.get(i).toComponent());
+                    for (Range range : ranges) {
+                        builder.add(range.toComponent());
                     }
+
+                    builder.add(Component.translatable(item.translationKey() + ".season"));
                 }
 
                 private List<Range> buildRanges(final List<Season.Sub> sorted) {

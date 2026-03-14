@@ -114,7 +114,7 @@ public enum Season implements Translatable {
             final Month month = LocalDate.now().getMonth();
             if (season.months().getFirst() == month) {
                 return EARLY;
-            } else if (season.months().get(2) == month) {
+            } else if (season.months().get(1) == month) {
                 return MID;
             } else {
                 return LATE;

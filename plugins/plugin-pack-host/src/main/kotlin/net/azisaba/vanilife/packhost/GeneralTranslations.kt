@@ -1,9 +1,13 @@
 package net.azisaba.vanilife.packhost
 
+import io.papermc.paper.registry.RegistryAccess
+import io.papermc.paper.registry.RegistryKey
 import net.azisaba.packed.lang.PackLanguage
 import net.azisaba.packed.lang.Translation
 import net.azisaba.vanilife.Season
+import net.azisaba.vanilife.item.ServerItem
 import net.azisaba.vanilife.registry.data.ServerItemCategory
+import java.time.LocalDate
 
 object GeneralTranslations {
     const val ITEM_VANILIFE_CATEGORY: String = "item.vanilife.category"
@@ -43,6 +47,18 @@ object GeneralTranslations {
         Season.WINTER.withStage(Season.Stage.EARLY).translationKey() to Translation.literal("Early Winter"),
         Season.WINTER.withStage(Season.Stage.MID).translationKey() to Translation.literal("Mid Winter"),
         Season.WINTER.withStage(Season.Stage.LATE).translationKey() to Translation.literal("Late Winter"),
+
+        *RegistryAccess.registryAccess()
+            .getRegistry(RegistryKey.SERVER_ITEM)
+            .filter(ServerItem::hasPeakSeason)
+            .map { item ->
+                item.translationKey() + ".season" to if (Season.Sub.now() in item.peakSeason()) {
+                    Translation.literal("§d§k>>§r§d§lIN SEASON§k<<")
+                } else {
+                    Translation.literal("§8In season in §7${computeMonthsUntilPeakSeason(item)}§8 month(s)")
+                }
+            }
+            .toTypedArray()
     )
 
     fun jp(): PackLanguage = mapOf(
@@ -77,5 +93,29 @@ object GeneralTranslations {
         Season.WINTER.withStage(Season.Stage.EARLY).translationKey() to Translation.literal("初冬"),
         Season.WINTER.withStage(Season.Stage.MID).translationKey() to Translation.literal("仲冬"),
         Season.WINTER.withStage(Season.Stage.LATE).translationKey() to Translation.literal("晩冬"),
+
+        *RegistryAccess.registryAccess()
+            .getRegistry(RegistryKey.SERVER_ITEM)
+            .filter(ServerItem::hasPeakSeason)
+            .map { item ->
+                item.translationKey() + ".season" to if (Season.Sub.now() in item.peakSeason()) {
+                    Translation.literal("§d§k>>§r§d§l旬の季節です§k<<")
+                } else {
+                    Translation.literal("§7${computeMonthsUntilPeakSeason(item)}§8ヶ月後が旬です")
+                }
+            }
+            .toTypedArray()
     )
+
+    private fun computeMonthsUntilPeakSeason(item: ServerItem): Int {
+        val currentMonth = LocalDate.now().monthValue
+        return item.peakSeason()
+            .asSequence()
+            .map { it.season().months()[it.stage().ordinal].value }
+            .distinct()
+            .map { (it - currentMonth + 12) % 12 }
+            .filter { it > 0 }
+            .minOrNull()
+            ?: 0
+    }
 }
