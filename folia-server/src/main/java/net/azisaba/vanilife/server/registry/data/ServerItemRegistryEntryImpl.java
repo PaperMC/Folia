@@ -137,7 +137,7 @@ public record ServerItemRegistryEntryImpl(
         public ServerItemRegistryEntry build() {
             return new ServerItemRegistryEntryImpl(
                     asConfigured(this.translationKey, "translationKey"),
-                    described,
+                    this.described,
                     asConfigured(this.category, "category"),
                     this.peakSeason,
                     this.loreStyle,

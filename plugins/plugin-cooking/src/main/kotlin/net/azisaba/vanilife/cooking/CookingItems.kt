@@ -23,50 +23,35 @@ object CookingItems {
     val BUCKWHEAT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "buckwheat"))
     val CHEESE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cheese"))
     val CHERRY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cherry"))
-    val CHILI_PEPPER: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "chili_pepper"))
+    val CHILI_PEPPER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "chili_pepper"))
     val COFFEE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "coffee"))
-    val COFFEE_BEANS: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "coffee_beans"))
+    val COFFEE_BEANS: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "coffee_beans"))
     val CORN: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "corn"))
-    val COTTON_CANDY: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cotton_candy"))
+    val COTTON_CANDY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cotton_candy"))
     val CUCUMBER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "cucumber"))
     val CURRY_RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "curry_rice"))
-    val DRIED_PERSIMMON: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "dried_persimmon"))
-    val EEL_RICE_BOWL: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel_rice_bowl"))
+    val DRIED_PERSIMMON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "dried_persimmon"))
+    val EEL_RICE_BOWL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eel_rice_bowl"))
     val EGGPLANT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "eggplant"))
-    val FIREFLY_SQUID: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "firefly_squid"))
-    val FRIED_HORSE_MACKEREL: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "fried_horse_mackerel"))
+    val FIREFLY_SQUID: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "firefly_squid"))
+    val FRIED_HORSE_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "fried_horse_mackerel"))
     val GRAPE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grape"))
     val GREEN_ONION: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "green_onion"))
     val GRILLED_AYU: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_ayu"))
-    val GRILLED_MACKEREL: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_mackerel"))
-    val GRILLED_PACIFIC_SAURY: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_pacific_saury"))
-    val GRILLED_SQUID: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_squid"))
-    val HAMBURG_STEAK: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "hamburg_steak"))
-    val JAPANESE_RADISH: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "japanese_radish"))
+    val GRILLED_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_mackerel"))
+    val GRILLED_PACIFIC_SAURY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_pacific_saury"))
+    val GRILLED_SQUID: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "grilled_squid"))
+    val HAMBURG_STEAK: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "hamburg_steak"))
+    val JAPANESE_RADISH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "japanese_radish"))
     val KIWI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "kiwi"))
     val LETTUCE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "lettuce"))
     val LOTUS_ROOT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "lotus_root"))
-    val MARINATED_EGGPLANT: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "marinated_eggplant"))
+    val MARINATED_EGGPLANT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "marinated_eggplant"))
     val MELON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "melon"))
     val MISO: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso"))
-    val MISO_MACKEREL: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso_mackerel"))
+    val MISO_MACKEREL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso_mackerel"))
     val MISO_SOUP: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "miso_soup"))
-    val NAPPA_CABBAGE: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "nappa_cabbage"))
+    val NAPPA_CABBAGE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "nappa_cabbage"))
     val NIKUJAGA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "nikujaga"))
     val ODEN: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "oden"))
     val ONION: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "onion"))
@@ -79,33 +64,24 @@ object CookingItems {
     val RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "rice"))
     val SALAD: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salad"))
     val SALMON_ROE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon_roe"))
-    val SALMON_ROE_SUSHI: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon_roe_sushi"))
+    val SALMON_ROE_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "salmon_roe_sushi"))
     val SARDINE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sardine"))
     val SAUSAGE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sausage"))
-    val SEA_URCHIN_SUSHI: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_urchin_sushi"))
-    val SEAFOOD_RICE_FOWL: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "seafood_rice_fowl"))
+    val SEA_URCHIN_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sea_urchin_sushi"))
+    val SEAFOOD_RICE_FOWL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "seafood_rice_fowl"))
     val SHAVED_ICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "shaved_ice"))
-    val SKIPJACK_TUNA: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "skipjack_tuna"))
+    val SKIPJACK_TUNA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "skipjack_tuna"))
     val SOBA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soba"))
-    val SOFT_SERVE_ICE_CREAM: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soft_serve_ice_cream"))
+    val SOFT_SERVE_ICE_CREAM: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soft_serve_ice_cream"))
     val SOYBEANS: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "soybeans"))
     val SPINACH: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "spinach"))
     val SQUID_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "squid_sushi"))
-    val STEAMED_RICE: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "steamed_rice"))
+    val STEAMED_RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "steamed_rice"))
     val STRAWBERRY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "strawberry"))
-    val SWEET_POTATO: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sweet_potato"))
+    val SWEET_POTATO: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "sweet_potato"))
     val TAKOYAKI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "takoyaki"))
-    val TAMAGO_SUSHI: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tamago_sushi"))
-    val TERIYAKI_YELLOWTAIL: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "teriyaki_yellowtail"))
+    val TAMAGO_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tamago_sushi"))
+    val TERIYAKI_YELLOWTAIL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "teriyaki_yellowtail"))
     val TOMATO: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tomato"))
     val TONKATSU: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tonkatsu"))
     val TUNA_SUSHI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "tuna_sushi"))

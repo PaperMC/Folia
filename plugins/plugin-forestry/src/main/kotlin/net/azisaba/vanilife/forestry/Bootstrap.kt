@@ -7,7 +7,7 @@ import io.papermc.paper.registry.event.RegistryEvents
 internal class Bootstrap : PluginBootstrap {
     override fun bootstrap(context: BootstrapContext) {
         context.lifecycleManager.registerEventHandler(
-            RegistryEvents.ENCHANTMENT.compose().newHandler(CutAllEnchantments::bootstrap)
+            RegistryEvents.ENCHANTMENT.compose().newHandler(ForestryEnchantments::bootstrap)
         )
     }
 }

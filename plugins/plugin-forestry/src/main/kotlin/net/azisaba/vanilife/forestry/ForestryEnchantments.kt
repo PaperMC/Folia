@@ -11,7 +11,7 @@ import net.kyori.adventure.text.Component
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.EquipmentSlotGroup
 
-object CutAllEnchantments {
+object ForestryEnchantments {
     val CUT_ALL: TypedKey<Enchantment> = TypedKey.create(RegistryKey.ENCHANTMENT, Key.key(Vanilife.NAMESPACE, "cut_all"))
 
     fun bootstrap(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>) {

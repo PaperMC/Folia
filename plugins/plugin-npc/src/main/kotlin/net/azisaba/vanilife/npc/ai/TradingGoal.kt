@@ -8,8 +8,7 @@ import kr.toxicity.model.api.event.hitbox.HitBoxInteractEvent
 import kr.toxicity.model.api.tracker.Tracker
 import net.azisaba.vanilife.npc.Npc
 import net.azisaba.vanilife.npc.NpcFonts
-import net.azisaba.vanilife.npc.NpcItems
-import net.azisaba.vanilife.npc.NpcType
+import net.azisaba.vanilife.npc.recipe.UnreadableRecipe
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.Mob
@@ -27,12 +26,7 @@ internal class TradingGoal(
     private var activeTrader: Player? = null
 
     init {
-        tracker.listenHitBox(HitBoxInteractEvent::class.java) { event ->
-            val player = (event.who as? BukkitPlayer)?.source() ?: return@listenHitBox
-            if (!player.isSneaking && !player.equipment.itemInMainHand.isOf(NpcItems.UNREADABLE_RECIPE)) {
-                requestedTrader = player
-            }
-        }
+        tracker.listenHitBox(HitBoxInteractEvent::class.java, ::handleHitBoxInteract)
     }
 
     override fun getKey(): GoalKey<Mob> = NpcGoalKeys.TRADING
@@ -76,6 +70,15 @@ internal class TradingGoal(
         val trader = activeTrader ?: return
         mob.pathfinder.stopPathfinding()
         mob.lookAt(trader)
+    }
+
+    private fun handleHitBoxInteract(event: HitBoxInteractEvent) {
+        val player = (event.who as? BukkitPlayer)?.source() ?: return
+        val itemStack = player.equipment.itemInMainHand
+        val serverItem = itemStack.serverItem()
+        if (!player.isSneaking && (serverItem == null || UnreadableRecipe.byRecipeItem(serverItem) == null)) {
+            requestedTrader = player
+        }
     }
 
     private fun canStartTrade(player: Player): Boolean {

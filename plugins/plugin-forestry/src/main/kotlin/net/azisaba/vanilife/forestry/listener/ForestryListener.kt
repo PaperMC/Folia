@@ -2,7 +2,7 @@ package net.azisaba.vanilife.forestry.listener
 
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
-import net.azisaba.vanilife.forestry.CutAllEnchantments
+import net.azisaba.vanilife.forestry.ForestryEnchantments
 import net.azisaba.vanilife.forestry.cutdown.CutDownAnimator
 import net.azisaba.vanilife.forestry.cutdown.CutDownContext
 import net.azisaba.vanilife.forestry.finder.TreeFinderRouter
@@ -21,7 +21,7 @@ internal class ForestryListener(
 
         val enchantment = RegistryAccess.registryAccess()
             .getRegistry(RegistryKey.ENCHANTMENT)
-            .getOrThrow(CutAllEnchantments.CUT_ALL)
+            .getOrThrow(ForestryEnchantments.CUT_ALL)
 
         if (itemStack.containsEnchantment(enchantment) && finderRouter.findApplicableFinders(event.block).isNotEmpty()) {
             val blockData = event.block.blockData
