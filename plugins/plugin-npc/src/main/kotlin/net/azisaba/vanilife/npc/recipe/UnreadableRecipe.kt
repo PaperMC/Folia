@@ -12,7 +12,9 @@ import net.kyori.adventure.audience.Audience
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.MerchantRecipe
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
+import org.jetbrains.annotations.ApiStatus
 
 sealed interface UnreadableRecipe {
     val recipeItem: TypedKey<net.azisaba.vanilife.item.ServerItem>
@@ -23,6 +25,11 @@ sealed interface UnreadableRecipe {
 
     fun createResultItem(): ItemStack
 
+    fun toMerchantRecipe(): MerchantRecipe = MerchantRecipe(createResultItem(), 8).apply {
+        addIngredient(ItemStack.of(Material.LAPIS_LAZULI, 15))
+    }
+
+    @ApiStatus.Internal
     fun recipeItem(builder: ServerItemRegistryEntry.Builder) {
         builder.translationKey(NpcTranslations.ITEM_VANILIFE_UNREADABLE_RECIPE)
             .describe()

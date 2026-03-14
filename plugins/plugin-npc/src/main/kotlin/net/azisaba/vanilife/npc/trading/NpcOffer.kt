@@ -57,13 +57,13 @@ fun interface NpcOffer {
                 val costAmount = cost.second.random(random)
                 addIngredient(ItemStack.of(cost.first, costAmount))
 
-                val peakSeason = RegistryAccess.registryAccess()
+                val targetPeriod = RegistryAccess.registryAccess()
                     .getRegistry(RegistryKey.SERVER_ITEM)
                     .getOrThrow(result.first)
                     .peakSeason()
 
-                if (Season.Sub.now() in peakSeason) {
-                    specialPrice = -(costAmount * 0.3).toInt()
+                if (Season.Sub.now() in targetPeriod) {
+                    specialPrice = -(costAmount * 0.5).toInt()
                 }
             }
         }

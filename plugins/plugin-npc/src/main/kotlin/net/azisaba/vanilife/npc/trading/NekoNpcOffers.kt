@@ -22,7 +22,7 @@ private val offerList: List<NpcOffer> = listOf(
     NpcOffer.itemWithSeasonalDiscount(CookingItems.KIWI to 1..2, Material.PACKED_ICE to 10..15),
     NpcOffer.itemWithSeasonalDiscount(CookingItems.LETTUCE to 1..2, Material.SPRUCE_LOG to 12..16),
     NpcOffer.itemWithSeasonalDiscount(CookingItems.LOTUS_ROOT to 1..2, Material.BLUE_ORCHID to 6..8),
-    NpcOffer.itemWithSeasonalDiscount(CookingItems.MELON to 1..1, Material.DIAMOND to 1..2),
+    NpcOffer.item(CookingItems.MELON to 1..1, Material.DIAMOND to 1..2),
     NpcOffer.itemWithSeasonalDiscount(CookingItems.MISO to 1..2, Material.BIRCH_LOG to 12..16),
     NpcOffer.itemWithSeasonalDiscount(CookingItems.NAPPA_CABBAGE to 1..2, Material.SNOWBALL to 48..54),
     NpcOffer.itemWithSeasonalDiscount(CookingItems.ONION to 1..2, Material.POPPY to 8..12),

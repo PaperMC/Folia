@@ -9,13 +9,11 @@ import kr.toxicity.model.api.animation.AnimationIterator
 import kr.toxicity.model.api.animation.AnimationModifier
 import kr.toxicity.model.api.bukkit.platform.BukkitEntity
 import kr.toxicity.model.api.tracker.Tracker
-import net.azisaba.vanilife.fishing.FishingItems
 import net.azisaba.vanilife.islands.Island
 import net.azisaba.vanilife.npc.ai.ReadRecipeGoal
 import net.azisaba.vanilife.npc.ai.SitGoal
 import net.azisaba.vanilife.npc.ai.TradingGoal
 import net.azisaba.vanilife.npc.recipe.UnreadableRecipe
-import net.azisaba.vanilife.npc.recipe.UnreadableRecipeReader
 import net.kyori.adventure.audience.Audience
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
@@ -25,9 +23,7 @@ import org.bukkit.RegionAccessor
 import org.bukkit.entity.Chicken
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.Merchant
-import org.bukkit.inventory.MerchantRecipe
 
 fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
     val chicken = spawn(location, Chicken::class.java) { spawned ->
@@ -37,10 +33,12 @@ fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
     return WildNpcImpl(npcType, chicken)
 }
 
-sealed interface Npc : Audience, Nameable, UnreadableRecipeReader {
+sealed interface Npc : Audience, Nameable {
     val npcType: NpcType
 
     val merchant: Merchant
+
+    val recipes: Set<UnreadableRecipe>
 
     val isSitting: Boolean
 
@@ -48,7 +46,9 @@ sealed interface Npc : Audience, Nameable, UnreadableRecipeReader {
 
     fun standUp()
 
-    fun updateMerchantRecipes()
+    fun read(recipe: UnreadableRecipe)
+
+    fun rollMerchantRecipes()
 
     fun remove()
 
@@ -73,17 +73,23 @@ sealed interface Npc : Audience, Nameable, UnreadableRecipeReader {
 }
 
 private abstract class AbstractNpcImpl(override val npcType: NpcType, protected val mob: Mob) : Npc {
-    override var merchant: Merchant = this.npcType.offers.bake(12)
+    override val merchant: Merchant = Bukkit.createMerchant()
+
+    override val recipes: Set<UnreadableRecipe>
+        get() = recipesMutable.toSet()
 
     override val isSitting: Boolean
         get() = tracker.bones().any { bone -> bone.runningAnimation()?.name == "sit" }
 
     protected val tracker: Tracker = npcType.modelOrThrow().create(BukkitEntity(mob))
 
+    protected val recipesMutable: MutableSet<UnreadableRecipe> = mutableSetOf()
+
     init {
         Bukkit.getMobGoals().addGoal(mob, 1, ReadRecipeGoal(this, mob, tracker))
         Bukkit.getMobGoals().addGoal(mob, 3, TradingGoal(this, mob, tracker))
         Bukkit.getMobGoals().addGoal(mob, 2, SitGoal(this, mob, tracker))
+        rollMerchantRecipes()
     }
 
     override fun sitDown() {
@@ -99,8 +105,13 @@ private abstract class AbstractNpcImpl(override val npcType: NpcType, protected 
         tracker.stopAnimation("sit")
     }
 
-    override fun updateMerchantRecipes() {
-        merchant = npcType.offers.bake(12)
+    override fun read(recipe: UnreadableRecipe) {
+        recipesMutable.add(recipe)
+        merchant.recipes = listOf(recipe.toMerchantRecipe()) + merchant.recipes
+    }
+
+    override fun rollMerchantRecipes() {
+        merchant.recipes = recipes.map(UnreadableRecipe::toMerchantRecipe) + npcType.offers.roll(15)
     }
 
     override fun remove() {
@@ -110,22 +121,7 @@ private abstract class AbstractNpcImpl(override val npcType: NpcType, protected 
 }
 
 private class WildNpcImpl(npcType: NpcType, mob: Mob) : AbstractNpcImpl(npcType, mob), Npc.Wild {
-    override val readRecipes: Collection<UnreadableRecipe>
-        get() = _readRecipes.toSet()
-
-    private val _readRecipes: MutableSet<UnreadableRecipe> = mutableSetOf()
-
-    override fun readRecipe(recipe: UnreadableRecipe) {
-        _readRecipes.add(recipe)
-        merchant.recipes = merchant.recipes + listOf(
-            MerchantRecipe(recipe.createResultItem(), 5).apply {
-                addIngredient(ItemStack.of(FishingItems.SALMON))
-            }
-        )
-    }
-
-    override fun canRead(recipe: UnreadableRecipe): Boolean = true
-
+    // TODO
     override fun tame(player: Player) {
         val dialog = Dialog.create { builder ->
             builder.empty()
