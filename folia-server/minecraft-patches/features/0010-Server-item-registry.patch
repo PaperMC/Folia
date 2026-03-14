@@ -4,6 +4,19 @@ Date: Tue, 3 Mar 2026 17:49:56 +0900
 Subject: [PATCH] Server item registry
 
 
+diff --git a/io/papermc/paper/threadedregions/ThreadedRegionizer.java b/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+index 604385af903845d966382ad0a4168798e4ed4a0e..b7c4500a40035ead2026e8f2fd4259926137ab7e 100644
+--- a/io/papermc/paper/threadedregions/ThreadedRegionizer.java
++++ b/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+@@ -617,7 +617,7 @@ public final class ThreadedRegionizer<R extends ThreadedRegionizer.ThreadedRegio
+             newRegions.add(currRegion);
+         }
+ 
+-        // now we have split the regions into separate parts, we can split recalculate
++        // now we have split the regions into separate conditionedParts, we can split recalculate
+ 
+         if (newRegions.size() == 1) {
+             // no need to split anything, we're done here
 diff --git a/net/minecraft/core/registries/BuiltInRegistries.java b/net/minecraft/core/registries/BuiltInRegistries.java
 index d3822f1713f588e9c7a41ecb408db99689f3d2ba..00d89f0cb74392227fb6e49251f8b71c368c0b9d 100644
 --- a/net/minecraft/core/registries/BuiltInRegistries.java
@@ -51,6 +64,46 @@ index ab7f29272be21d2815ccb5add96def059442f250..7b443c0b0b8cef92ab001ebdc785cdaf
  
      public static ResourceKey<Level> levelStemToLevel(ResourceKey<LevelStem> levelStem) {
          return ResourceKey.create(DIMENSION, levelStem.identifier());
+diff --git a/net/minecraft/network/chat/contents/TranslatableContents.java b/net/minecraft/network/chat/contents/TranslatableContents.java
+index 8da489e8179f772ed439360c3451fdff15f0dc22..bbc2de522b2b6702a7b2b0f85a9ff767cdf26e46 100644
+--- a/net/minecraft/network/chat/contents/TranslatableContents.java
++++ b/net/minecraft/network/chat/contents/TranslatableContents.java
+@@ -178,7 +178,7 @@ public class TranslatableContents implements ComponentContents {
+ 
+     @Override
+     public <T> Optional<T> visit(FormattedText.ContentConsumer<T> contentConsumer) {
+-        // Paper start - Count visited parts
++        // Paper start - Count visited conditionedParts
+         try {
+             return this.visit(new TranslatableContentConsumer<>(contentConsumer));
+         } catch (IllegalArgumentException ignored) {
+@@ -187,7 +187,7 @@ public class TranslatableContents implements ComponentContents {
+     }
+ 
+     private <T> Optional<T> visit(TranslatableContentConsumer<T> contentConsumer) {
+-        // Paper end - Count visited parts
++        // Paper end - Count visited conditionedParts
+         this.decompose();
+ 
+         for (FormattedText formattedText : this.decomposedParts) {
+@@ -200,7 +200,7 @@ public class TranslatableContents implements ComponentContents {
+         return Optional.empty();
+     }
+ 
+-    // Paper start - Count visited parts
++    // Paper start - Count visited conditionedParts
+     private static final class TranslatableContentConsumer<T> implements FormattedText.ContentConsumer<T> {
+         private static final IllegalArgumentException NESTED_TOO_LONG = new IllegalArgumentException("Too long");
+ 
+@@ -219,7 +219,7 @@ public class TranslatableContents implements ComponentContents {
+             return this.visitor.accept(asString);
+         }
+     }
+-    // Paper end - Count visited parts
++    // Paper end - Count visited conditionedParts
+ 
+     @Override
+     public MutableComponent resolve(@Nullable CommandSourceStack source, @Nullable Entity entity, int recursionDepth) throws CommandSyntaxException {
 diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
 index 4a700aa0e68044bb950710be679861230ab5223d..b7b9d7807334bab6b8ad934b441aa18bd168c8eb 100644
 --- a/net/minecraft/resources/RegistryDataLoader.java
@@ -68,6 +121,32 @@ index 4a700aa0e68044bb950710be679861230ab5223d..b7b9d7807334bab6b8ad934b441aa18b
  import net.azisaba.vanilife.annotations.Modified;
  import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.CrashReport;
+diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index bdd3062d0e2cca647c749259c8d497d05f7fed86..578bad3c53aba748601a3b7686f7cef5355ba25c 100644
+--- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2464,7 +2464,7 @@ public class ServerGamePacketListenerImpl
+             return;
+         }
+ 
+-        // Remove signed parts if the command was changed
++        // Remove signed conditionedParts if the command was changed
+         if (!command.equals(packet.command())) {
+             parseResults = this.parseCommand(command);
+             map = Collections.emptyMap();
+diff --git a/net/minecraft/world/level/ServerExplosion.java b/net/minecraft/world/level/ServerExplosion.java
+index 08a1be57e1057a9e961eeb8f59cd12e98ed52bab..85f9767632b21d4194076b2205422d909791c56b 100644
+--- a/net/minecraft/world/level/ServerExplosion.java
++++ b/net/minecraft/world/level/ServerExplosion.java
+@@ -504,7 +504,7 @@ public class ServerExplosion implements Explosion {
+                             // - Setting a velocity to a EnderDragonPart is ignored (and therefore not needed)
+                             // - Damaging EnderDragonPart while forward the damage to EnderDragon
+                             // - Damaging EnderDragon does nothing
+-                            // - EnderDragon hitbox always covers the other parts and is therefore always present
++                            // - EnderDragon hitbox always covers the other conditionedParts and is therefore always present
+                             if (entity instanceof EnderDragonPart) {
+                                 continue;
+                             }
 diff --git a/net/minecraft/world/level/biome/BiomeManager.java b/net/minecraft/world/level/biome/BiomeManager.java
 index 1ee7b32ae9dc579337520edfbf337ffaeaeebf00..82d79c6e2a7d5c56992e9558befc7ccfbc45b312 100644
 --- a/net/minecraft/world/level/biome/BiomeManager.java
@@ -356,3 +435,18 @@ index 51e0290e9d1b0e81174260d9b5470ce5d2e2db54..85b32eafcd45dc5c9e881c328ca8670e
  import net.minecraft.core.BlockPos;
  import net.minecraft.util.RandomSource;
  
+diff --git a/net/minecraft/world/phys/shapes/Shapes.java b/net/minecraft/world/phys/shapes/Shapes.java
+index fc2b393d24fef8ce3a74d38d0937bfe5604eae87..e516e5f19835556887069369c38e18d849732685 100644
+--- a/net/minecraft/world/phys/shapes/Shapes.java
++++ b/net/minecraft/world/phys/shapes/Shapes.java
+@@ -64,8 +64,8 @@ public final class Shapes {
+     };
+ 
+     private static double[] generateCubeParts(final int parts) {
+-        // note: parts is a power of two, so we do not need to worry about loss of precision here
+-        // note: parts is from [2^0, 2^3]
++        // note: conditionedParts is a power of two, so we do not need to worry about loss of precision here
++        // note: conditionedParts is from [2^0, 2^3]
+         final double inc = 1.0 / (double)parts;
+ 
+         final double[] ret = new double[parts + 1];

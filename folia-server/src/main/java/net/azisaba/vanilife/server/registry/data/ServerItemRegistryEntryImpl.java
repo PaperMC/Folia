@@ -12,6 +12,7 @@ import java.util.Set;
 import net.azisaba.vanilife.Season;
 import net.azisaba.vanilife.item.ServerItem;
 import net.azisaba.vanilife.registry.data.ServerItemCategory;
+import net.azisaba.vanilife.registry.data.ServerItemLoreStyle;
 import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
 import net.kyori.adventure.text.Component;
 import net.minecraft.core.component.DataComponentMap;
@@ -28,6 +29,7 @@ public record ServerItemRegistryEntryImpl(
         boolean described,
         ServerItemCategory category,
         Set<Season.Sub> peakSeason,
+        ServerItemLoreStyle loreStyle,
         DataComponentMap components
 ) implements ServerItemRegistryEntry {
     @Override
@@ -58,7 +60,7 @@ public record ServerItemRegistryEntryImpl(
 
     @Override
     public void applyItemLore(final ItemStack itemStack) {
-        final ItemLore itemLore = ServerItemLoreBuilder.DEFAULT.build(this);
+        final ItemLore itemLore = this.loreStyle.itemLore(this);
         itemStack.setData(DataComponentTypes.LORE, itemLore);
     }
 
@@ -68,6 +70,7 @@ public record ServerItemRegistryEntryImpl(
         private boolean described = false;
         private @Nullable ServerItemCategory category;
         private Set<Season.Sub> peakSeason = Collections.emptySet();
+        private ServerItemLoreStyle loreStyle = ServerItemLoreStyle.defaultStyle();
         private final DataComponentMap.Builder componentsBuilder = DataComponentMap.builder();
 
         public BuilderImpl(final Conversions conversions, final @Nullable ServerItemRegistryEntry initial) {
@@ -76,12 +79,14 @@ public record ServerItemRegistryEntryImpl(
                     final boolean initialDescribed,
                     final ServerItemCategory initialCategory,
                     final Set<Season.Sub> initialPeakSeason,
+                    final ServerItemLoreStyle initialLoreStyle,
                     final DataComponentMap components
             )) {
                 this.translationKey = initialTranslationKey;
                 this.described = initialDescribed;
                 this.category = initialCategory;
                 this.peakSeason = initialPeakSeason;
+                this.loreStyle = initialLoreStyle;
                 this.componentsBuilder.addAll(components);
             }
         }
@@ -111,6 +116,12 @@ public record ServerItemRegistryEntryImpl(
         }
 
         @Override
+        public Builder loreStyle(final ServerItemLoreStyle loreStyle) {
+            this.loreStyle = loreStyle;
+            return this;
+        }
+
+        @Override
         public <T> Builder withComponent(final DataComponentType.Valued<T> type, T value) {
             this.withComponentInternal((PaperDataComponentType.ValuedImpl<T, ?>) type, value);
             return this;
@@ -129,6 +140,7 @@ public record ServerItemRegistryEntryImpl(
                     described,
                     asConfigured(this.category, "category"),
                     this.peakSeason,
+                    this.loreStyle,
                     this.componentsBuilder.build()
             );
         }

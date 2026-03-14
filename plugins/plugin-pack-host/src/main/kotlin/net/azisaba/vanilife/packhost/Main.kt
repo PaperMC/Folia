@@ -41,6 +41,7 @@ internal class Main : JavaPlugin() {
                 FishingFonts.FISH_SHADOWS to FishingFonts.fishShadows()
                 IslandsFonts.WAVES to IslandsFonts.waves()
                 NpcFonts.NPC_ICONS to NpcFonts.npcIcons()
+                GeneralFonts.DEFAULT to GeneralFonts.default()
             }
 
             items {
@@ -246,6 +247,8 @@ internal class Main : JavaPlugin() {
             includeJavaResources(net.azisaba.vanilife.fishing.Main::class)
             includeJavaResources(net.azisaba.vanilife.islands.Main::class)
             includeJavaResources(net.azisaba.vanilife.npc.Main::class)
+            includeJavaResources(Main::class)
+
             includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "assets", "assets")
             includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_legacy", "bettermodel_legacy")
             includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_modern", "bettermodel_modern")

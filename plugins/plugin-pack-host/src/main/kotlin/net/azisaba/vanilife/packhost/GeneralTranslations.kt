@@ -58,8 +58,8 @@ object GeneralTranslations {
         ServerItemCategory.DESSERT.translationKey() to Translation.literal("デザート"),
 
         ITEM_VANILIFE_PEAK_SEASON to Translation.literal("旬の時期："),
-        ITEM_VANILIFE_PEAK_SEASON_RANGE_MULTIPLE to Translation.literal("- ") + Translation.placeholder() + Translation.literal("から") + Translation.placeholder(),
-        ITEM_VANILIFE_PEAK_SEASON_RANGE_SINGLE to Translation.literal("- ") + Translation.placeholder(),
+        ITEM_VANILIFE_PEAK_SEASON_RANGE_MULTIPLE to Translation.literal("・") + Translation.placeholder() + Translation.literal("から") + Translation.placeholder(),
+        ITEM_VANILIFE_PEAK_SEASON_RANGE_SINGLE to Translation.literal("・") + Translation.placeholder(),
 
         Season.SPRING.translationKey() to Translation.literal("春"),
         Season.SPRING.withStage(Season.Stage.EARLY).translationKey() to Translation.literal("早春"),

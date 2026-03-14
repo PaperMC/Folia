@@ -4,6 +4,42 @@ Date: Tue, 3 Mar 2026 17:50:15 +0900
 Subject: [PATCH] Server item registry
 
 
+diff --git a/src/main/java/com/destroystokyo/paper/SkinParts.java b/src/main/java/com/destroystokyo/paper/SkinParts.java
+index d48cddad85bf4163269aaf795e4e2d16151ea740..370680209a7fb3fd43c6b466870a7314e70bcde4 100644
+--- a/src/main/java/com/destroystokyo/paper/SkinParts.java
++++ b/src/main/java/com/destroystokyo/paper/SkinParts.java
+@@ -5,13 +5,13 @@ import org.jetbrains.annotations.Contract;
+ import org.jspecify.annotations.NullMarked;
+ 
+ /**
+- * Represents the different parts of a player's skin that can be toggled on or off.
++ * Represents the different conditionedParts of a player's skin that can be toggled on or off.
+  */
+ @NullMarked
+ public interface SkinParts {
+ 
+     /**
+-     * Creates a new instance of {@link SkinParts} with all parts enabled.
++     * Creates a new instance of {@link SkinParts} with all conditionedParts enabled.
+      *
+      * @return a new {@link SkinParts} instance
+      */
+diff --git a/src/main/java/io/papermc/paper/plugin/bootstrap/PluginBootstrap.java b/src/main/java/io/papermc/paper/plugin/bootstrap/PluginBootstrap.java
+index b409620d9724e064fd12b1a5456574e3e3aad025..36f1834b0077e5facdc5b3c06819635d2ed26743 100644
+--- a/src/main/java/io/papermc/paper/plugin/bootstrap/PluginBootstrap.java
++++ b/src/main/java/io/papermc/paper/plugin/bootstrap/PluginBootstrap.java
+@@ -6,9 +6,9 @@ import org.jetbrains.annotations.ApiStatus;
+ import org.jspecify.annotations.NullMarked;
+ 
+ /**
+- * A plugin bootstrap is meant for loading certain parts of the plugin before the server is loaded.
++ * A plugin bootstrap is meant for loading certain conditionedParts of the plugin before the server is loaded.
+  * <p>
+- * Plugin bootstrapping allows values to be initialized in certain parts of the server that might not be allowed
++ * Plugin bootstrapping allows values to be initialized in certain conditionedParts of the server that might not be allowed
+  * when the server is running.
+  * <p>
+  * Your bootstrap class will be on the same classloader as your JavaPlugin.
 diff --git a/src/main/java/io/papermc/paper/registry/RegistryKey.java b/src/main/java/io/papermc/paper/registry/RegistryKey.java
 index dcee3d88f5b77cdd5c7cbc07f73f54cc548d2f94..572b91fddcecf27c2a1b34ca27765d3173261f58 100644
 --- a/src/main/java/io/papermc/paper/registry/RegistryKey.java
@@ -56,6 +92,19 @@ index ac68dfce754dc7e014bb31bba32d9b246ffd411c..084a31cec9720c409b3e814723509ea9
      // creates the key without adding to the internal set of keys
      static <T> RegistryKey<T> createInternal(@Subst("some_key") final String key) {
          return new RegistryKeyImpl<>(Key.key(Key.MINECRAFT_NAMESPACE, key));
+diff --git a/src/main/java/io/papermc/paper/registry/event/RegistryEntryAddEvent.java b/src/main/java/io/papermc/paper/registry/event/RegistryEntryAddEvent.java
+index dd9af46618513880f1988e1b955b19a18f8e7480..c4e5fb72c49086c0dadde8f0f59754fd217c0acb 100644
+--- a/src/main/java/io/papermc/paper/registry/event/RegistryEntryAddEvent.java
++++ b/src/main/java/io/papermc/paper/registry/event/RegistryEntryAddEvent.java
+@@ -10,7 +10,7 @@ import org.jetbrains.annotations.ApiStatus;
+ /**
+  * Event object for {@link RegistryEventProvider#entryAdd()}. This
+  * event is fired right before a specific entry is registered in/added to registry.
+- * It provides a way for plugins to modify parts of this entry.
++ * It provides a way for plugins to modify conditionedParts of this entry.
+  *
+  * @param <T> registry entry type
+  * @param <B> registry entry builder type
 diff --git a/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java b/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
 index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..72bd14f2e30a25f1d86e4c09fcd07e755c095e11 100644
 --- a/src/main/java/io/papermc/paper/registry/event/RegistryEvents.java
@@ -80,6 +129,84 @@ index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..72bd14f2e30a25f1d86e4c09fcd07e75
  
      private RegistryEvents() {
      }
+diff --git a/src/main/java/org/bukkit/block/Block.java b/src/main/java/org/bukkit/block/Block.java
+index fbee4ab2faaeba8d798aaba2e1837315ed56a184..e57825a00a3352e0d098d12d55ef07dfe35ca623 100644
+--- a/src/main/java/org/bukkit/block/Block.java
++++ b/src/main/java/org/bukkit/block/Block.java
+@@ -28,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
+  * snapshot state of a block which will not be modified.
+  *
+  * <br>
+- * Note that parts of this class which require access to the world at large
++ * Note that conditionedParts of this class which require access to the world at large
+  * (i.e. lighting and power) may not be able to be safely accessed during world
+  * generation when used in cases like BlockPhysicsEvent!!!!
+  */
+@@ -714,11 +714,11 @@ public interface Block extends Metadatable, Translatable, net.kyori.adventure.tr
+     /**
+      * Checks if this block is passable.
+      * <p>
+-     * A block is passable if it has no colliding parts that would prevent
++     * A block is passable if it has no colliding conditionedParts that would prevent
+      * players from moving through it.
+      * <p>
+      * Examples: Tall grass, flowers, signs, etc. are passable, but open doors,
+-     * fence gates, trap doors, etc. are not because they still have parts that
++     * fence gates, trap doors, etc. are not because they still have conditionedParts that
+      * can be collided with.
+      *
+      * @return <code>true</code> if passable
+diff --git a/src/main/java/org/bukkit/command/defaults/VersionCommand.java b/src/main/java/org/bukkit/command/defaults/VersionCommand.java
+index 29756f4ea6c6abf3b35106ee05a4f9ffd404a6af..5f4d141165c45ba9f3954aaff8209354c09f31b9 100644
+--- a/src/main/java/org/bukkit/command/defaults/VersionCommand.java
++++ b/src/main/java/org/bukkit/command/defaults/VersionCommand.java
+@@ -220,10 +220,10 @@ public class VersionCommand extends BukkitCommand {
+         setVersionMessage(getVersionFetcher().getVersionMessage(version));
+         /*
+         if (version == null) version = "Custom";
+-        String[] parts = version.substring(0, version.indexOf(' ')).split("-");
+-        if (parts.length == 4) {
+-            int cbVersions = getDistance("craftbukkit", parts[3]);
+-            int spigotVersions = getDistance("spigot", parts[2]);
++        String[] conditionedParts = version.substring(0, version.indexOf(' ')).split("-");
++        if (conditionedParts.length == 4) {
++            int cbVersions = getDistance("craftbukkit", conditionedParts[3]);
++            int spigotVersions = getDistance("spigot", conditionedParts[2]);
+             if (cbVersions == -1 || spigotVersions == -1) {
+                 setVersionMessage("Error obtaining version information");
+             } else {
+@@ -234,8 +234,8 @@ public class VersionCommand extends BukkitCommand {
+                 }
+             }
+ 
+-        } else if (parts.length == 3) {
+-            int cbVersions = getDistance("craftbukkit", parts[2]);
++        } else if (conditionedParts.length == 3) {
++            int cbVersions = getDistance("craftbukkit", conditionedParts[2]);
+             if (cbVersions == -1) {
+                 setVersionMessage("Error obtaining version information");
+             } else {
+diff --git a/src/main/java/org/bukkit/entity/ComplexLivingEntity.java b/src/main/java/org/bukkit/entity/ComplexLivingEntity.java
+index 2151e3bac040b0dd47c67ffe3a9de6dc45e9d62c..c1046afcd37805ed0853ecb0ed6f6adb56ab780d 100644
+--- a/src/main/java/org/bukkit/entity/ComplexLivingEntity.java
++++ b/src/main/java/org/bukkit/entity/ComplexLivingEntity.java
+@@ -5,13 +5,13 @@ import org.jetbrains.annotations.NotNull;
+ 
+ /**
+  * Represents a complex living entity - one that is made up of various smaller
+- * parts
++ * conditionedParts
+  */
+ public interface ComplexLivingEntity extends LivingEntity {
+     /**
+-     * Gets a list of parts that belong to this complex entity
++     * Gets a list of conditionedParts that belong to this complex entity
+      *
+-     * @return List of parts
++     * @return List of conditionedParts
+      */
+     @NotNull
+     public Set<ComplexEntityPart> getParts();
 diff --git a/src/main/java/org/bukkit/inventory/ItemStack.java b/src/main/java/org/bukkit/inventory/ItemStack.java
 index f20f072b0978b3ef4b3f36c952d469e0d8d5cd22..1f4a49614820967e28b04631c17f31de6a030a26 100644
 --- a/src/main/java/org/bukkit/inventory/ItemStack.java

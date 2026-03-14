@@ -6,6 +6,7 @@ import java.util.Set;
 import net.azisaba.vanilife.Season;
 import net.azisaba.vanilife.item.ServerItem;
 import net.azisaba.vanilife.registry.data.ServerItemCategory;
+import net.azisaba.vanilife.registry.data.ServerItemLoreStyle;
 import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
@@ -46,6 +47,11 @@ public class ServerItemImpl extends HolderableBase<ServerItemRegistryEntry> impl
     @Override
     public Set<Season.Sub> peakSeason() {
         return this.getHandle().peakSeason();
+    }
+
+    @Override
+    public ServerItemLoreStyle loreStyle() {
+        return this.getHandle().loreStyle();
     }
 
     @Override

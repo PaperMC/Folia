@@ -10,10 +10,10 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public enum Season implements Translatable {
-    SPRING(TextColor.color(242, 156, 167), Month.MARCH, Month.APRIL, Month.MAY),
-    SUMMER(TextColor.color(0, 154, 68), Month.JUNE, Month.JULY, Month.AUGUST),
-    FALL(TextColor.color(224, 126, 16), Month.SEPTEMBER, Month.OCTOBER, Month.NOVEMBER),
-    WINTER(TextColor.color(114, 134, 161), Month.DECEMBER, Month.JANUARY, Month.FEBRUARY);
+    SPRING(TextColor.color(242, 163, 179), Month.MARCH, Month.APRIL, Month.MAY),
+    SUMMER(TextColor.color(126, 215, 193), Month.JUNE, Month.JULY, Month.AUGUST),
+    FALL(TextColor.color(230, 126, 34), Month.SEPTEMBER, Month.OCTOBER, Month.NOVEMBER),
+    WINTER(TextColor.color(143, 163, 191), Month.DECEMBER, Month.JANUARY, Month.FEBRUARY);
 
     public static Season now() {
         final Month month = LocalDate.now().getMonth();

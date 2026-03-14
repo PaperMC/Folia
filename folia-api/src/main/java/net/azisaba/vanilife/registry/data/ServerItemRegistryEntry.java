@@ -32,6 +32,9 @@ public interface ServerItemRegistryEntry extends DataComponentView, Translatable
     @Contract(pure = true)
     Set<Season.Sub> peakSeason();
 
+    @Contract(pure = true)
+    ServerItemLoreStyle loreStyle();
+
     @Contract(mutates = "param1")
     void applyData(final ItemStack itemStack);
 
@@ -59,6 +62,9 @@ public interface ServerItemRegistryEntry extends DataComponentView, Translatable
 
         @Contract(value = "_ -> this", mutates = "this")
         Builder peakSeason(final Season.Sub... peakSeason);
+
+        @Contract(value = "_ -> this", mutates = "this")
+        Builder loreStyle(final ServerItemLoreStyle loreStyle);
 
         @Contract(value = "_, _ -> this", mutates = "this")
         <T> Builder withComponent(final DataComponentType.Valued<T> type, T value);

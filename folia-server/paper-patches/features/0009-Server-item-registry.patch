@@ -4,6 +4,32 @@ Date: Tue, 3 Mar 2026 17:50:11 +0900
 Subject: [PATCH] Server item registry
 
 
+diff --git a/src/main/java/io/papermc/paper/command/brigadier/ApiMirrorRootNode.java b/src/main/java/io/papermc/paper/command/brigadier/ApiMirrorRootNode.java
+index 51cd385821a4099f92e4cfb0fb9b6988cd4fe72e..69b90c5f98d18d803fdb41f7ce3aed2bcd5a073d 100644
+--- a/src/main/java/io/papermc/paper/command/brigadier/ApiMirrorRootNode.java
++++ b/src/main/java/io/papermc/paper/command/brigadier/ApiMirrorRootNode.java
+@@ -35,7 +35,7 @@ import org.jetbrains.annotations.Nullable;
+  * <p>
+  * Command nodes such as vanilla (those without a proper "api node")
+  * will be assigned a {@link ShadowBrigNode}.
+- * This prevents certain parts of it (children) from being accessed by the api.
++ * This prevents certain conditionedParts of it (children) from being accessed by the api.
+  */
+ public abstract class ApiMirrorRootNode extends RootCommandNode<CommandSourceStack> {
+ 
+diff --git a/src/main/java/io/papermc/paper/plugin/provider/PluginProvider.java b/src/main/java/io/papermc/paper/plugin/provider/PluginProvider.java
+index fd9748c693a029c0d75f6ad813ea46a2b528d140..56f104e345a694772d9f2f5d43ef3029d6b372f6 100644
+--- a/src/main/java/io/papermc/paper/plugin/provider/PluginProvider.java
++++ b/src/main/java/io/papermc/paper/plugin/provider/PluginProvider.java
+@@ -18,7 +18,7 @@ import java.util.jar.JarFile;
+  * <p>
+  * A PluginProvider is responsible for providing part of a plugin, whether it's a Bootstrapper or Server Plugin.
+  * The point of this class is to be able to create the actual instance later, as at the time this is created the server
+- * may be missing some key parts. For example, the Bukkit singleton will not be initialized yet, therefor we need to
++ * may be missing some key conditionedParts. For example, the Bukkit singleton will not be initialized yet, therefor we need to
+  * have a PluginServerProvider load the server plugin later.
+  * <p>
+  * Plugin providers are currently not exposed in any way of the api. It is preferred that this stays this way,
 diff --git a/src/main/java/io/papermc/paper/registry/PaperRegistries.java b/src/main/java/io/papermc/paper/registry/PaperRegistries.java
 index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..a2993d01c9c83d8ff332312f3534c24d566c7b5d 100644
 --- a/src/main/java/io/papermc/paper/registry/PaperRegistries.java
@@ -31,6 +57,41 @@ index 121babcfdda53e8cade0edfc7f8bd4af56db9abe..a2993d01c9c83d8ff332312f3534c24d
          );
          final Map<RegistryKey<?>, RegistryEntry<?, ?>> byRegistryKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
          final Map<ResourceKey<?>, RegistryEntry<?, ?>> byResourceKey = new IdentityHashMap<>(REGISTRY_ENTRIES.size());
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftRegistry.java b/src/main/java/org/bukkit/craftbukkit/CraftRegistry.java
+index 0d343556fbb699c099a49c2c8df9a816dc6f7ac8..79cb65ca6ae43c91c199b6d4cdb76d5054a1a0e1 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftRegistry.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftRegistry.java
+@@ -49,7 +49,7 @@ public class CraftRegistry<B extends Keyed, M> implements Registry<B> {
+ 
+     /**
+      * Usage note: Only use this method to delegate the conversion methods from the individual Craft classes to here.
+-     * Do not use it in other parts of CraftBukkit, use the methods in the respective Craft classes instead.
++     * Do not use it in other conditionedParts of CraftBukkit, use the methods in the respective Craft classes instead.
+      *
+      * @param minecraft   the minecraft representation
+      * @param registryKey the registry key of the minecraft registry to use
+@@ -94,7 +94,7 @@ public class CraftRegistry<B extends Keyed, M> implements Registry<B> {
+ 
+     /**
+      * Usage note: Only use this method to delegate the conversion methods from the individual Craft classes to here.
+-     * Do not use it in other parts of CraftBukkit, use the methods in the respective Craft classes instead.
++     * Do not use it in other conditionedParts of CraftBukkit, use the methods in the respective Craft classes instead.
+      *
+      * @param bukkit the bukkit representation
+      * @return the minecraft representation of the bukkit value
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMannequin.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMannequin.java
+index 4b5d39ee38886f504522560f087077a2b81a4b16..17f56c6def27dc43030ff3d353645c6b5b38260c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMannequin.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMannequin.java
+@@ -63,7 +63,7 @@ public class CraftMannequin extends CraftLivingEntity implements Mannequin {
+ 
+     @Override
+     public void setSkinParts(final SkinParts parts) {
+-        Preconditions.checkArgument(parts != null, "parts cannot be null");
++        Preconditions.checkArgument(parts != null, "conditionedParts cannot be null");
+         this.getHandle().getEntityData().set(Avatar.DATA_PLAYER_MODE_CUSTOMISATION, (byte) parts.getRaw());
+     }
+ 
 diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
 index 002682049fe890333794072e1e2717004f2ad0cf..a13e672606c16ccb136adac06ef48d4a5aa0ac4e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftItemStack.java
@@ -113,3 +174,44 @@ index 002682049fe890333794072e1e2717004f2ad0cf..a13e672606c16ccb136adac06ef48d4a
      public static final String PDC_CUSTOM_DATA_KEY = "PublicBukkitValues";
      private net.minecraft.nbt.CompoundTag getPdcTag() {
          if (this.handle == null) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftMetaItem.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftMetaItem.java
+index 3825cd713a42397204b13212a47d63626985b71b..00c92f1fbe4507e1daea4d0ef8497d4269296624 100644
+--- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftMetaItem.java
++++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftMetaItem.java
+@@ -1988,8 +1988,8 @@ class CraftMetaItem implements ItemMeta, Damageable, Repairable, BlockDataMeta {
+ 
+     /**
+      * This method is a bit weird...
+-     * Return true if you are a common class OR your uncommon parts are empty.
+-     * Empty uncommon parts implies the NBT data would be equivalent if both were applied to an item
++     * Return true if you are a common class OR your uncommon conditionedParts are empty.
++     * Empty uncommon conditionedParts implies the NBT data would be equivalent if both were applied to an item
+      */
+     @Overridden
+     boolean notUncommon(CraftMetaItem meta) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/tags/DeprecatedCustomTagContainer.java b/src/main/java/org/bukkit/craftbukkit/inventory/tags/DeprecatedCustomTagContainer.java
+index 9496478c869e9c8b0021633cdb858d5cf3611631..45fb0cab7542fb43e82428fc9357e68a6ae93276 100644
+--- a/src/main/java/org/bukkit/craftbukkit/inventory/tags/DeprecatedCustomTagContainer.java
++++ b/src/main/java/org/bukkit/craftbukkit/inventory/tags/DeprecatedCustomTagContainer.java
+@@ -9,7 +9,7 @@ import org.bukkit.persistence.PersistentDataContainer;
+ 
+ /**
+  * The {@link DeprecatedCustomTagContainer} is a simply wrapper implementation
+- * that wraps the new api to still be usable with the old api parts.
++ * that wraps the new api to still be usable with the old api conditionedParts.
+  */
+ @SuppressWarnings("unchecked")
+ public final class DeprecatedCustomTagContainer implements CustomItemTagContainer {
+diff --git a/src/main/resources/configurations/help.yml b/src/main/resources/configurations/help.yml
+index e0958ee252cb38aeb21c2db24a9cbdb134171507..44301bf9d3bcd5199fed84630293a126cfa02db9 100644
+--- a/src/main/resources/configurations/help.yml
++++ b/src/main/resources/configurations/help.yml
+@@ -4,7 +4,7 @@
+ # or extracted from your installed plugins. You only need to modify this file if you wish to add new help pages to
+ # your server or override the help pages of existing plugin commands.
+ # 
+-# This file is divided up into the following parts:
++# This file is divided up into the following conditionedParts:
+ # -- general-topics: lists admin defined help topics
+ # -- index-topics:   lists admin defined index topics
+ # -- amended-topics: lists topic amendments to apply to existing help topics

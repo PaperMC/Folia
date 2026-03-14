@@ -14,10 +14,10 @@ object NpcFonts {
     fun npcIcons(): PackFont = PackFont(
         listOf(
             PackBitmapFontProvider(
-                Key.key(Vanilife.NAMESPACE, "icon/npc/neko.png"),
-                listOf("${NpcIcons.NEKO}"),
-                8,
-                9,
+                file = Key.key(Vanilife.NAMESPACE, "icon/npc/neko.png"),
+                chars = listOf("${NpcIcons.NEKO}"),
+                ascent = 8,
+                height = 9,
             )
         )
     )
