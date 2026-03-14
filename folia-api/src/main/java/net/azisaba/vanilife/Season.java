@@ -2,7 +2,9 @@ package net.azisaba.vanilife;
 
 import java.time.LocalDate;
 import java.time.Month;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.translation.Translatable;
 import org.jspecify.annotations.NullMarked;
@@ -24,19 +26,19 @@ public enum Season implements Translatable {
     }
 
     private final TextColor color;
-    private final Set<Month> months;
+    private final List<Month> months;
 
     Season(final TextColor color, final Month... months) {
         this.color = color;
-        this.months = new HashSet<>(Arrays.asList(months));
+        this.months = Arrays.asList(months);
     }
 
     public TextColor color() {
         return this.color;
     }
 
-    public Set<Month> months() {
-        return Collections.unmodifiableSet(this.months);
+    public List<Month> months() {
+        return this.months;
     }
 
     public Season next() {
@@ -108,10 +110,11 @@ public enum Season implements Translatable {
         EARLY, MID, LATE;
 
         public static Stage now() {
-            final int dayOfMonth = LocalDate.now().getDayOfMonth();
-            if (dayOfMonth <= 10) {
+            final Season season = Season.now();
+            final Month month = LocalDate.now().getMonth();
+            if (season.months().getFirst() == month) {
                 return EARLY;
-            } else if (dayOfMonth <= 20) {
+            } else if (season.months().get(2) == month) {
                 return MID;
             } else {
                 return LATE;
