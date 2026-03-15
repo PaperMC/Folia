@@ -5,6 +5,7 @@ import net.azisaba.packed.lang.Translation
 
 object MiningTranslations {
     const val ITEM_VANILIFE_FROZEN_COAL: String = "item.vanilife.frozen_coal"
+    const val ITEM_VANILIFE_FROZEN_DIAMOND: String = "item.vanilife.frozen_diamond"
     const val ITEM_VANILIFE_FROZEN_EMERALD: String = "item.vanilife.frozen_emerald"
     const val ITEM_VANILIFE_FROZEN_LAPIS_LAZULI: String = "item.vanilife.frozen_lapis_lazuli"
     const val ITEM_VANILIFE_FROZEN_RAW_COPPER: String = "item.vanilife.frozen_raw_copper"
@@ -14,6 +15,7 @@ object MiningTranslations {
 
     fun us(): PackLanguage = mapOf(
         ITEM_VANILIFE_FROZEN_COAL to Translation.literal("Frozen Coal"),
+        ITEM_VANILIFE_FROZEN_DIAMOND to Translation.literal("Frozen Diamond"),
         ITEM_VANILIFE_FROZEN_EMERALD to Translation.literal("Frozen Emerald"),
         ITEM_VANILIFE_FROZEN_LAPIS_LAZULI to Translation.literal("Frozen Lapis Lazuli"),
         ITEM_VANILIFE_FROZEN_RAW_COPPER to Translation.literal("Frozen Raw Copper"),
@@ -24,6 +26,7 @@ object MiningTranslations {
 
     fun jp(): PackLanguage = mapOf(
         ITEM_VANILIFE_FROZEN_COAL to Translation.literal("凍った石炭"),
+        ITEM_VANILIFE_FROZEN_DIAMOND to Translation.literal("凍ったダイヤモンド"),
         ITEM_VANILIFE_FROZEN_EMERALD to Translation.literal("凍ったエメラルド"),
         ITEM_VANILIFE_FROZEN_LAPIS_LAZULI to Translation.literal("凍ったラピスラズリ"),
         ITEM_VANILIFE_FROZEN_RAW_COPPER to Translation.literal("凍った銅の原石"),

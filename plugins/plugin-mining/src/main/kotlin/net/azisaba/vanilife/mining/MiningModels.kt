@@ -8,6 +8,7 @@ import net.kyori.adventure.key.Key
 
 object MiningModels {
     val FROZEN_COAL: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/frozen_coal")
+    val FROZEN_DIAMOND: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/frozen_diamond")
     val FROZEN_EMERALD: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/frozen_emerald")
     val FROZEN_LAPIS_LAZULI: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/frozen_lapis_lazuli")
     val FROZEN_RAW_COPPER: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/frozen_raw_copper")
@@ -16,6 +17,8 @@ object MiningModels {
     val FROZEN_REDSTONE: PackedKey<PackModel> = PackedKey.model(Vanilife.NAMESPACE, "item/frozen_redstone")
 
     fun frozenCoal(): PackModel = PackModel.item(Key.key(Vanilife.NAMESPACE, "item/frozen_coal"))
+
+    fun frozenDiamond(): PackModel = PackModel.item(Key.key(Vanilife.NAMESPACE, "item/frozen_diamond"))
 
     fun frozenEmerald(): PackModel = PackModel.item(Key.key(Vanilife.NAMESPACE, "item/frozen_emerald"))
 

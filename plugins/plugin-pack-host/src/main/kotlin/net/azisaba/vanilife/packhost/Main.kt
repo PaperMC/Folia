@@ -148,6 +148,7 @@ internal class Main : JavaPlugin() {
                 ForestryItemModels.SMALL_TREE_STUMP to ForestryItemModels.smallTreeStump()
 
                 MiningItemModels.FROZEN_COAL to MiningItemModels.frozenCoal()
+                MiningItemModels.FROZEN_DIAMOND to MiningItemModels.frozenDiamond()
                 MiningItemModels.FROZEN_EMERALD to MiningItemModels.frozenEmerald()
                 MiningItemModels.FROZEN_LAPIS_LAZULI to MiningItemModels.frozenLapisLazuli()
                 MiningItemModels.FROZEN_RAW_COPPER to MiningItemModels.frozenRawCopper()
@@ -161,7 +162,7 @@ internal class Main : JavaPlugin() {
 
             lang {
                 PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.us() + NpcTranslations.jp() + GeneralTranslations.jp())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
@@ -261,6 +262,7 @@ internal class Main : JavaPlugin() {
                 ForestryModels.SMALL_TREE_STUMP to ForestryModels.smallTreeStump()
 
                 MiningModels.FROZEN_COAL to MiningModels.frozenCoal()
+                MiningModels.FROZEN_DIAMOND to MiningModels.frozenDiamond()
                 MiningModels.FROZEN_EMERALD to MiningModels.frozenEmerald()
                 MiningModels.FROZEN_LAPIS_LAZULI to MiningModels.frozenLapisLazuli()
                 MiningModels.FROZEN_RAW_COPPER to MiningModels.frozenRawCopper()

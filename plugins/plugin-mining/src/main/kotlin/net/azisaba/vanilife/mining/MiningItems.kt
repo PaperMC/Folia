@@ -11,6 +11,7 @@ import net.kyori.adventure.key.Key
 
 object MiningItems {
     val FROZEN_COAL: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_coal"))
+    val FROZEN_DIAMOND: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_diamond"))
     val FROZEN_EMERALD: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_emerald"))
     val FROZEN_LAPIS_LAZULI: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_lapis_lazuli"))
     val FROZEN_RAW_COPPER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_raw_copper"))
@@ -20,6 +21,7 @@ object MiningItems {
 
     fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
         event.registry().register(FROZEN_COAL, ::frozenCoal)
+        event.registry().register(FROZEN_DIAMOND, ::frozenDiamond)
         event.registry().register(FROZEN_EMERALD, ::frozenEmerald)
         event.registry().register(FROZEN_LAPIS_LAZULI, ::frozenLapisLazuli)
         event.registry().register(FROZEN_RAW_COPPER, ::frozenRawCopper)
@@ -32,6 +34,12 @@ object MiningItems {
         builder.translationKey(MiningTranslations.ITEM_VANILIFE_FROZEN_COAL)
             .category(ServerItemCategory.MATERIAL)
             .itemModel(MiningItemModels.FROZEN_COAL)
+    }
+
+    private fun frozenDiamond(builder: ServerItemRegistryEntry.Builder) {
+        builder.translationKey(MiningTranslations.ITEM_VANILIFE_FROZEN_DIAMOND)
+            .category(ServerItemCategory.MATERIAL)
+            .itemModel(MiningItemModels.FROZEN_DIAMOND)
     }
 
     private fun frozenEmerald(builder: ServerItemRegistryEntry.Builder) {

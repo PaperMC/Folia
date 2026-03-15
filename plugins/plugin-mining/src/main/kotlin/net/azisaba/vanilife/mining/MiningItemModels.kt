@@ -8,6 +8,7 @@ import net.azisaba.vanilife.Vanilife
 
 object MiningItemModels {
     val FROZEN_COAL: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "frozen_from_coal")
+    val FROZEN_DIAMOND: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "frozen_diamond")
     val FROZEN_EMERALD: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "frozen_from_emerald")
     val FROZEN_LAPIS_LAZULI: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "frozen_lapis_lazuli")
     val FROZEN_RAW_COPPER: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "frozen_raw_copper")
@@ -16,6 +17,8 @@ object MiningItemModels {
     val FROZEN_REDSTONE: PackedKey<PackItemModel> = PackedKey.itemModel(Vanilife.NAMESPACE, "frozen_redstone")
 
     fun frozenCoal(): PackItemModel = PackItemModel(PackModelItemModelProperties(MiningModels.FROZEN_COAL))
+
+    fun frozenDiamond(): PackItemModel = PackItemModel(PackModelItemModelProperties(MiningModels.FROZEN_DIAMOND))
 
     fun frozenEmerald(): PackItemModel = PackItemModel(PackModelItemModelProperties(MiningModels.FROZEN_EMERALD))
 
