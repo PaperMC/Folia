@@ -21,6 +21,9 @@ import net.azisaba.vanilife.forestry.ForestryItemModels
 import net.azisaba.vanilife.forestry.ForestryModels
 import net.azisaba.vanilife.forestry.ForestryTranslations
 import net.azisaba.vanilife.islands.IslandsFonts
+import net.azisaba.vanilife.mining.MiningItemModels
+import net.azisaba.vanilife.mining.MiningModels
+import net.azisaba.vanilife.mining.MiningTranslations
 import net.azisaba.vanilife.npc.NpcFonts
 import net.azisaba.vanilife.npc.NpcItemModels
 import net.azisaba.vanilife.npc.NpcModels
@@ -144,13 +147,21 @@ internal class Main : JavaPlugin() {
 
                 ForestryItemModels.SMALL_TREE_STUMP to ForestryItemModels.smallTreeStump()
 
+                MiningItemModels.FROZEN_COAL to MiningItemModels.frozenCoal()
+                MiningItemModels.FROZEN_EMERALD to MiningItemModels.frozenEmerald()
+                MiningItemModels.FROZEN_LAPIS_LAZULI to MiningItemModels.frozenLapisLazuli()
+                MiningItemModels.FROZEN_RAW_COPPER to MiningItemModels.frozenRawCopper()
+                MiningItemModels.FROZEN_RAW_GOLD to MiningItemModels.frozenRawGold()
+                MiningItemModels.FROZEN_RAW_IRON to MiningItemModels.frozenRawIron()
+                MiningItemModels.FROZEN_REDSTONE to MiningItemModels.frozenRedstone()
+
                 NpcItemModels.EXPERIENCE to NpcItemModels.experience()
                 NpcItemModels.UNREADABLE_RECIPE to NpcItemModels.unreadableRecipe()
             }
 
             lang {
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.us() + NpcTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
@@ -249,6 +260,14 @@ internal class Main : JavaPlugin() {
 
                 ForestryModels.SMALL_TREE_STUMP to ForestryModels.smallTreeStump()
 
+                MiningModels.FROZEN_COAL to MiningModels.frozenCoal()
+                MiningModels.FROZEN_EMERALD to MiningModels.frozenEmerald()
+                MiningModels.FROZEN_LAPIS_LAZULI to MiningModels.frozenLapisLazuli()
+                MiningModels.FROZEN_RAW_COPPER to MiningModels.frozenRawCopper()
+                MiningModels.FROZEN_RAW_GOLD to MiningModels.frozenRawGold()
+                MiningModels.FROZEN_RAW_IRON to MiningModels.frozenRawIron()
+                MiningModels.FROZEN_REDSTONE to MiningModels.frozenRedstone()
+
                 NpcModels.EXPERIENCE to NpcModels.experience()
                 NpcModels.UNREADABLE_RECIPE to NpcModels.unreadableRecipe()
             }
@@ -261,6 +280,7 @@ internal class Main : JavaPlugin() {
             includeJavaResources(net.azisaba.vanilife.fishing.Main::class)
             includeJavaResources(net.azisaba.vanilife.forestry.Main::class)
             includeJavaResources(net.azisaba.vanilife.islands.Main::class)
+            includeJavaResources(net.azisaba.vanilife.mining.Main::class)
             includeJavaResources(net.azisaba.vanilife.npc.Main::class)
             includeJavaResources(Main::class)
 
