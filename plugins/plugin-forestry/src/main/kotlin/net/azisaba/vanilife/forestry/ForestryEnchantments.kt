@@ -14,7 +14,7 @@ import org.bukkit.inventory.EquipmentSlotGroup
 object ForestryEnchantments {
     val CUT_ALL: TypedKey<Enchantment> = TypedKey.create(RegistryKey.ENCHANTMENT, Key.key(Vanilife.NAMESPACE, "cut_all"))
 
-    fun bootstrap(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>) {
+    internal fun bootstrap(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>) {
         event.registry().register(CUT_ALL) { cutAll(event, it) }
     }
 

@@ -19,7 +19,7 @@ object MiningItems {
     val FROZEN_RAW_IRON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_raw_iron"))
     val FROZEN_REDSTONE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "frozen_redstone"))
 
-    fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
+    internal fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
         event.registry().register(FROZEN_COAL, ::frozenCoal)
         event.registry().register(FROZEN_DIAMOND, ::frozenDiamond)
         event.registry().register(FROZEN_EMERALD, ::frozenEmerald)

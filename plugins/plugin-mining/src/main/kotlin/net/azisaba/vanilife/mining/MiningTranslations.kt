@@ -4,6 +4,7 @@ import net.azisaba.packed.lang.PackLanguage
 import net.azisaba.packed.lang.Translation
 
 object MiningTranslations {
+    const val ENCHANTMENT_VANILIFE_RANGE_MINING_3X3X3: String = "enchantment.vanilife.range_mining_3x3x3"
     const val ITEM_VANILIFE_FROZEN_COAL: String = "item.vanilife.frozen_coal"
     const val ITEM_VANILIFE_FROZEN_DIAMOND: String = "item.vanilife.frozen_diamond"
     const val ITEM_VANILIFE_FROZEN_EMERALD: String = "item.vanilife.frozen_emerald"
@@ -14,6 +15,7 @@ object MiningTranslations {
     const val ITEM_VANILIFE_FROZEN_REDSTONE: String = "item.vanilife.frozen_redstone"
 
     fun us(): PackLanguage = mapOf(
+        ENCHANTMENT_VANILIFE_RANGE_MINING_3X3X3 to Translation.literal("Range Mining (3x3x3)"),
         ITEM_VANILIFE_FROZEN_COAL to Translation.literal("Frozen Coal"),
         ITEM_VANILIFE_FROZEN_DIAMOND to Translation.literal("Frozen Diamond"),
         ITEM_VANILIFE_FROZEN_EMERALD to Translation.literal("Frozen Emerald"),
@@ -25,6 +27,7 @@ object MiningTranslations {
     )
 
     fun jp(): PackLanguage = mapOf(
+        ENCHANTMENT_VANILIFE_RANGE_MINING_3X3X3 to Translation.literal("範囲採掘（3x3x3）"),
         ITEM_VANILIFE_FROZEN_COAL to Translation.literal("凍った石炭"),
         ITEM_VANILIFE_FROZEN_DIAMOND to Translation.literal("凍ったダイヤモンド"),
         ITEM_VANILIFE_FROZEN_EMERALD to Translation.literal("凍ったエメラルド"),
