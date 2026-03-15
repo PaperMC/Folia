@@ -23,7 +23,7 @@ import org.bukkit.RegionAccessor
 import org.bukkit.entity.Chicken
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
-import org.bukkit.inventory.Merchant
+import org.bukkit.inventory.MerchantRecipe
 
 fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
     val chicken = spawn(location, Chicken::class.java) { spawned ->
@@ -33,22 +33,14 @@ fun RegionAccessor.spawn(location: Location, npcType: NpcType): Npc {
     return WildNpcImpl(npcType, chicken)
 }
 
-sealed interface Npc : Audience, Nameable {
+sealed interface Npc : Audience, Nameable, RecipeHolder {
     val npcType: NpcType
-
-    val merchant: Merchant
-
-    val recipes: Set<UnreadableRecipe>
 
     val isSitting: Boolean
 
     fun sitDown()
 
     fun standUp()
-
-    fun read(recipe: UnreadableRecipe)
-
-    fun rollMerchantRecipes()
 
     fun remove()
 
@@ -73,23 +65,24 @@ sealed interface Npc : Audience, Nameable {
 }
 
 private abstract class AbstractNpcImpl(override val npcType: NpcType, protected val mob: Mob) : Npc {
-    override val merchant: Merchant = Bukkit.createMerchant()
+    override val unreadableRecipes: Set<UnreadableRecipe>
+        get() = unreadableRecipesMutable.toSet()
 
-    override val recipes: Set<UnreadableRecipe>
-        get() = recipesMutable.toSet()
+    override val merchantRecipes: List<MerchantRecipe>
+        get() = merchantRecipesMutable.toList()
 
     override val isSitting: Boolean
         get() = tracker.bones().any { bone -> bone.runningAnimation()?.name == "sit" }
 
     protected val tracker: Tracker = npcType.modelOrThrow().create(BukkitEntity(mob))
 
-    protected val recipesMutable: MutableSet<UnreadableRecipe> = mutableSetOf()
+    protected val unreadableRecipesMutable: MutableSet<UnreadableRecipe> = mutableSetOf()
+    protected val merchantRecipesMutable: MutableList<MerchantRecipe> = npcType.offers.roll(15).toMutableList()
 
     init {
         Bukkit.getMobGoals().addGoal(mob, 1, ReadRecipeGoal(this, mob, tracker))
         Bukkit.getMobGoals().addGoal(mob, 3, TradingGoal(this, mob, tracker))
         Bukkit.getMobGoals().addGoal(mob, 2, SitGoal(this, mob, tracker))
-        rollMerchantRecipes()
     }
 
     override fun sitDown() {
@@ -105,13 +98,13 @@ private abstract class AbstractNpcImpl(override val npcType: NpcType, protected 
         tracker.stopAnimation("sit")
     }
 
-    override fun read(recipe: UnreadableRecipe) {
-        recipesMutable.add(recipe)
-        merchant.recipes = listOf(recipe.toMerchantRecipe()) + merchant.recipes
+    override fun readUnreadableRecipe(unreadableRecipe: UnreadableRecipe) {
+        unreadableRecipesMutable.add(unreadableRecipe)
     }
 
     override fun rollMerchantRecipes() {
-        merchant.recipes = recipes.map(UnreadableRecipe::toMerchantRecipe) + npcType.offers.roll(15)
+        merchantRecipesMutable.clear()
+        merchantRecipesMutable += npcType.offers.roll(15).toMutableList()
     }
 
     override fun remove() {

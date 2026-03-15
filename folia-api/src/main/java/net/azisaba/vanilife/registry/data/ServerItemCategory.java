@@ -1,5 +1,6 @@
 package net.azisaba.vanilife.registry.data;
 
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.translation.Translatable;
 import org.jspecify.annotations.NullMarked;
@@ -16,7 +17,9 @@ public enum ServerItemCategory implements Translatable {
 
     FOOD("item.vanilife.category.food", TextColor.color(255, 183, 77)),
     DRINK("item.vanilife.category.drink", TextColor.color(77, 208, 225)),
-    DESSERT("item.vanilife.category.dessert", TextColor.color(255, 138, 128));
+    DESSERT("item.vanilife.category.dessert", TextColor.color(255, 138, 128)),
+
+    SYSTEM("item.vanilife.category.system", NamedTextColor.BLUE);
 
     private final String translationKey;
     private final TextColor color;

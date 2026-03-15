@@ -15,6 +15,7 @@ class Main : JavaPlugin() {
                 single<Plugin> { this@Main }
             })
         }
+        setupEventListeners()
     }
 
     override fun onDisable() {

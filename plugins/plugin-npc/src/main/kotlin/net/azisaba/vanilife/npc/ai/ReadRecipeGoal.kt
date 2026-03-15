@@ -67,7 +67,7 @@ internal class ReadRecipeGoal(private val npc: Npc, private val mob: Mob, privat
         mob.world.spawnParticle(Particle.ENCHANT, mob.location, (2..5).random())
 
         if (remainingReadTime <= 0) {
-            npc.read(readingRecipe)
+            npc.readUnreadableRecipe(readingRecipe)
             mob.world.playSound(
                 Sound.sound(SoundEventKeys.ENTITY_EXPERIENCE_ORB_PICKUP, Sound.Source.PLAYER, 1f, 2f),
                 mob.x,
@@ -87,7 +87,7 @@ internal class ReadRecipeGoal(private val npc: Npc, private val mob: Mob, privat
         val itemStack = player.equipment.itemInMainHand
         val serverItem = itemStack.serverItem() ?: return
         val unreadableRecipe = UnreadableRecipe.byRecipeItem(serverItem) ?: return
-        if (unreadableRecipe.canRead(npc)) {
+        if (unreadableRecipe.canReadBy(npc)) {
             readRequest = ReadRequest(unreadableRecipe, itemStack)
         }
     }

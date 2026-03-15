@@ -56,7 +56,7 @@ internal class TradingGoal(
                     .append(npc.customName() ?: Component.text("ねこ"))
                     .build()
             )
-            .merchant(npc.merchant)
+            .merchant(npc.toMerchant())
             .build(trader)
         trader.openInventory(view)
         mob.pathfinder.stopPathfinding()

@@ -4,101 +4,105 @@ import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
 import io.papermc.paper.registry.TypedKey
 import net.azisaba.vanilife.forestry.ForestryEnchantments
-import net.azisaba.vanilife.npc.*
-import net.azisaba.vanilife.registry.data.ServerItemCategory
-import net.azisaba.vanilife.registry.data.ServerItemLoreStyle
-import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry
+import net.azisaba.vanilife.forestry.ForestryItems
+import net.azisaba.vanilife.item.ServerItem
+import net.azisaba.vanilife.npc.Npc
+import net.azisaba.vanilife.npc.NpcItems
+import net.azisaba.vanilife.npc.NpcType
 import net.kyori.adventure.audience.Audience
-import net.kyori.adventure.text.Component
 import org.bukkit.Material
+import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.MerchantRecipe
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
-import org.jetbrains.annotations.ApiStatus
 
-sealed interface UnreadableRecipe {
-    val recipeItem: TypedKey<net.azisaba.vanilife.item.ServerItem>
+@ConsistentCopyVisibility
+data class UnreadableRecipe private constructor(
+    val item: TypedKey<ServerItem>,
+    val reader: NpcType,
+    val experienceCost: Int,
+    private val resultItemProvider: () -> ItemStack,
+    private val costItemProvider: () -> ItemStack,
+) {
+    constructor(
+        item: TypedKey<ServerItem>,
+        reader: NpcType,
+        resultItem: Pair<TypedKey<ServerItem>, Int>,
+        costItem: Pair<TypedKey<ServerItem>, Int>,
+        experienceCost: Int,
+    ) : this(
+        item,
+        reader,
+        experienceCost,
+        { ItemStack.of(resultItem.first, resultItem.second) },
+        { ItemStack.of(costItem.first, costItem.second) },
+    )
 
-    val reader: NpcType
+    constructor(
+        item: TypedKey<ServerItem>,
+        reader: NpcType,
+        resultEnchantment: TypedKey<Enchantment>,
+        resultEnchantmentLevel: Int,
+        costItem: Pair<TypedKey<ServerItem>, Int>,
+        experienceCost: Int,
+    ) : this(
+        item,
+        reader,
+        experienceCost,
+        {
+            ItemStack.of(Material.ENCHANTED_BOOK).apply {
+                editMeta(EnchantmentStorageMeta::class.java) { meta ->
+                    val resolvedEnchantment = RegistryAccess.registryAccess()
+                        .getRegistry(RegistryKey.ENCHANTMENT)
+                        .getOrThrow(resultEnchantment)
+                    meta.addStoredEnchant(resolvedEnchantment, resultEnchantmentLevel, true)
+                }
+            }
+        },
+        { ItemStack.of(costItem.first, costItem.second) },
+    )
 
-    fun canRead(audience: Audience): Boolean = audience is Npc && audience.npcType == reader
+    fun canReadBy(audience: Audience): Boolean = audience is Npc && audience.npcType == reader
 
-    fun createResultItem(): ItemStack
+    fun createResultItem(): ItemStack = resultItemProvider()
 
-    fun toMerchantRecipe(): MerchantRecipe = MerchantRecipe(createResultItem(), 8).apply {
-        addIngredient(ItemStack.of(Material.LAPIS_LAZULI, 15))
-    }
+    fun createCostItem(): ItemStack = costItemProvider()
 
-    @ApiStatus.Internal
-    fun recipeItem(builder: ServerItemRegistryEntry.Builder) {
-        builder.translationKey(NpcTranslations.ITEM_VANILIFE_UNREADABLE_RECIPE)
-            .describe()
-            .category(ServerItemCategory.MATERIAL)
-            .loreStyle(
-                ServerItemLoreStyle.loreStyle()
-                    .then(ServerItemRegistryEntry::described, ServerItemLoreStyle.Part.description())
-                    .then(ServerItemLoreStyle.Part.itemCategory())
-                    .then { _, builder ->
-                        builder.add(Component.translatable(NpcTranslations.ITEM_VANILIFE_UNREADABLE_RECIPE_READABLE_NPC_TYPES))
-                            .add(Component.text(reader.icon).font(NpcFonts.NPC_ICONS))
-                    }
-                    .build()
-            )
-            .itemModel(NpcItemModels.UNREADABLE_RECIPE)
+    fun asItem(): ServerItem = RegistryAccess.registryAccess()
+        .getRegistry(RegistryKey.SERVER_ITEM)
+        .getOrThrow(item)
+
+    fun toMerchantRecipe(): MerchantRecipe = MerchantRecipe(createResultItem(), 15).apply {
+        addIngredient(createCostItem())
+        addIngredient(ItemStack.of(NpcItems.EXPERIENCE, experienceCost))
     }
 
     companion object {
         private val SET: MutableSet<UnreadableRecipe> = mutableSetOf()
-        private val BY_RECIPE_ITEM: MutableMap<TypedKey<net.azisaba.vanilife.item.ServerItem>, UnreadableRecipe> =
-            mutableMapOf()
+        private val BY_RECIPE_ITEM: MutableMap<TypedKey<ServerItem>, UnreadableRecipe> = mutableMapOf()
 
-        val CUT_ALL: Enchantment = register(
-            Enchantment(
-                enchantment = ForestryEnchantments.CUT_ALL,
-                enchantmentLevel = 1,
-                recipeItem = NpcItems.CUT_ALL_UNREADABLE_RECIPE,
+        val CUT_ALL: UnreadableRecipe = register(
+            UnreadableRecipe(
+                item = NpcItems.CUT_ALL_RECIPE,
                 reader = NpcType.NEKO,
+                resultEnchantment = ForestryEnchantments.CUT_ALL,
+                resultEnchantmentLevel = 1,
+                costItem = ForestryItems.SMALL_TREE_STUMP to 16,
+                experienceCost = 6,
             )
         )
 
         fun all(): Set<UnreadableRecipe> = SET.toSet()
 
-        fun byRecipeItem(recipeItem: net.azisaba.vanilife.item.ServerItem): UnreadableRecipe? =
+        fun byRecipeItem(recipeItem: ServerItem): UnreadableRecipe? =
             byRecipeItem(RegistryKey.SERVER_ITEM.typedKey(recipeItem.key()))
 
-        fun byRecipeItem(recipeItem: TypedKey<net.azisaba.vanilife.item.ServerItem>): UnreadableRecipe? =
-            BY_RECIPE_ITEM[recipeItem]
+        fun byRecipeItem(recipeItem: TypedKey<ServerItem>): UnreadableRecipe? = BY_RECIPE_ITEM[recipeItem]
 
-        private fun <T : UnreadableRecipe> register(unreadableRecipe: T): T {
+        private fun register(unreadableRecipe: UnreadableRecipe): UnreadableRecipe {
             SET.add(unreadableRecipe)
-            BY_RECIPE_ITEM[unreadableRecipe.recipeItem] = unreadableRecipe
+            BY_RECIPE_ITEM[unreadableRecipe.item] = unreadableRecipe
             return unreadableRecipe
-        }
-    }
-
-    @ConsistentCopyVisibility
-    data class ServerItem internal constructor(
-        val resultItem: TypedKey<net.azisaba.vanilife.item.ServerItem>,
-        override val recipeItem: TypedKey<net.azisaba.vanilife.item.ServerItem>,
-        override val reader: NpcType,
-    ) : UnreadableRecipe {
-        override fun createResultItem(): ItemStack = ItemStack.of(resultItem)
-    }
-
-    @ConsistentCopyVisibility
-    data class Enchantment internal constructor(
-        val enchantment: TypedKey<org.bukkit.enchantments.Enchantment>,
-        val enchantmentLevel: Int,
-        override val recipeItem: TypedKey<net.azisaba.vanilife.item.ServerItem>,
-        override val reader: NpcType,
-    ) : UnreadableRecipe {
-        override fun createResultItem(): ItemStack = ItemStack.of(Material.ENCHANTED_BOOK).apply {
-            editMeta(EnchantmentStorageMeta::class.java) { meta ->
-                val resolvedEnchantment = RegistryAccess.registryAccess()
-                    .getRegistry(RegistryKey.ENCHANTMENT)
-                    .getOrThrow(enchantment)
-                meta.addStoredEnchant(resolvedEnchantment, enchantmentLevel, true)
-            }
         }
     }
 }

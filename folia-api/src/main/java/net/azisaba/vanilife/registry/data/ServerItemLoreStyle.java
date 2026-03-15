@@ -22,6 +22,8 @@ public record ServerItemLoreStyle(List<ConditionedPart> conditionedParts) {
             .then(ServerItemRegistryEntry::hasPeakSeason, Part.peakSeason())
             .build();
 
+    private static final ServerItemLoreStyle EMPTY = new ServerItemLoreStyle(Collections.emptyList());
+
     private static final Style RESET_LORE_STYLE = Style.style()
             .color(NamedTextColor.GRAY)
             .decoration(TextDecoration.ITALIC, false)
@@ -35,6 +37,11 @@ public record ServerItemLoreStyle(List<ConditionedPart> conditionedParts) {
     @Contract(pure = true)
     public static ServerItemLoreStyle defaultStyle() {
         return DEFAULT;
+    }
+
+    @Contract(pure = true)
+    public static ServerItemLoreStyle emptyStyle() {
+        return EMPTY;
     }
 
     public List<Part> parts(final ServerItemRegistryEntry item) {

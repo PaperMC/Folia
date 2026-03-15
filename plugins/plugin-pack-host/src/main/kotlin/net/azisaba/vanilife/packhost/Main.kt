@@ -16,6 +16,9 @@ import net.azisaba.vanilife.fishing.FishingFonts
 import net.azisaba.vanilife.fishing.FishingItemModels
 import net.azisaba.vanilife.fishing.FishingModels
 import net.azisaba.vanilife.fishing.FishingTranslations
+import net.azisaba.vanilife.forestry.ForestryItemModels
+import net.azisaba.vanilife.forestry.ForestryModels
+import net.azisaba.vanilife.forestry.ForestryTranslations
 import net.azisaba.vanilife.islands.IslandsFonts
 import net.azisaba.vanilife.npc.NpcFonts
 import net.azisaba.vanilife.npc.NpcItemModels
@@ -25,8 +28,7 @@ import net.kyori.adventure.resource.ResourcePackInfo
 import net.kyori.adventure.text.Component
 import org.bukkit.plugin.java.JavaPlugin
 import java.net.URI
-import java.util.Locale
-import java.util.UUID
+import java.util.*
 
 internal class Main : JavaPlugin() {
     override fun onEnable() {
@@ -138,12 +140,15 @@ internal class Main : JavaPlugin() {
                 FishingItemModels.TUNA to FishingItemModels.tunaItem()
                 FishingItemModels.YELLOWTAIL to FishingItemModels.yellowtailItem()
 
+                ForestryItemModels.SMALL_TREE_STUMP to ForestryItemModels.smallTreeStump()
+
+                NpcItemModels.EXPERIENCE to NpcItemModels.experience()
                 NpcItemModels.UNREADABLE_RECIPE to NpcItemModels.unreadableRecipe()
             }
 
             lang {
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
+                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
@@ -240,11 +245,15 @@ internal class Main : JavaPlugin() {
                 FishingModels.TUNA to FishingModels.tuna()
                 FishingModels.YELLOWTAIL to FishingModels.yellowtail()
 
+                ForestryModels.SMALL_TREE_STUMP to ForestryModels.smallTreeStump()
+
+                NpcModels.EXPERIENCE to NpcModels.experience()
                 NpcModels.UNREADABLE_RECIPE to NpcModels.unreadableRecipe()
             }
 
             includeJavaResources(net.azisaba.vanilife.cooking.Main::class)
             includeJavaResources(net.azisaba.vanilife.fishing.Main::class)
+            includeJavaResources(net.azisaba.vanilife.forestry.Main::class)
             includeJavaResources(net.azisaba.vanilife.islands.Main::class)
             includeJavaResources(net.azisaba.vanilife.npc.Main::class)
             includeJavaResources(Main::class)

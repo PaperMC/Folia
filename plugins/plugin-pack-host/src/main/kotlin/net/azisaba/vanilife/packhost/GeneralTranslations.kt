@@ -26,6 +26,7 @@ object GeneralTranslations {
         ServerItemCategory.FOOD.translationKey() to Translation.literal("Food"),
         ServerItemCategory.DRINK.translationKey() to Translation.literal("Drink"),
         ServerItemCategory.DESSERT.translationKey() to Translation.literal("Dessert"),
+        ServerItemCategory.SYSTEM.translationKey() to Translation.literal("System (Cannot exist in inventories other than the Operator's)"),
 
         ITEM_VANILIFE_PEAK_SEASON to Translation.literal("Peak Season:"),
         ITEM_VANILIFE_PEAK_SEASON_RANGE_MULTIPLE to Translation.literal("- ") + Translation.placeholder() + Translation.literal("〜") + Translation.placeholder(),
@@ -53,9 +54,22 @@ object GeneralTranslations {
             .filter(ServerItem::hasPeakSeason)
             .map { item ->
                 item.translationKey() + ".season" to if (Season.Sub.now() in item.peakSeason()) {
-                    Translation.literal("§d§k>>§r§d§lIN SEASON§k<<")
+                    Translation.lightPurple() +
+                            Translation.obfuscated() +
+                            Translation.literal(">>") +
+                            Translation.resetStyle() +
+                            Translation.lightPurple() +
+                            Translation.bold() +
+                            Translation.literal("IN SEASON") +
+                            Translation.obfuscated() +
+                            Translation.literal("<<")
                 } else {
-                    Translation.literal("§8In season in §7${computeMonthsUntilPeakSeason(item)}§8 month(s)")
+                    Translation.darkGray() +
+                            Translation.literal("In season in") +
+                            Translation.gray() +
+                            Translation.literal("${computeMonthsUntilPeakSeason(item)}") +
+                            Translation.darkGray() +
+                            Translation.literal("month(s).")
                 }
             }
             .toTypedArray()
@@ -72,6 +86,7 @@ object GeneralTranslations {
         ServerItemCategory.FOOD.translationKey() to Translation.literal("食べ物"),
         ServerItemCategory.DRINK.translationKey() to Translation.literal("飲み物"),
         ServerItemCategory.DESSERT.translationKey() to Translation.literal("デザート"),
+        ServerItemCategory.SYSTEM.translationKey() to Translation.literal("システム（オペレーターのインベントリでは存在不可）"),
 
         ITEM_VANILIFE_PEAK_SEASON to Translation.literal("旬の時期："),
         ITEM_VANILIFE_PEAK_SEASON_RANGE_MULTIPLE to Translation.literal("・") + Translation.placeholder() + Translation.literal("から") + Translation.placeholder(),
@@ -99,9 +114,20 @@ object GeneralTranslations {
             .filter(ServerItem::hasPeakSeason)
             .map { item ->
                 item.translationKey() + ".season" to if (Season.Sub.now() in item.peakSeason()) {
-                    Translation.literal("§d§k>>§r§d§l旬の季節です§k<<")
+                    Translation.lightPurple() +
+                            Translation.obfuscated() +
+                            Translation.literal(">>") +
+                            Translation.resetStyle() +
+                            Translation.lightPurple() +
+                            Translation.bold() +
+                            Translation.literal("今が旬です") +
+                            Translation.obfuscated() +
+                            Translation.literal("<<")
                 } else {
-                    Translation.literal("§7${computeMonthsUntilPeakSeason(item)}§8ヶ月後が旬です")
+                    Translation.gray() +
+                            Translation.literal("${computeMonthsUntilPeakSeason(item)}") +
+                            Translation.darkGray() +
+                            Translation.literal("ヶ月後に旬を迎えます。")
                 }
             }
             .toTypedArray()
