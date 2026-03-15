@@ -9,18 +9,21 @@ import kr.toxicity.model.api.event.hitbox.HitBoxInteractEvent
 import kr.toxicity.model.api.tracker.Tracker
 import kr.toxicity.model.api.tracker.TrackerUpdateAction
 import net.azisaba.vanilife.npc.Npc
-import net.azisaba.vanilife.npc.recipe.UnreadableRecipe
+import net.azisaba.vanilife.npc.NpcSoundEvents
+import net.azisaba.vanilife.npc.UnreadableRecipe
 import net.kyori.adventure.sound.Sound
 import org.bukkit.Particle
 import org.bukkit.entity.Mob
+import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import java.util.*
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
 
 internal class ReadRecipeGoal(private val npc: Npc, private val mob: Mob, private val tracker: Tracker) : Goal<Mob> {
     private var readRequest: ReadRequest? = null
 
-    private var readingRecipe: UnreadableRecipe? = null
+    private var readTask: ReadTask? = null
 
     private var remainingReadTime: AtomicLong = AtomicLong(0)
 
@@ -32,65 +35,80 @@ internal class ReadRecipeGoal(private val npc: Npc, private val mob: Mob, privat
 
     override fun getTypes(): EnumSet<GoalType> = EnumSet.of(GoalType.MOVE, GoalType.LOOK, GoalType.JUMP)
 
-    override fun shouldActivate(): Boolean = readRequest != null && readingRecipe == null
+    override fun shouldActivate(): Boolean = readRequest != null && readTask == null && mob.isOnGround
 
-    override fun shouldStayActive(): Boolean = readingRecipe != null
+    override fun shouldStayActive(): Boolean = readTask != null
 
     override fun start() {
-        val (unreadableRecipe, itemStack) = readRequest ?: return
-
-        itemStack.subtract()
+        val (player, recipe, itemStack) = readRequest ?: return
 
         this.readRequest = null
-        readingRecipe = unreadableRecipe
+        readTask = ReadTask(player, recipe)
 
-        remainingReadTime.set(20L * 2)
+        resetRemainingReadTime()
 
         npc.sitDown()
-
-        mob.equipment.setItemInMainHand(itemStack)
+        mob.equipment.setItemInMainHand(itemStack.clone())
         tracker.update(TrackerUpdateAction.itemMapping())
+
+        player.playSound(Sound.sound(SoundEventKeys.ITEM_BOOK_PAGE_TURN, Sound.Source.PLAYER, 0.4f, 2f))
+
+        if (!player.gameMode.isInvulnerable) {
+            itemStack.subtract()
+        }
     }
 
     override fun stop() {
-        readingRecipe = null
+        readTask = null
         mob.equipment.setItemInMainHand(null)
         tracker.update(TrackerUpdateAction.itemMapping())
-
         npc.standUp()
     }
 
     override fun tick() {
-        val readingRecipe = readingRecipe ?: return
+        val (player, recipe) = readTask ?: return
         val remainingReadTime = remainingReadTime.decrementAndGet()
 
         mob.world.spawnParticle(Particle.ENCHANT, mob.location, (2..5).random())
 
         if (remainingReadTime <= 0) {
-            npc.readUnreadableRecipe(readingRecipe)
-            mob.world.playSound(
-                Sound.sound(SoundEventKeys.ENTITY_EXPERIENCE_ORB_PICKUP, Sound.Source.PLAYER, 1f, 2f),
+            npc.readRecipe(recipe)
+            player.playSound(
+                Sound.sound(NpcSoundEvents.NPC_READ_RECIPE, Sound.Source.PLAYER, 0.4f, 1f),
                 mob.x,
                 mob.y,
                 mob.z,
             )
-            mob.world.dropItemNaturally(mob.location, readingRecipe.createResultItem())
-            this.readingRecipe = null
+            mob.world.spawnParticle(
+                Particle.HAPPY_VILLAGER,
+                mob.x,
+                mob.y + 1.25,
+                mob.z,
+                Random.nextInt(4, 7),
+                0.5,
+                0.2,
+                0.5,
+            )
+            this.readTask = null
         }
     }
 
+    private fun resetRemainingReadTime() {
+        remainingReadTime.set(20L)
+    }
+
     private fun handleHitboxInteract(event: HitBoxInteractEvent) {
-        if (readingRecipe != null) return
+        if (readTask != null || !mob.isOnGround) return
 
         val player = (event.who as? BukkitPlayer)?.source() ?: return
 
         val itemStack = player.equipment.itemInMainHand
         val serverItem = itemStack.serverItem() ?: return
-        val unreadableRecipe = UnreadableRecipe.byRecipeItem(serverItem) ?: return
-        if (unreadableRecipe.canReadBy(npc)) {
-            readRequest = ReadRequest(unreadableRecipe, itemStack)
-        }
+        val unreadableRecipe = UnreadableRecipe.byItem(serverItem) ?: return
+        readRequest = ReadRequest(player, unreadableRecipe, itemStack)
     }
 
-    private data class ReadRequest(val unreadableRecipe: UnreadableRecipe, val itemStack: ItemStack)
+    private data class ReadRequest(val player: Player, val recipe: UnreadableRecipe, val itemStack: ItemStack)
+
+    private data class ReadTask(val player: Player, val recipe: UnreadableRecipe)
 }

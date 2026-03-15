@@ -2,11 +2,13 @@ package net.azisaba.vanilife.npc.listener
 
 import com.github.shynixn.mccoroutine.folia.launch
 import io.papermc.paper.event.player.PlayerPurchaseEvent
+import io.papermc.paper.registry.keys.SoundEventKeys
 import kotlinx.coroutines.delay
 import net.azisaba.vanilife.npc.NpcItems
 import net.azisaba.vanilife.npc.trading.clearExperiences
 import net.azisaba.vanilife.npc.trading.experienceCost
 import net.azisaba.vanilife.npc.trading.updateExperiencePreview
+import net.kyori.adventure.sound.Sound
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -30,6 +32,7 @@ internal class ExperienceTradeListener(private val plugin: Plugin) : Listener {
         val experienceCost = event.trade.experienceCost()
         if (experienceCost > 0 && !event.player.gameMode.isInvulnerable) {
             event.player.giveExpLevels(-experienceCost)
+            event.player.playSound(Sound.sound(SoundEventKeys.BLOCK_ENCHANTMENT_TABLE_USE, Sound.Source.PLAYER, 0.8f, 0.65f))
         }
 
         val merchantInventory = event.player.openInventory.topInventory as? MerchantInventory ?: return

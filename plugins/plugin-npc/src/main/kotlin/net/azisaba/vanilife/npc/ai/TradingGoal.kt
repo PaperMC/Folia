@@ -8,7 +8,7 @@ import kr.toxicity.model.api.event.hitbox.HitBoxInteractEvent
 import kr.toxicity.model.api.tracker.Tracker
 import net.azisaba.vanilife.npc.Npc
 import net.azisaba.vanilife.npc.NpcFonts
-import net.azisaba.vanilife.npc.recipe.UnreadableRecipe
+import net.azisaba.vanilife.npc.UnreadableRecipe
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.Mob
@@ -53,10 +53,10 @@ internal class TradingGoal(
                 Component.text()
                     .append(Component.text(npc.npcType.icon, NamedTextColor.WHITE).font(NpcFonts.NPC_ICONS))
                     .appendSpace()
-                    .append(npc.customName() ?: Component.text("ねこ"))
+                    .append(Component.text("ねこ"))
                     .build()
             )
-            .merchant(npc.toMerchant())
+            .merchant(npc.merchant)
             .build(trader)
         trader.openInventory(view)
         mob.pathfinder.stopPathfinding()
@@ -76,7 +76,7 @@ internal class TradingGoal(
         val player = (event.who as? BukkitPlayer)?.source() ?: return
         val itemStack = player.equipment.itemInMainHand
         val serverItem = itemStack.serverItem()
-        if (!player.isSneaking && (serverItem == null || UnreadableRecipe.byRecipeItem(serverItem) == null)) {
+        if (!player.isSneaking && (serverItem == null || UnreadableRecipe.byItem(serverItem) == null)) {
             requestedTrader = player
         }
     }

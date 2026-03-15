@@ -5,6 +5,8 @@ import io.papermc.paper.registry.RegistryKey
 import io.papermc.paper.registry.TypedKey
 import net.azisaba.vanilife.Season
 import net.azisaba.vanilife.item.ServerItem
+import net.azisaba.vanilife.npc.NpcItems
+import net.azisaba.vanilife.npc.UnreadableRecipe
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.MerchantRecipe
@@ -65,6 +67,15 @@ fun interface NpcOffer {
                 if (Season.Sub.now() in targetPeriod) {
                     specialPrice = -(costAmount * 0.5).toInt()
                 }
+            }
+        }
+
+        fun recipe(recipe: UnreadableRecipe, maxUses: Int = 8): NpcOffer = NpcOffer { random ->
+            MerchantRecipe(recipe.result, 4).apply {
+                addIngredient(recipe.rollCost(random))
+
+                val requiredExperience = recipe.rollExperienceCost(random)
+                addIngredient(ItemStack.of(NpcItems.EXPERIENCE, requiredExperience))
             }
         }
 

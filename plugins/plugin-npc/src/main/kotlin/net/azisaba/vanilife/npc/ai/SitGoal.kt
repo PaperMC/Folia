@@ -40,7 +40,7 @@ internal class SitGoal(private val npc: Npc, private val mob: Mob, tracker: Trac
 
     private fun handleHitBoxInteract(event: HitBoxInteractEvent) {
         val player = (event.who as? BukkitPlayer)?.source() ?: return
-        if (player.isSneaking) {
+        if (player.isSneaking && mob.isOnGround) {
             sit = !sit
         }
     }

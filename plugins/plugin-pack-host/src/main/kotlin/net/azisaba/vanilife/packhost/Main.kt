@@ -6,6 +6,7 @@ import net.azisaba.packed.dsl.font
 import net.azisaba.packed.dsl.items
 import net.azisaba.packed.dsl.lang
 import net.azisaba.packed.dsl.models
+import net.azisaba.packed.dsl.sounds
 import net.azisaba.packed.lang
 import net.azisaba.packed.server.configureEmbeddedServer
 import net.azisaba.vanilife.Vanilife
@@ -23,6 +24,7 @@ import net.azisaba.vanilife.islands.IslandsFonts
 import net.azisaba.vanilife.npc.NpcFonts
 import net.azisaba.vanilife.npc.NpcItemModels
 import net.azisaba.vanilife.npc.NpcModels
+import net.azisaba.vanilife.npc.NpcSoundEvents
 import net.azisaba.vanilife.npc.NpcTranslations
 import net.kyori.adventure.resource.ResourcePackInfo
 import net.kyori.adventure.text.Component
@@ -249,6 +251,10 @@ internal class Main : JavaPlugin() {
 
                 NpcModels.EXPERIENCE to NpcModels.experience()
                 NpcModels.UNREADABLE_RECIPE to NpcModels.unreadableRecipe()
+            }
+
+            sounds {
+                NpcSoundEvents.NPC_READ_RECIPE to NpcSoundEvents.npcReadRecipe()
             }
 
             includeJavaResources(net.azisaba.vanilife.cooking.Main::class)

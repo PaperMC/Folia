@@ -16,7 +16,7 @@ internal fun MerchantInventory.updateExperiencePreview(trader: Player, merchantR
         val amount = if (!trader.gameMode.isInvulnerable) minOf(required, trader.level) else required
         val slotIndex = merchantRecipe.ingredients.indexOfLast { it.isOf(NpcItems.EXPERIENCE) }
         setItem(slotIndex, ItemStack.of(NpcItems.EXPERIENCE, amount))
-        clearExperiences { index, _ -> index == slotIndex }
+        clearExperiences { index, _ -> index != slotIndex }
     } else {
         clearExperiences()
     }
