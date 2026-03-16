@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.islands.portal.listener
 
 import com.github.shynixn.mccoroutine.folia.launch
+import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import net.azisaba.vanilife.islands.IslandPos
 import net.azisaba.vanilife.islands.portal.ResourcePortals
 import net.azisaba.vanilife.islands.portal.ResourceTeleporter
