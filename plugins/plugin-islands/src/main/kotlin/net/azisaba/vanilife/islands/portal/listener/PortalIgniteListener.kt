@@ -25,22 +25,16 @@ internal class PortalIgniteListener(
             val player = event.player ?: return@launch
             val world = detected.world
 
-            if (world.name == resourceWorldName) {
-                val success = teleporter.teleportResourceToIsland(player)
-                if (!success) {
-                    player.sendMessage(Component.text("Could not return to your island."))
-                }
-                return@launch
-            }
+            // On ignite: only create the portal visuals/blocks. Actual teleport occurs when
+            // a player enters the portal (PlayerPortalEvent). This prevents surprise immediate teleports.
+            ResourcePortals.createWithAnimation(plugin, detected)
 
-            val islandPos = IslandPos.fromBlockPos(player.location.blockX, player.location.blockZ)
-            val success = teleporter.teleportIslandToResource(player, islandPos)
-            if (success) {
-                if (world.getBlockAt(event.block.location).type == Material.FIRE) {
-                    world.getBlockAt(event.block.location).type = Material.AIR
+            // Extinguish the ignited fire on the region dispatcher so we modify world state safely
+            val fireLocation = event.block.location
+            plugin.launch(plugin.regionDispatcher(fireLocation)) {
+                if (detected.world.getBlockAt(fireLocation).type == Material.FIRE) {
+                    detected.world.getBlockAt(fireLocation).type = Material.AIR
                 }
-            } else {
-                player.sendMessage(Component.text("Could not connect to resource world."))
             }
         }
     }

@@ -37,6 +37,13 @@ object ResourcePortals {
                         val blockData = Material.NETHER_PORTAL.createBlockData() as Orientable
                         blockData.axis = portalAxis
                         block.setBlockData(blockData, false)
+                        // mark plugin-created portal blocks so listeners can identify them
+                        try {
+                            // avoid hard dependency on Bukkit metadata api at top-level; use reflection-safe call
+                            block.setMetadata("vanilife_portal", org.bukkit.metadata.FixedMetadataValue(plugin, true))
+                        } catch (_: NoClassDefFoundError) {
+                            // ignore if metadata API is not available in this environment (very unlikely)
+                        }
                     }
                 }
                 delay(50)
