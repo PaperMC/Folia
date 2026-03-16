@@ -5,6 +5,13 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
+import net.azisaba.vanilife.islands.portal.ExposedLastBedRepository
+import net.azisaba.vanilife.islands.portal.ExposedResourceSpawnRepository
+import net.azisaba.vanilife.islands.portal.LastBedRepository
+import net.azisaba.vanilife.islands.portal.LastBedStorage
+import net.azisaba.vanilife.islands.portal.ResourceSpawnCache
+import net.azisaba.vanilife.islands.portal.ResourceSpawnRepository
+import net.azisaba.vanilife.islands.portal.ResourceTeleporter
 import net.azisaba.vanilife.islands.storage.DatabaseIslandRepository
 import net.azisaba.vanilife.islands.storage.IslandRepository
 import org.bukkit.Bukkit
@@ -36,6 +43,11 @@ class Main : JavaPlugin() {
                 single { database }
                 single<IslandRepository> { DatabaseIslandRepository(get()) }
                 single<IslandManager> { IslandManager(get(), Bukkit.getIslandsWorld(), get()) }
+                single<ResourceSpawnRepository> { ExposedResourceSpawnRepository(get()) }
+                single<LastBedRepository> { ExposedLastBedRepository(get()) }
+                single { ResourceSpawnCache(get(), get<Config>().portal, get()) }
+                single { LastBedStorage(get()) }
+                single { ResourceTeleporter(get(), get(), get(), get(), get<Config>().portal.resourceWorld) }
             })
         }
 

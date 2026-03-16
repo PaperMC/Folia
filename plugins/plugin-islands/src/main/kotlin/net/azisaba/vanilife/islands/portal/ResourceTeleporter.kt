@@ -1,0 +1,55 @@
+package net.azisaba.vanilife.islands.portal
+
+import com.github.shynixn.mccoroutine.folia.regionDispatcher
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
+import net.azisaba.vanilife.islands.IslandManager
+import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.islands.storage.resolveSpawnPoint
+import org.bukkit.Bukkit
+import org.bukkit.Location
+import org.bukkit.entity.Player
+import org.bukkit.plugin.Plugin
+
+internal class ResourceTeleporter(
+    private val plugin: Plugin,
+    private val cache: ResourceSpawnCache,
+    private val lastBedStorage: LastBedStorage,
+    private val islandManager: IslandManager,
+    private val resourceWorldName: String,
+) {
+    suspend fun teleportIslandToResource(player: Player, islandPos: IslandPos): Boolean {
+        val world = Bukkit.getWorld(resourceWorldName) ?: return false
+        val cached = cache.getOrCompute(islandPos, world)
+        val safe = cache.findSafeLocation(world, cached.spawnX, cached.spawnY, cached.spawnZ, 8)
+            ?: Location(world, cached.spawnX + 0.5, cached.spawnY.toDouble(), cached.spawnZ + 0.5)
+
+        if (safe.blockX != cached.spawnX || safe.blockY != cached.spawnY || safe.blockZ != cached.spawnZ) {
+            cache.overwrite(islandPos, world, safe.blockX, safe.blockY, safe.blockZ)
+        }
+
+        return withContext(plugin.regionDispatcher(safe)) {
+            world.getChunkAtAsync(safe.blockX shr 4, safe.blockZ shr 4, true).await()
+            player.teleportAsync(safe).await()
+        }
+    }
+
+    suspend fun teleportResourceToIsland(player: Player): Boolean {
+        val resourceWorld = Bukkit.getWorld(resourceWorldName) ?: return false
+        val bed = lastBedStorage.getLastBed(resourceWorld.key.toString(), player.uniqueId)
+        if (bed != null) {
+            val bedLocation = Location(resourceWorld, bed.x + 0.5, bed.y.toDouble(), bed.z + 0.5, bed.yaw, bed.pitch)
+            if (cache.findSafeLocation(resourceWorld, bed.x, bed.y, bed.z, 2) != null) {
+                return withContext(plugin.regionDispatcher(bedLocation)) {
+                    resourceWorld.getChunkAtAsync(bedLocation.blockX shr 4, bedLocation.blockZ shr 4, true).await()
+                    player.teleportAsync(bedLocation).await()
+                }
+            }
+            lastBedStorage.clear(resourceWorld.key.toString(), player.uniqueId)
+        }
+
+        val island = islandManager.lookupByOwner(player.uniqueId) ?: return false
+        val islandSpawn = island.primaryData.resolveSpawnPoint(island.pos)
+        return player.teleportAsync(islandSpawn).await()
+    }
+}
