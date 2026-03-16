@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.server.world;
+package net.azisaba.vanilife.server.world.resource;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.datafixers.util.Pair;
@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 @NullMarked
 public class ResourceBiomeSource extends BiomeSource {
     private final ResourceLayout layout;
-    private final ResourceRandomStateSource randomStateSource = new ResourceRandomStateSource();
+    private final ResourceRandomStateProvider randomStateSource = new ResourceRandomStateProvider();
 
     public ResourceBiomeSource(final ResourceLayout layout) {
         this.layout = layout;

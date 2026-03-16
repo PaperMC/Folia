@@ -105,10 +105,10 @@ index 8da489e8179f772ed439360c3451fdff15f0dc22..bbc2de522b2b6702a7b2b0f85a9ff767
      @Override
      public MutableComponent resolve(@Nullable CommandSourceStack source, @Nullable Entity entity, int recursionDepth) throws CommandSyntaxException {
 diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
-index 4a700aa0e68044bb950710be679861230ab5223d..b7b9d7807334bab6b8ad934b441aa18bd168c8eb 100644
+index 4a700aa0e68044bb950710be679861230ab5223d..d44beb960f623d86bcd29c8aafc989b902f6fd98 100644
 --- a/net/minecraft/resources/RegistryDataLoader.java
 +++ b/net/minecraft/resources/RegistryDataLoader.java
-@@ -22,9 +22,9 @@ import java.util.function.BiConsumer;
+@@ -22,9 +22,11 @@ import java.util.function.BiConsumer;
  import java.util.function.Function;
  import java.util.stream.Collectors;
  
@@ -118,9 +118,64 @@ index 4a700aa0e68044bb950710be679861230ab5223d..b7b9d7807334bab6b8ad934b441aa18b
 +import net.azisaba.vanilife.server.VanilifeBiomes;
 +import net.azisaba.vanilife.server.VanilifeDimensionTypes;
 +import net.azisaba.vanilife.server.VanilifeLevelStems;
++import net.azisaba.vanilife.server.VanilifeConfiguredFeatures;
++import net.azisaba.vanilife.server.VanilifePlacedFeatures;
  import net.azisaba.vanilife.annotations.Modified;
  import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.CrashReport;
+@@ -193,19 +195,23 @@ public class RegistryDataLoader {
+             .collect(Collectors.toUnmodifiableList());
+         RegistryOps.RegistryInfoLookup registryInfoLookup = createContext(registryLookups, list);
+         list.forEach(loader -> loadingFunction.apply((RegistryDataLoader.Loader<?>)loader, registryInfoLookup));
+-        // Aetheria start - Register Aetheria objects in data-driven registries
++        // Vanilife start - Register Vanilife objects in data-driven registries
+         list.forEach(loader -> {
+             final WritableRegistry<?> registry = loader.registry();
+ 
+             if (registry.key().equals(Registries.BIOME)) {
+                 VanilifeBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.CONFIGURED_FEATURE)) {
++                VanilifeConfiguredFeatures.bootstrap((WritableRegistry<ConfiguredFeature<?, ?>>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.PLACED_FEATURE)) {
++                VanilifePlacedFeatures.bootstrap((WritableRegistry<PlacedFeature>) registry, registryInfoLookup);
+             } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
+                 VanilifeDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
+             } else if (registry.key().equals(Registries.LEVEL_STEM)) {
+                 VanilifeLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
+             }
+         });
+-        // Aetheria end - Register Aetheria objects in data-driven registries
++        // Vanilife end - Register Vanilife objects in data-driven registries
+         list.forEach(loader -> {
+             Registry<?> registry = loader.registry();
+ 
+diff --git a/net/minecraft/server/Bootstrap.java b/net/minecraft/server/Bootstrap.java
+index ed675ee78be0c06c7b07ded7d3b9d87b2b4fdc15..efb850b013758fb550833926c5526312fa49d856 100644
+--- a/net/minecraft/server/Bootstrap.java
++++ b/net/minecraft/server/Bootstrap.java
+@@ -9,12 +9,14 @@ import java.util.TreeSet;
+ import java.util.concurrent.atomic.AtomicLong;
+ import java.util.function.Function;
+ import java.util.function.Supplier;
++import net.azisaba.vanilife.server.VanilifeFeatures;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.SuppressForbidden;
+ import net.minecraft.commands.Commands;
+ import net.minecraft.commands.arguments.selector.options.EntitySelectorOptions;
+ import net.minecraft.core.cauldron.CauldronInteraction;
+ import net.minecraft.core.dispenser.DispenseItemBehavior;
++import net.minecraft.core.WritableRegistry;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.locale.Language;
+ import net.minecraft.world.effect.MobEffect;
+@@ -55,6 +57,7 @@ public class Bootstrap {
+                     EntitySelectorOptions.bootStrap();
+                     DispenseItemBehavior.bootStrap();
+                     CauldronInteraction.bootStrap();
++                    VanilifeFeatures.bootstrap((WritableRegistry<net.minecraft.world.level.levelgen.feature.Feature<?>>) BuiltInRegistries.FEATURE);
+                     // Paper start
+                     BuiltInRegistries.bootStrap(() -> {
+                         io.papermc.paper.world.worldgen.OptionallyFlatBedrockConditionSource.bootstrap(); // Paper - Flat bedrock generator settings
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 index bdd3062d0e2cca647c749259c8d497d05f7fed86..578bad3c53aba748601a3b7686f7cef5355ba25c 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
@@ -148,7 +203,7 @@ index 08a1be57e1057a9e961eeb8f59cd12e98ed52bab..85f9767632b21d4194076b2205422d90
                                  continue;
                              }
 diff --git a/net/minecraft/world/level/biome/BiomeManager.java b/net/minecraft/world/level/biome/BiomeManager.java
-index 1ee7b32ae9dc579337520edfbf337ffaeaeebf00..0ae80b0a7caebb067aaaf071af339c9cc59bcf6c 100644
+index 1ee7b32ae9dc579337520edfbf337ffaeaeebf00..ca31b8952ed1d7ecdd708f734e7aa6216f2d3740 100644
 --- a/net/minecraft/world/level/biome/BiomeManager.java
 +++ b/net/minecraft/world/level/biome/BiomeManager.java
 @@ -1,8 +1,8 @@
@@ -157,8 +212,8 @@ index 1ee7b32ae9dc579337520edfbf337ffaeaeebf00..0ae80b0a7caebb067aaaf071af339c9c
  import com.google.common.hash.Hashing;
 -import net.azisaba.vanilife.world.AetheriaLayer;
 -import net.azisaba.vanilife.world.AetheriaLayout;
-+import net.azisaba.vanilife.server.world.ResourceLayer;
-+import net.azisaba.vanilife.server.world.ResourceLayout;
++import net.azisaba.vanilife.server.world.resource.ResourceLayer;
++import net.azisaba.vanilife.server.world.resource.ResourceLayout;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
  import net.minecraft.core.QuartPos;
@@ -184,6 +239,94 @@ index fd92282bb1cbe7051258f6d239e8dc0ce191baba..5d0d04f21e46d58c20badd2127fcd95c
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
+diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
+index d88c703e0eb22af1d815d712f4499305497c1180..8bf486b35f71a9a1642d28a03ee24cc201a664da 100644
+--- a/net/minecraft/world/level/levelgen/Heightmap.java
++++ b/net/minecraft/world/level/levelgen/Heightmap.java
+@@ -10,6 +10,8 @@ import java.util.EnumSet;
+ import java.util.Set;
+ import java.util.function.IntFunction;
+ import java.util.function.Predicate;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.network.codec.StreamCodec;
+@@ -141,6 +143,7 @@ public class Heightmap {
+         return x + z * 16;
+     }
+ 
++    @Modified(Op.ADD_ENUM)
+     public static enum Types implements StringRepresentable {
+         WORLD_SURFACE_WG(0, "WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
+         WORLD_SURFACE(1, "WORLD_SURFACE", Heightmap.Usage.CLIENT, Heightmap.NOT_AIR),
+@@ -154,43 +157,43 @@ public class Heightmap {
+             state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
+         ),
+ 
+-        // Aetheria start - Custom heightmap types by Aetheria layer
+-        AETHERIA_OVERWORLD_WORLD_SURFACE_WG(6, "AETHERIA_OVERWORLD_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
+-        AETHERIA_OVERWORLD_WORLD_SURFACE(7, "AETHERIA_OVERWORLD_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
+-        AETHERIA_OVERWORLD_OCEAN_FLOOR_WG(8, "AETHERIA_OVERWORLD_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
+-        AETHERIA_OVERWORLD_OCEAN_FLOOR(9, "AETHERIA_OVERWORLD_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
+-        AETHERIA_OVERWORLD_MOTION_BLOCKING(10, "AETHERIA_OVERWORLD_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
+-        AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES(
++        // Vanilife start - Custom heightmap types by resource layer
++        RESOURCE_OVERWORLD_WORLD_SURFACE_WG(6, "RESOURCE_OVERWORLD_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        RESOURCE_OVERWORLD_WORLD_SURFACE(7, "RESOURCE_OVERWORLD_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        RESOURCE_OVERWORLD_OCEAN_FLOOR_WG(8, "RESOURCE_OVERWORLD_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        RESOURCE_OVERWORLD_OCEAN_FLOOR(9, "RESOURCE_OVERWORLD_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        RESOURCE_OVERWORLD_MOTION_BLOCKING(10, "RESOURCE_OVERWORLD_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        RESOURCE_OVERWORLD_MOTION_BLOCKING_NO_LEAVES(
+                 11,
+-                "AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES",
++                "RESOURCE_OVERWORLD_MOTION_BLOCKING_NO_LEAVES",
+                 Heightmap.Usage.LIVE_WORLD,
+                 state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
+         ),
+ 
+-        AETHERIA_NETHER_WORLD_SURFACE_WG(12, "AETHERIA_NETHER_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
+-        AETHERIA_NETHER_WORLD_SURFACE(13, "AETHERIA_NETHER_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
+-        AETHERIA_NETHER_OCEAN_FLOOR_WG(14, "AETHERIA_NETHER_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
+-        AETHERIA_NETHER_OCEAN_FLOOR(15, "AETHERIA_NETHER_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
+-        AETHERIA_NETHER_MOTION_BLOCKING(16, "AETHERIA_NETHER_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
+-        AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES(
++        RESOURCE_NETHER_WORLD_SURFACE_WG(12, "RESOURCE_NETHER_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        RESOURCE_NETHER_WORLD_SURFACE(13, "RESOURCE_NETHER_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        RESOURCE_NETHER_OCEAN_FLOOR_WG(14, "RESOURCE_NETHER_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        RESOURCE_NETHER_OCEAN_FLOOR(15, "RESOURCE_NETHER_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        RESOURCE_NETHER_MOTION_BLOCKING(16, "RESOURCE_NETHER_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        RESOURCE_NETHER_MOTION_BLOCKING_NO_LEAVES(
+                 17,
+-                "AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES",
++                "RESOURCE_NETHER_MOTION_BLOCKING_NO_LEAVES",
+                 Heightmap.Usage.LIVE_WORLD,
+                 state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
+         ),
+ 
+-        AETHERIA_END_WORLD_SURFACE_WG(18, "AETHERIA_END_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
+-        AETHERIA_END_WORLD_SURFACE(19, "AETHERIA_END_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
+-        AETHERIA_END_OCEAN_FLOOR_WG(20, "AETHERIA_END_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
+-        AETHERIA_END_OCEAN_FLOOR(21, "AETHERIA_END_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
+-        AETHERIA_END_MOTION_BLOCKING(22, "AETHERIA_END_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
+-        AETHERIA_END_MOTION_BLOCKING_NO_LEAVES(
++        RESOURCE_END_WORLD_SURFACE_WG(18, "RESOURCE_END_WORLD_SURFACE_WG", Heightmap.Usage.WORLDGEN, Heightmap.NOT_AIR),
++        RESOURCE_END_WORLD_SURFACE(19, "RESOURCE_END_WORLD_SURFACE", Heightmap.Usage.LIVE_WORLD, Heightmap.NOT_AIR),
++        RESOURCE_END_OCEAN_FLOOR_WG(20, "RESOURCE_END_OCEAN_FLOOR_WG", Heightmap.Usage.WORLDGEN, Heightmap.MATERIAL_MOTION_BLOCKING),
++        RESOURCE_END_OCEAN_FLOOR(21, "RESOURCE_END_OCEAN_FLOOR", Heightmap.Usage.LIVE_WORLD, Heightmap.MATERIAL_MOTION_BLOCKING),
++        RESOURCE_END_MOTION_BLOCKING(22, "RESOURCE_END_MOTION_BLOCKING", Heightmap.Usage.LIVE_WORLD, state -> state.blocksMotion() || !state.getFluidState().isEmpty()),
++        RESOURCE_END_MOTION_BLOCKING_NO_LEAVES(
+                 23,
+-                "AETHERIA_END_MOTION_BLOCKING_NO_LEAVES",
++                "RESOURCE_END_MOTION_BLOCKING_NO_LEAVES",
+                 Heightmap.Usage.LIVE_WORLD,
+                 state -> (state.blocksMotion() || !state.getFluidState().isEmpty()) && !(state.getBlock() instanceof LeavesBlock)
+         );
+-        // Aetheria end - Custom heightmap types by Aetheria layer
++        // Vanilife end - Custom heightmap types by resource layer
+ 
+         public static final Codec<Heightmap.Types> CODEC = StringRepresentable.fromEnum(Heightmap.Types::values);
+         private static final IntFunction<Heightmap.Types> BY_ID = ByIdMap.continuous(types -> types.id, values(), ByIdMap.OutOfBoundsStrategy.ZERO);
 diff --git a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java b/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java
 index f12520f990d28c28e8ce8d4c3c182da266f159b6..4e289e473205b2df162314aad2ef45b1d35a14eb 100644
 --- a/net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java

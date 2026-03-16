@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.server.world;
+package net.azisaba.vanilife.server.world.resource;
 
 import com.mojang.serialization.MapCodec;
 import net.azisaba.vanilife.server.world.height.HeightContext;
@@ -29,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
 public class ResourceChunkGenerator extends ChunkGenerator {
     private final ResourceLayout layout;
 
-    private final ResourceRandomStateSource randomStateSource = new ResourceRandomStateSource();
+    private final ResourceRandomStateProvider randomStateSource = new ResourceRandomStateProvider();
 
     public ResourceChunkGenerator(final ResourceLayout layout) {
         super(new ResourceBiomeSource(layout));

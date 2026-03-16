@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.server.world.noise;
+package net.azisaba.vanilife.server.world.resource;
 
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.registries.Registries;
@@ -16,7 +16,7 @@ import org.jspecify.annotations.NullMarked;
 import java.util.List;
 
 @NullMarked
-public final class AetheriaNoiseGeneratorSettings {
+public final class ResourceNoiseGeneratorSettings {
     public static NoiseGeneratorSettings overworld(final RegistryOps.RegistryInfoLookup lookup) {
         final HolderGetter<DensityFunction> densityFunctions = lookup.lookup(Registries.DENSITY_FUNCTION)
                 .orElseThrow()

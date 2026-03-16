@@ -1,8 +1,7 @@
-package net.azisaba.vanilife.server.world;
+package net.azisaba.vanilife.server.world.resource;
 
 import net.azisaba.vanilife.server.VanilifeBiomes;
 import net.azisaba.vanilife.server.world.height.HeightmapSet;
-import net.azisaba.vanilife.server.world.noise.AetheriaNoiseGeneratorSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -115,17 +114,13 @@ public class ResourceLayer extends ProtoChunk {
     }
 
     @NullMarked
-    public record Type(
-            int height,
-            HeightmapSet heightmapSet,
-            ChunkGenerator generator
-    ) {
+    public record Type(int height, HeightmapSet heightmapSet, ChunkGenerator generator) {
         public static ResourceLayer.Type overworld(final RegistryOps.RegistryInfoLookup lookup) {
-            final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(AetheriaNoiseGeneratorSettings.overworld(lookup));
+            final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(ResourceNoiseGeneratorSettings.overworld(lookup));
             return new ResourceLayer.Type(
                     DimensionDefaults.OVERWORLD_GENERATION_HEIGHT,
-                    HeightmapSet.AETHERIA_OVERWORLD,
-                    new NoiseBasedChunkGenerator(VanilifeBiomeSources.aetheriaOverworld(lookup), noiseGeneratorSettings)
+                    HeightmapSet.RESOURCE_OVERWORLD,
+                    new NoiseBasedChunkGenerator(new OverworldLayerBiomeSourceBuilder().build(lookup), noiseGeneratorSettings)
             );
         }
 
@@ -134,10 +129,10 @@ public class ResourceLayer extends ProtoChunk {
                     .orElseThrow()
                     .getter()
                     .getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER);
-            final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(AetheriaNoiseGeneratorSettings.nether(lookup));
+            final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(ResourceNoiseGeneratorSettings.nether(lookup));
             return new ResourceLayer.Type(
                     DimensionDefaults.NETHER_GENERATION_HEIGHT,
-                    HeightmapSet.AETHERIA_NETHER,
+                    HeightmapSet.RESOURCE_NETHER,
                     new NoiseBasedChunkGenerator(MultiNoiseBiomeSource.createFromPreset(parameterList), noiseGeneratorSettings)
             );
         }
@@ -152,7 +147,7 @@ public class ResourceLayer extends ProtoChunk {
                     .getOrThrow(NoiseGeneratorSettings.END);
             return new ResourceLayer.Type(
                     DimensionDefaults.END_GENERATION_HEIGHT,
-                    HeightmapSet.AETHERIA_END,
+                    HeightmapSet.RESOURCE_END,
                     new NoiseBasedChunkGenerator(
                             new TheEndBiomeSource(
                                     biomes.getOrThrow(VanilifeBiomes.THE_END),

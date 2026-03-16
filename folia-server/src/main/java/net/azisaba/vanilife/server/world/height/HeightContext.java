@@ -1,7 +1,7 @@
 package net.azisaba.vanilife.server.world.height;
 
-import net.azisaba.vanilife.server.world.ResourceLayer;
-import net.azisaba.vanilife.server.world.ResourceLayout;
+import net.azisaba.vanilife.server.world.resource.ResourceLayer;
+import net.azisaba.vanilife.server.world.resource.ResourceLayout;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.NullMarked;

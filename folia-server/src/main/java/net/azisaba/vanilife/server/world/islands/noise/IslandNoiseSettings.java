@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.server.islands.noise;
+package net.azisaba.vanilife.server.world.islands.noise;
 
 import net.minecraft.util.valueproviders.IntProvider;
 import net.minecraft.util.valueproviders.UniformInt;

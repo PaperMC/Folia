@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.server.world;
+package net.azisaba.vanilife.server.world.resource;
 
 import net.minecraft.core.HolderGetter;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @NullMarked
-class ResourceRandomStateSource {
+class ResourceRandomStateProvider {
     private final Map<Long, Map<ResourceLayer.Type, RandomState>> cacheMap = new ConcurrentHashMap<>();
 
     public @Nullable RandomState getOrCreate(final long seed, final ResourceLayer.Type layerType, final HolderGetter<NormalNoise.NoiseParameters> noiseParametersGetter) {

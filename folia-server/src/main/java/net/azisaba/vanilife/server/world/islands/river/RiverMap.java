@@ -1,7 +1,7 @@
-package net.azisaba.vanilife.server.islands.river;
+package net.azisaba.vanilife.server.world.islands.river;
 
-import net.azisaba.vanilife.server.islands.IslandsGeneratorSettings;
-import net.azisaba.vanilife.server.islands.noise.IslandNoise;
+import net.azisaba.vanilife.server.world.islands.IslandsGeneratorSettings;
+import net.azisaba.vanilife.server.world.islands.noise.IslandNoise;
 import net.minecraft.util.Mth;
 import org.jspecify.annotations.NullMarked;
 

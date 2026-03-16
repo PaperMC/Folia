@@ -34,28 +34,28 @@ public record HeightmapSet(
             Heightmap.Types.MOTION_BLOCKING,
             Heightmap.Types.MOTION_BLOCKING_NO_LEAVES
     );
-    public static final HeightmapSet AETHERIA_OVERWORLD = new HeightmapSet(
-            Heightmap.Types.AETHERIA_OVERWORLD_WORLD_SURFACE_WG,
-            Heightmap.Types.AETHERIA_OVERWORLD_WORLD_SURFACE,
-            Heightmap.Types.AETHERIA_OVERWORLD_OCEAN_FLOOR_WG,
-            Heightmap.Types.AETHERIA_OVERWORLD_OCEAN_FLOOR,
-            Heightmap.Types.AETHERIA_OVERWORLD_MOTION_BLOCKING,
-            Heightmap.Types.AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES
+    public static final HeightmapSet RESOURCE_OVERWORLD = new HeightmapSet(
+            Heightmap.Types.RESOURCE_OVERWORLD_WORLD_SURFACE_WG,
+            Heightmap.Types.RESOURCE_OVERWORLD_WORLD_SURFACE,
+            Heightmap.Types.RESOURCE_OVERWORLD_OCEAN_FLOOR_WG,
+            Heightmap.Types.RESOURCE_OVERWORLD_OCEAN_FLOOR,
+            Heightmap.Types.RESOURCE_OVERWORLD_MOTION_BLOCKING,
+            Heightmap.Types.RESOURCE_OVERWORLD_MOTION_BLOCKING_NO_LEAVES
     );
-    public static final HeightmapSet AETHERIA_NETHER = new HeightmapSet(
-            Heightmap.Types.AETHERIA_NETHER_WORLD_SURFACE_WG,
-            Heightmap.Types.AETHERIA_NETHER_WORLD_SURFACE,
-            Heightmap.Types.AETHERIA_NETHER_OCEAN_FLOOR_WG,
-            Heightmap.Types.AETHERIA_NETHER_OCEAN_FLOOR,
-            Heightmap.Types.AETHERIA_NETHER_MOTION_BLOCKING,
-            Heightmap.Types.AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES
+    public static final HeightmapSet RESOURCE_NETHER = new HeightmapSet(
+            Heightmap.Types.RESOURCE_NETHER_WORLD_SURFACE_WG,
+            Heightmap.Types.RESOURCE_NETHER_WORLD_SURFACE,
+            Heightmap.Types.RESOURCE_NETHER_OCEAN_FLOOR_WG,
+            Heightmap.Types.RESOURCE_NETHER_OCEAN_FLOOR,
+            Heightmap.Types.RESOURCE_NETHER_MOTION_BLOCKING,
+            Heightmap.Types.RESOURCE_NETHER_MOTION_BLOCKING_NO_LEAVES
     );
-    public static final HeightmapSet AETHERIA_END = new HeightmapSet(
-            Heightmap.Types.AETHERIA_END_WORLD_SURFACE_WG,
-            Heightmap.Types.AETHERIA_END_WORLD_SURFACE,
-            Heightmap.Types.AETHERIA_END_OCEAN_FLOOR_WG,
-            Heightmap.Types.AETHERIA_END_OCEAN_FLOOR,
-            Heightmap.Types.AETHERIA_END_MOTION_BLOCKING,
-            Heightmap.Types.AETHERIA_END_MOTION_BLOCKING_NO_LEAVES
+    public static final HeightmapSet RESOURCE_END = new HeightmapSet(
+            Heightmap.Types.RESOURCE_END_WORLD_SURFACE_WG,
+            Heightmap.Types.RESOURCE_END_WORLD_SURFACE,
+            Heightmap.Types.RESOURCE_END_OCEAN_FLOOR_WG,
+            Heightmap.Types.RESOURCE_END_OCEAN_FLOOR,
+            Heightmap.Types.RESOURCE_END_MOTION_BLOCKING,
+            Heightmap.Types.RESOURCE_END_MOTION_BLOCKING_NO_LEAVES
     );
 }
