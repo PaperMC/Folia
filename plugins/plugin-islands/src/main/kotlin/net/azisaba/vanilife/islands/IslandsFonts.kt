@@ -14,10 +14,10 @@ object IslandsFonts {
     fun waves(): PackFont = PackFont(
         listOf(
             PackBitmapFontProvider(
-                Key.key(Vanilife.NAMESPACE, "large_0.png"),
-                listOf("${Waves.LARGE_0}"),
-                767,
-                768,
+                file = Key.key(Vanilife.NAMESPACE, "large_0.png"),
+                chars = listOf(Waves.LARGE_0.toString()),
+                ascent = 767,
+                height = 768,
             )
         )
     )

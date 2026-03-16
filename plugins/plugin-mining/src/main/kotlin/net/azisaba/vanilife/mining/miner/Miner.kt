@@ -2,7 +2,10 @@ package net.azisaba.vanilife.mining.miner
 
 import com.github.shynixn.mccoroutine.folia.launch
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
+import io.papermc.paper.registry.RegistryAccess
+import io.papermc.paper.registry.RegistryKey
 import kotlinx.coroutines.withContext
+import net.azisaba.vanilife.mining.MiningBlockTypeTagKeys
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.block.Block
@@ -16,7 +19,7 @@ fun interface Miner {
     companion object Builtins {
         fun range(halfRange: Int): Miner = Miner { context, plugin ->
             fun breakBlock(block: Block) {
-                if (block.type.isAir) return
+                if (!isMinable(block)) return
 
                 if (context.pickaxe != null) {
                     context.pickaxe.damage(1, context.player)
@@ -44,6 +47,11 @@ fun interface Miner {
                 }
             }
         }
+
+        internal fun isMinable(block: Block): Boolean = RegistryAccess.registryAccess()
+            .getRegistry(RegistryKey.BLOCK)
+            .getTag(MiningBlockTypeTagKeys.MINER_MINABLE)
+            .contains(block.type.asBlockType()!!.key())
     }
 
     data class Context(val player: Player, val source: Block, val pickaxe: ItemStack?)

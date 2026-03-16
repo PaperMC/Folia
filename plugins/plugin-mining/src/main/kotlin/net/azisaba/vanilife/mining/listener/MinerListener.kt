@@ -14,11 +14,7 @@ import org.bukkit.plugin.Plugin
 internal class MinerListener(private val plugin: Plugin) : Listener {
     @EventHandler
     fun onBlockBreak(event: BlockBreakEvent) {
-        val minerSourcesTag = RegistryAccess.registryAccess()
-            .getRegistry(RegistryKey.BLOCK)
-            .getTag(MiningBlockTypeTagKeys.MINER_SOURCES)
-
-        if (!minerSourcesTag.contains(event.block.type.asBlockType()!!.key())) {
+        if (!Miner.isMinable(event.block)) {
             return
         }
 

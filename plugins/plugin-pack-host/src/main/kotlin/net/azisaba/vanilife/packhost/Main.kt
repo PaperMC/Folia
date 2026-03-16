@@ -2,11 +2,7 @@ package net.azisaba.vanilife.packhost
 
 import net.azisaba.packed.Packed
 import net.azisaba.packed.PackedKey
-import net.azisaba.packed.dsl.font
-import net.azisaba.packed.dsl.items
-import net.azisaba.packed.dsl.lang
-import net.azisaba.packed.dsl.models
-import net.azisaba.packed.dsl.sounds
+import net.azisaba.packed.dsl.*
 import net.azisaba.packed.lang
 import net.azisaba.packed.server.configureEmbeddedServer
 import net.azisaba.vanilife.Vanilife
@@ -24,11 +20,7 @@ import net.azisaba.vanilife.islands.IslandsFonts
 import net.azisaba.vanilife.mining.MiningItemModels
 import net.azisaba.vanilife.mining.MiningModels
 import net.azisaba.vanilife.mining.MiningTranslations
-import net.azisaba.vanilife.npc.NpcFonts
-import net.azisaba.vanilife.npc.NpcItemModels
-import net.azisaba.vanilife.npc.NpcModels
-import net.azisaba.vanilife.npc.NpcSoundEvents
-import net.azisaba.vanilife.npc.NpcTranslations
+import net.azisaba.vanilife.npc.*
 import net.kyori.adventure.resource.ResourcePackInfo
 import net.kyori.adventure.text.Component
 import org.bukkit.plugin.java.JavaPlugin
@@ -161,8 +153,14 @@ internal class Main : JavaPlugin() {
             }
 
             lang {
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
+                PackedKey.lang(
+                    Vanilife.NAMESPACE,
+                    Locale.US
+                ) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
+                PackedKey.lang(
+                    Vanilife.NAMESPACE,
+                    Locale.JAPAN
+                ) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
@@ -287,13 +285,25 @@ internal class Main : JavaPlugin() {
             includeJavaResources(Main::class)
 
             includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "assets", "assets")
-            includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_legacy", "bettermodel_legacy")
-            includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_modern", "bettermodel_modern")
+            includeZip(
+                server.pluginsFolder.toPath().resolve("BetterModel/build.zip"),
+                "bettermodel_legacy",
+                "bettermodel_legacy"
+            )
+            includeZip(
+                server.pluginsFolder.toPath().resolve("BetterModel/build.zip"),
+                "bettermodel_modern",
+                "bettermodel_modern"
+            )
         }
 
         val configured = packed.configureEmbeddedServer(port = 8085)
         configured.embeddedServer.start(wait = false)
-        val packInfo = ResourcePackInfo.resourcePackInfo(UUID.randomUUID(), URI.create("http://localhost:8085"), configured.computeSha1Hash())
+        val packInfo = ResourcePackInfo.resourcePackInfo(
+            UUID.randomUUID(),
+            URI.create("http://localhost:8085"),
+            configured.computeSha1Hash()
+        )
 
         server.pluginManager.registerEvents(PlayerListener(packInfo), this)
     }

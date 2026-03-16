@@ -16,6 +16,7 @@ object GeneralFonts {
                 file = Key.key(Vanilife.NAMESPACE, "misaki_gothic.ttf"),
                 size = 8,
                 oversample = 2,
+                skip = (' '..'~').toList(),
             )
         )
     )
