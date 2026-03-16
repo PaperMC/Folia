@@ -18,17 +18,6 @@ fun interface Miner {
 
     companion object Builtins {
         fun range(halfRange: Int): Miner = Miner { context, plugin ->
-            fun breakBlock(block: Block) {
-                if (!isMinable(block)) return
-
-                if (context.pickaxe != null) {
-                    context.pickaxe.damage(1, context.player)
-                    block.breakNaturally(context.pickaxe, true, true)
-                } else {
-                    block.type = Material.AIR
-                }
-            }
-
             plugin.launch(plugin.regionDispatcher(context.source.location)) {
                 for (dx in -halfRange..halfRange) {
                     for (dy in -halfRange..halfRange) {
@@ -36,12 +25,28 @@ fun interface Miner {
                             val currentLocation = context.source.location.add(dx.toDouble(), dy.toDouble(), dz.toDouble())
 
                             if (Bukkit.isOwnedByCurrentRegion(currentLocation)) {
-                                breakBlock(currentLocation.block)
+                                breakBlockWithCheck(currentLocation.block, context)
                             } else {
                                 withContext(plugin.regionDispatcher(currentLocation)) {
-                                    breakBlock(currentLocation.block)
+                                    breakBlockWithCheck(currentLocation.block, context)
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        fun vertical(up: Int, down: Int): Miner = Miner { context, plugin ->
+            plugin.launch(plugin.regionDispatcher(context.source.location)) {
+                for (dy in -down..up) {
+                    val currentLocation = context.source.location.add(0.0, dy.toDouble(), 0.0)
+
+                    if (Bukkit.isOwnedByCurrentRegion(currentLocation)) {
+                        breakBlockWithCheck(currentLocation.block, context)
+                    } else {
+                        withContext(plugin.regionDispatcher(currentLocation)) {
+                            breakBlockWithCheck(currentLocation.block, context)
                         }
                     }
                 }
@@ -52,6 +57,16 @@ fun interface Miner {
             .getRegistry(RegistryKey.BLOCK)
             .getTag(MiningBlockTypeTagKeys.MINER_MINABLE)
             .contains(block.type.asBlockType()!!.key())
+
+        private fun breakBlockWithCheck(block: Block, context: Context) {
+            if (!isMinable(block)) return
+            if (context.pickaxe != null) {
+                context.pickaxe.damage(1, context.player)
+                block.breakNaturally(context.pickaxe, true, true)
+            } else {
+                block.type = Material.AIR
+            }
+        }
     }
 
     data class Context(val player: Player, val source: Block, val pickaxe: ItemStack?)
