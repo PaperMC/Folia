@@ -22,6 +22,7 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class VanilifeBiomes {
+    public static final ResourceKey<Biome> GLACIAL_CAVE = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "glacial_cave"));
     public static final ResourceKey<Biome> THE_END = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "the_end"));
     public static final ResourceKey<Biome> END_BARRENS = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "end_barrens"));
     public static final ResourceKey<Biome> END_MIDLANDS = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "end_midlands"));
@@ -36,6 +37,11 @@ public final class VanilifeBiomes {
                 .orElseThrow()
                 .getter();
 
+        writable.register(
+                VanilifeBiomes.GLACIAL_CAVE,
+                VanilifeBiomes.glacialCave(placedFeature, worldCarvers),
+                RegistrationInfo.BUILT_IN
+        );
         writable.register(
                 VanilifeBiomes.THE_END,
                 VanilifeBiomes.theEnd(placedFeature, worldCarvers),
@@ -63,46 +69,63 @@ public final class VanilifeBiomes {
         );
     }
 
+    private static Biome glacialCave(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
+        final MobSpawnSettings.Builder mobSpawnSettings = new MobSpawnSettings.Builder();
+        BiomeDefaultFeatures.caveSpawns(mobSpawnSettings);
+
+        final BiomeGenerationSettings generationSettings = new BiomeGenerationSettings.Builder(placedFeatures, worldCarvers)
+                .build();
+
+        return new Biome.BiomeBuilder()
+                .hasPrecipitation(true)
+                .temperature(0.0F)
+                .downfall(0.4F)
+                .specialEffects(new BiomeSpecialEffects.Builder().waterColor(1332635).grassColorOverride(8434839).foliageColorOverride(6332795).build())
+                .mobSpawnSettings(mobSpawnSettings.build())
+                .generationSettings(generationSettings)
+                .build();
+    }
+
     private static Biome baseEndBiome(final BiomeGenerationSettings.Builder generationSettings) {
-        MobSpawnSettings.Builder builder = new MobSpawnSettings.Builder();
-        BiomeDefaultFeatures.endSpawns(builder);
+        final MobSpawnSettings.Builder mobSpawnSettings = new MobSpawnSettings.Builder();
+        BiomeDefaultFeatures.endSpawns(mobSpawnSettings);
         return new Biome.BiomeBuilder()
                 .hasPrecipitation(false)
                 .temperature(0.5F)
                 .downfall(0.5F)
                 .specialEffects(new BiomeSpecialEffects.Builder().waterColor(4159204).build())
-                .mobSpawnSettings(builder.build())
+                .mobSpawnSettings(mobSpawnSettings.build())
                 .generationSettings(generationSettings.build())
                 .setAttribute(EnvironmentAttributes.SKY_COLOR, 1250067)
                 .setAttribute(EnvironmentAttributes.FOG_COLOR, 9538492)
                 .build();
     }
 
-    public static Biome theEnd(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
+    private static Biome theEnd(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
         BiomeGenerationSettings.Builder builder = new BiomeGenerationSettings.Builder(placedFeatures, worldCarvers)
                 .addFeature(GenerationStep.Decoration.SURFACE_STRUCTURES, EndPlacements.END_SPIKE)
                 .addFeature(GenerationStep.Decoration.TOP_LAYER_MODIFICATION, EndPlacements.END_PLATFORM);
         return baseEndBiome(builder);
     }
 
-    public static Biome endBarrens(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
+    private static Biome endBarrens(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
         BiomeGenerationSettings.Builder builder = new BiomeGenerationSettings.Builder(placedFeatures, worldCarvers);
         return baseEndBiome(builder);
     }
 
-    public static Biome endMidlands(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
+    private static Biome endMidlands(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
         BiomeGenerationSettings.Builder builder = new BiomeGenerationSettings.Builder(placedFeatures, worldCarvers);
         return baseEndBiome(builder);
     }
 
-    public static Biome endHighlands(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
+    private static Biome endHighlands(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
         BiomeGenerationSettings.Builder builder = new BiomeGenerationSettings.Builder(placedFeatures, worldCarvers)
                 .addFeature(GenerationStep.Decoration.SURFACE_STRUCTURES, EndPlacements.END_GATEWAY_RETURN)
                 .addFeature(GenerationStep.Decoration.VEGETAL_DECORATION, EndPlacements.CHORUS_PLANT);
         return baseEndBiome(builder);
     }
 
-    public static Biome smallEndIslands(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
+    private static Biome smallEndIslands(final HolderGetter<PlacedFeature> placedFeatures, final HolderGetter<ConfiguredWorldCarver<?>> worldCarvers) {
         BiomeGenerationSettings.Builder builder = new BiomeGenerationSettings.Builder(placedFeatures, worldCarvers)
                 .addFeature(GenerationStep.Decoration.RAW_GENERATION, EndPlacements.END_ISLAND_DECORATED);
         return baseEndBiome(builder);

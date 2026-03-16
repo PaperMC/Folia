@@ -25,13 +25,13 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
-public class AetheriaLayer extends ProtoChunk {
-    public static AetheriaLayer empty(final ChunkPos pos, final ServerLevel level, final AetheriaLayout layout, final AetheriaLayer.Type type) {
-        return new AetheriaLayer(pos, level, layout, type);
+public class ResourceLayer extends ProtoChunk {
+    public static ResourceLayer empty(final ChunkPos pos, final ServerLevel level, final ResourceLayout layout, final ResourceLayer.Type type) {
+        return new ResourceLayer(pos, level, layout, type);
     }
 
-    public static AetheriaLayer copy(final ChunkAccess chunk, final ServerLevel level, final AetheriaLayout layout, final AetheriaLayer.Type type) {
-        final AetheriaLayer copy = new AetheriaLayer(chunk.getPos(), level, layout, type);
+    public static ResourceLayer copy(final ChunkAccess chunk, final ServerLevel level, final ResourceLayout layout, final ResourceLayer.Type type) {
+        final ResourceLayer copy = new ResourceLayer(chunk.getPos(), level, layout, type);
 
         final BlockPos.MutableBlockPos fromPos = new BlockPos.MutableBlockPos();
         final BlockPos.MutableBlockPos toPos = new BlockPos.MutableBlockPos();
@@ -58,10 +58,10 @@ public class AetheriaLayer extends ProtoChunk {
         return copy;
     }
 
-    private final AetheriaLayout layout;
-    private final AetheriaLayer.Type layerType;
+    private final ResourceLayout layout;
+    private final ResourceLayer.Type layerType;
 
-    private AetheriaLayer(final ChunkPos pos, final ServerLevel level, final AetheriaLayout layout, final AetheriaLayer.Type type) {
+    private ResourceLayer(final ChunkPos pos, final ServerLevel level, final ResourceLayout layout, final ResourceLayer.Type type) {
         super(pos, UpgradeData.EMPTY, type.createHeightAccessor(), level.palettedContainerFactory(), null);
         this.layout = layout;
         this.layerType = type;
@@ -120,33 +120,29 @@ public class AetheriaLayer extends ProtoChunk {
             HeightmapSet heightmapSet,
             ChunkGenerator generator
     ) {
-        public static AetheriaLayer.Type overworld(final RegistryOps.RegistryInfoLookup lookup) {
-            final Holder<MultiNoiseBiomeSourceParameterList> parameterList = lookup.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
-                    .orElseThrow()
-                    .getter()
-                    .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD);
+        public static ResourceLayer.Type overworld(final RegistryOps.RegistryInfoLookup lookup) {
             final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(AetheriaNoiseGeneratorSettings.overworld(lookup));
-            return new AetheriaLayer.Type(
+            return new ResourceLayer.Type(
                     DimensionDefaults.OVERWORLD_GENERATION_HEIGHT,
                     HeightmapSet.AETHERIA_OVERWORLD,
-                    new NoiseBasedChunkGenerator(MultiNoiseBiomeSource.createFromPreset(parameterList), noiseGeneratorSettings)
+                    new NoiseBasedChunkGenerator(VanilifeBiomeSources.aetheriaOverworld(lookup), noiseGeneratorSettings)
             );
         }
 
-        public static AetheriaLayer.Type nether(final RegistryOps.RegistryInfoLookup lookup) {
+        public static ResourceLayer.Type nether(final RegistryOps.RegistryInfoLookup lookup) {
             final Holder<MultiNoiseBiomeSourceParameterList> parameterList = lookup.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                     .orElseThrow()
                     .getter()
                     .getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER);
             final Holder<NoiseGeneratorSettings> noiseGeneratorSettings = Holder.direct(AetheriaNoiseGeneratorSettings.nether(lookup));
-            return new AetheriaLayer.Type(
+            return new ResourceLayer.Type(
                     DimensionDefaults.NETHER_GENERATION_HEIGHT,
                     HeightmapSet.AETHERIA_NETHER,
                     new NoiseBasedChunkGenerator(MultiNoiseBiomeSource.createFromPreset(parameterList), noiseGeneratorSettings)
             );
         }
 
-        public static AetheriaLayer.Type end(final RegistryOps.RegistryInfoLookup lookup) {
+        public static ResourceLayer.Type end(final RegistryOps.RegistryInfoLookup lookup) {
             final HolderGetter<Biome> biomes = lookup.lookup(Registries.BIOME)
                     .orElseThrow()
                     .getter();
@@ -154,7 +150,7 @@ public class AetheriaLayer extends ProtoChunk {
                     .orElseThrow()
                     .getter()
                     .getOrThrow(NoiseGeneratorSettings.END);
-            return new AetheriaLayer.Type(
+            return new ResourceLayer.Type(
                     DimensionDefaults.END_GENERATION_HEIGHT,
                     HeightmapSet.AETHERIA_END,
                     new NoiseBasedChunkGenerator(

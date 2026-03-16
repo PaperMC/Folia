@@ -26,13 +26,13 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 @NullMarked
-public class AetheriaChunkGenerator extends ChunkGenerator {
-    private final AetheriaLayout layout;
+public class ResourceChunkGenerator extends ChunkGenerator {
+    private final ResourceLayout layout;
 
-    private final AetheriaRandomStateSource randomStateSource = new AetheriaRandomStateSource();
+    private final ResourceRandomStateSource randomStateSource = new ResourceRandomStateSource();
 
-    public AetheriaChunkGenerator(final AetheriaLayout layout) {
-        super(new AetheriaBiomeSource(layout));
+    public ResourceChunkGenerator(final ResourceLayout layout) {
+        super(new ResourceBiomeSource(layout));
         this.layout = layout;
     }
 
@@ -71,7 +71,7 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
             column[i] = Blocks.AIR.defaultBlockState();
         }
 
-        for (final AetheriaLayer.Type layerType : this.layout) {
+        for (final ResourceLayer.Type layerType : this.layout) {
             final LevelHeightAccessor layerHeight = layerType.createHeightAccessor();
             final NoiseColumn layerColumn = layerType.generator().getBaseColumn(x, z, layerHeight, random);
 
@@ -91,9 +91,9 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
     public void applyCarvers(final WorldGenRegion region, final long seed, final RandomState random, final BiomeManager biomeManager, final StructureManager structureManager, final ChunkAccess chunk) {
         final HolderGetter<NormalNoise.NoiseParameters> noiseParametersGetter = region.registryAccess().lookupOrThrow(Registries.NOISE);
 
-        for (final AetheriaLayer.Type layerType : this.layout) {
+        for (final ResourceLayer.Type layerType : this.layout) {
             final ChunkGenerator layerGenerator = layerType.generator();
-            final AetheriaLayer layerChunk = AetheriaLayer.copy(chunk, region.getMinecraftWorld(), this.layout, layerType);
+            final ResourceLayer layerChunk = ResourceLayer.copy(chunk, region.getMinecraftWorld(), this.layout, layerType);
             layerGenerator.applyCarvers(
                     region,
                     seed,
@@ -111,7 +111,7 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
 
     @Override
     public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
-        for (final AetheriaLayer.Type layerType : this.layout) {
+        for (final ResourceLayer.Type layerType : this.layout) {
             final ChunkGenerator layerGenerator = layerType.generator();
             final HeightContext heightmapSet = this.layout.createHeightContext(layerType);
             layerGenerator.applyBiomeDecoration(level, chunk, structureManager, true, heightmapSet);
@@ -125,10 +125,10 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
 
         final Blender blender = Blender.of(region);
 
-        for (final AetheriaLayer.Type layerType : this.layout) {
+        for (final ResourceLayer.Type layerType : this.layout) {
             final ChunkGenerator layerGenerator = layerType.generator();
 
-            final AetheriaLayer layerChunk = AetheriaLayer.copy(chunk, region.getMinecraftWorld(), this.layout, layerType);
+            final ResourceLayer layerChunk = ResourceLayer.copy(chunk, region.getMinecraftWorld(), this.layout, layerType);
             final BiomeManager layerBiomeManager = region.getBiomeManager().withLayeredSource(this.layout, layerType);
             final RandomState layerRandomState = Objects.requireNonNullElse(
                     this.randomStateSource.getOrCreate(region.getSeed(), layerType, noiseParameters),
@@ -159,9 +159,9 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
             final long seed = level.getMinecraftWorld().getSeed();
             final HolderGetter<NormalNoise.NoiseParameters> noiseParametersGetter = structureManager.registryAccess().lookupOrThrow(Registries.NOISE);
 
-            for (final AetheriaLayer.Type layerType : this.layout) {
+            for (final ResourceLayer.Type layerType : this.layout) {
                 final ChunkGenerator layerGenerator = layerType.generator();
-                final AetheriaLayer layerChunk = AetheriaLayer.empty(chunk.getPos(), level, this.layout, layerType);
+                final ResourceLayer layerChunk = ResourceLayer.empty(chunk.getPos(), level, this.layout, layerType);
 
                 layerGenerator.fillFromNoise(
                         blender,
@@ -195,7 +195,7 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
                         final int quartY = quartMinY + qyOffset;
                         final int blockY = QuartPos.toBlock(quartY);
 
-                        final AetheriaLayer.Type layerType = this.layout.getLayerTypeAt(blockY);
+                        final ResourceLayer.Type layerType = this.layout.getLayerTypeAt(blockY);
                         if (layerType == null) {
                             continue;
                         }
@@ -218,7 +218,7 @@ public class AetheriaChunkGenerator extends ChunkGenerator {
 
     @Override
     public void spawnOriginalMobs(final WorldGenRegion region) {
-        for (final AetheriaLayer.Type layerType : this.layout) {
+        for (final ResourceLayer.Type layerType : this.layout) {
             final ChunkGenerator layerGenerator = layerType.generator();
             layerGenerator.spawnOriginalMobs(region);
         }

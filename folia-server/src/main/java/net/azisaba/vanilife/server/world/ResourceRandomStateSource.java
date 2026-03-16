@@ -11,14 +11,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @NullMarked
-class AetheriaRandomStateSource {
-    private final Map<Long, Map<AetheriaLayer.Type, RandomState>> cacheMap = new ConcurrentHashMap<>();
+class ResourceRandomStateSource {
+    private final Map<Long, Map<ResourceLayer.Type, RandomState>> cacheMap = new ConcurrentHashMap<>();
 
-    public @Nullable RandomState getOrCreate(final long seed, final AetheriaLayer.Type layerType, final HolderGetter<NormalNoise.NoiseParameters> noiseParametersGetter) {
+    public @Nullable RandomState getOrCreate(final long seed, final ResourceLayer.Type layerType, final HolderGetter<NormalNoise.NoiseParameters> noiseParametersGetter) {
         if (!(layerType.generator() instanceof NoiseBasedChunkGenerator noiseBasedGenerator)) {
             return null;
         }
-        final Map<AetheriaLayer.Type, RandomState> cache = this.cacheMap.computeIfAbsent(seed, s -> new ConcurrentHashMap<>());
+        final Map<ResourceLayer.Type, RandomState> cache = this.cacheMap.computeIfAbsent(seed, s -> new ConcurrentHashMap<>());
         return cache.computeIfAbsent(
                 layerType,
                 t -> RandomState.create(noiseBasedGenerator.settings.value(), noiseParametersGetter, seed)

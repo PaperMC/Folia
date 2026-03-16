@@ -10,32 +10,32 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 @NullMarked
-public record AetheriaLayout(
+public record ResourceLayout(
         int minY,
-        List<AetheriaLayer.Type> layersTypes
-) implements Iterable<AetheriaLayer.Type> {
+        List<ResourceLayer.Type> layersTypes
+) implements Iterable<ResourceLayer.Type> {
     public int height() {
         return this.layersTypes.stream()
-                .mapToInt(AetheriaLayer.Type::height)
+                .mapToInt(ResourceLayer.Type::height)
                 .sum();
     }
 
-    public int getMinYOf(final AetheriaLayer.Type type) {
+    public int getMinYOf(final ResourceLayer.Type type) {
         final int index = this.layersTypes.indexOf(type);
         if (index == -1) {
             throw new IllegalStateException("Layer type not found: " + type);
         }
         return this.minY + this.layersTypes.subList(0, index)
                 .stream()
-                .mapToInt(AetheriaLayer.Type::height)
+                .mapToInt(ResourceLayer.Type::height)
                 .sum();
     }
 
-    public int getMaxYOf(final AetheriaLayer.Type type) {
+    public int getMaxYOf(final ResourceLayer.Type type) {
         return this.getMinYOf(type) + type.height() - 1;
     }
 
-    public AetheriaLayer.@Nullable Type getLayerTypeAt(final int y) {
+    public ResourceLayer.@Nullable Type getLayerTypeAt(final int y) {
         return this.layersTypes.stream()
                 .filter(t -> {
                     final int minY = this.getMinYOf(t);
@@ -46,24 +46,24 @@ public record AetheriaLayout(
                 .orElse(null);
     }
 
-    public int toBlockY(final AetheriaLayer.Type type, final int layerY) {
+    public int toBlockY(final ResourceLayer.Type type, final int layerY) {
         return this.getMinYOf(type) + layerY - type.minY();
     }
 
-    public int toLayerY(final AetheriaLayer.Type type, final int blockY) {
+    public int toLayerY(final ResourceLayer.Type type, final int blockY) {
         return blockY - this.getMinYOf(type) + type.minY();
     }
 
-    public HeightContext createHeightContext(final AetheriaLayer.Type type) {
+    public HeightContext createHeightContext(final ResourceLayer.Type type) {
         return new HeightContext.Layered(this, type);
     }
 
-    public Stream<AetheriaLayer.Type> stream() {
+    public Stream<ResourceLayer.Type> stream() {
         return StreamSupport.stream(this.spliterator(), false);
     }
 
     @Override
-    public Iterator<AetheriaLayer.Type> iterator() {
+    public Iterator<ResourceLayer.Type> iterator() {
         return this.layersTypes.iterator();
     }
 }

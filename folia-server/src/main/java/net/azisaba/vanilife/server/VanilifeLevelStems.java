@@ -5,9 +5,9 @@ import net.azisaba.vanilife.Vanilife;
 import net.azisaba.vanilife.islands.IslandDefaults;
 import net.azisaba.vanilife.server.islands.IslandsChunkGenerator;
 import net.azisaba.vanilife.server.islands.IslandsGeneratorSettings;
-import net.azisaba.vanilife.server.world.AetheriaChunkGenerator;
-import net.azisaba.vanilife.server.world.AetheriaLayer;
-import net.azisaba.vanilife.server.world.AetheriaLayout;
+import net.azisaba.vanilife.server.world.ResourceChunkGenerator;
+import net.azisaba.vanilife.server.world.ResourceLayer;
+import net.azisaba.vanilife.server.world.ResourceLayout;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.WritableRegistry;
@@ -42,13 +42,13 @@ public final class VanilifeLevelStems {
                 .orElseThrow()
                 .getter()
                 .getOrThrow(VanilifeDimensionTypes.AETHERIA);
-        final AetheriaChunkGenerator generator = new AetheriaChunkGenerator(
-                new AetheriaLayout(
+        final ResourceChunkGenerator generator = new ResourceChunkGenerator(
+                new ResourceLayout(
                         DimensionDefaults.OVERWORLD_MIN_Y - DimensionDefaults.NETHER_GENERATION_HEIGHT,
                         List.of(
-                                AetheriaLayer.Type.nether(lookup),
-                                AetheriaLayer.Type.overworld(lookup),
-                                AetheriaLayer.Type.end(lookup)
+                                ResourceLayer.Type.nether(lookup),
+                                ResourceLayer.Type.overworld(lookup),
+                                ResourceLayer.Type.end(lookup)
                         )
                 )
         );
