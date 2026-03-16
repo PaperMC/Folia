@@ -27,11 +27,28 @@ internal class PortalEnterListener(
         val player = event.player
 
         // Quick synchronous check: if nearby blocks are plugin-created portal blocks
+        // or if the portal frame (prismarine) exists nearby. This avoids a race where
+        // the animation coroutine hasn't yet placed portal blocks / metadata and
+        // vanilla portal handling (Nether) runs instead.
         val base = event.from.block
         val candidates = listOf(base, base.getRelative(BlockFace.DOWN), base.getRelative(BlockFace.UP))
-        if (!candidates.any { it.type == Material.NETHER_PORTAL && it.hasMetadata("vanilife_portal") }) {
-            return // not our portal -> allow vanilla handling
+
+        val hasPortalMeta = candidates.any { it.type == Material.NETHER_PORTAL && it.hasMetadata("vanilife_portal") }
+
+        val hasFrameNearby = run {
+            // scan a small neighborhood for the configured frame block to avoid false positives
+            // (prismarine is the configured frame block in ResourcePortals.FRAME_BLOCK)
+            for (dx in -2..2) {
+                for (dy in -1..1) {
+                    for (dz in -2..2) {
+                        if (base.getRelative(dx, dy, dz).type == ResourcePortals.FRAME_BLOCK) return@run true
+                    }
+                }
+            }
+            false
         }
+
+        if (!hasPortalMeta && !hasFrameNearby) return // not our portal -> allow vanilla handling
 
         // cancel vanilla portal handling; we'll teleport manually
         event.isCancelled = true
