@@ -27,9 +27,10 @@ internal class MinerListener(private val plugin: Plugin) : Listener {
             event.block,
             if (!event.player.gameMode.isInvulnerable) itemStack else null,
         )
+        val sourceType = event.block.type
 
         plugin.launch {
-            miner.miner.perform(context, plugin)
+            miner.createMiner(sourceType).perform(context, plugin)
         }
     }
 }

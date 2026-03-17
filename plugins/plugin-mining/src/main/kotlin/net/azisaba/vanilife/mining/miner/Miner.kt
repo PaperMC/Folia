@@ -22,7 +22,7 @@ fun interface Miner {
                 for (dx in -halfRange..halfRange) {
                     for (dy in -halfRange..halfRange) {
                         for (dz in -halfRange..halfRange) {
-                            val currentLocation = context.source.location.add(dx.toDouble(), dy.toDouble(), dz.toDouble())
+                            val currentLocation = context.source.location.clone().add(dx.toDouble(), dy.toDouble(), dz.toDouble())
 
                             if (Bukkit.isOwnedByCurrentRegion(currentLocation)) {
                                 breakBlockWithCheck(currentLocation.block, context)
@@ -40,7 +40,7 @@ fun interface Miner {
         fun vertical(up: Int, down: Int): Miner = Miner { context, plugin ->
             plugin.launch(plugin.regionDispatcher(context.source.location)) {
                 for (dy in -down..up) {
-                    val currentLocation = context.source.location.add(0.0, dy.toDouble(), 0.0)
+                    val currentLocation = context.source.location.clone().add(0.0, dy.toDouble(), 0.0)
 
                     if (Bukkit.isOwnedByCurrentRegion(currentLocation)) {
                         breakBlockWithCheck(currentLocation.block, context)
@@ -53,12 +53,14 @@ fun interface Miner {
             }
         }
 
+        fun vein(maxBlocks: Int, targetType: Material): Miner = VeinMiner(maxBlocks, targetType)
+
         internal fun isMinable(block: Block): Boolean = RegistryAccess.registryAccess()
             .getRegistry(RegistryKey.BLOCK)
             .getTag(MiningBlockTypeTagKeys.MINER_MINABLE)
             .contains(block.type.asBlockType()!!.key())
 
-        private fun breakBlockWithCheck(block: Block, context: Context) {
+        internal fun breakBlockWithCheck(block: Block, context: Context) {
             if (!isMinable(block)) return
             if (context.pickaxe != null) {
                 context.pickaxe.damage(1, context.player)
