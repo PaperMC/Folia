@@ -226,6 +226,78 @@ index 1ee7b32ae9dc579337520edfbf337ffaeaeebf00..ca31b8952ed1d7ecdd708f734e7aa621
          return this.withDifferentSource((quartX, quartY, quartZ) -> {
              final int layerY = QuartPos.toBlock(quartY);
              final int blockY = layout.toBlockY(type, layerY);
+diff --git a/net/minecraft/world/level/block/Block.java b/net/minecraft/world/level/block/Block.java
+index 492b1615d96133c5082e0f16015f114299f8082f..37045ec700915896c924d159075aa58fd2aceff1 100644
+--- a/net/minecraft/world/level/block/Block.java
++++ b/net/minecraft/world/level/block/Block.java
+@@ -21,6 +21,9 @@ import java.util.function.IntFunction;
+ import java.util.function.Supplier;
+ import java.util.stream.Collectors;
+ import java.util.stream.IntStream;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.event.BlockDropLootEvent;
+ import net.minecraft.SharedConstants;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+@@ -71,6 +74,10 @@ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.BooleanOp;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.block.CraftBlockState;
++import org.bukkit.craftbukkit.block.CraftBlockStates;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
+ import org.jspecify.annotations.Nullable;
+ import org.slf4j.Logger;
+ 
+@@ -364,14 +371,26 @@ public class Block extends BlockBehaviour implements ItemLike {
+     public void destroy(LevelAccessor level, BlockPos pos, BlockState state) {
+     }
+ 
++    @Modified(Op.ADD_EVENT_CALL)
+     public static List<ItemStack> getDrops(BlockState state, ServerLevel level, BlockPos pos, @Nullable BlockEntity blockEntity) {
+         LootParams.Builder builder = new LootParams.Builder(level)
+             .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
+             .withParameter(LootContextParams.TOOL, ItemStack.EMPTY)
+             .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockEntity);
+-        return state.getDrops(builder);
++
++        final List<ItemStack> vanillaDrops = state.getDrops(builder);
++        final BlockDropLootEvent event = new BlockDropLootEvent(
++                CraftBlock.at(level, pos),
++                CraftBlockStates.getBlockState(level.getWorld(), pos, state, blockEntity),
++                null,
++                null,
++                vanillaDrops.stream().map(CraftItemStack::asBukkitCopy).collect(Collectors.toList())
++        );
++        event.callEvent();
++        return event.getDrops().stream().map(CraftItemStack::asNMSCopy).toList();
+     }
+ 
++    @Modified(Op.ADD_EVENT_CALL)
+     public static List<ItemStack> getDrops(
+         BlockState state, ServerLevel level, BlockPos pos, @Nullable BlockEntity blockEntity, @Nullable Entity entity, ItemStack tool
+     ) {
+@@ -380,7 +399,17 @@ public class Block extends BlockBehaviour implements ItemLike {
+             .withParameter(LootContextParams.TOOL, tool)
+             .withOptionalParameter(LootContextParams.THIS_ENTITY, entity)
+             .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockEntity);
+-        return state.getDrops(builder);
++
++        final List<ItemStack> vanillaDrops = state.getDrops(builder);
++        final BlockDropLootEvent event = new BlockDropLootEvent(
++                CraftBlock.at(level, pos),
++                CraftBlockStates.getBlockState(level.getWorld(), pos, state, blockEntity),
++                entity != null ? entity.getBukkitEntity() : null,
++                tool.asBukkitCopy(),
++                vanillaDrops.stream().map(CraftItemStack::asBukkitCopy).collect(Collectors.toList())
++        );
++        event.callEvent();
++        return event.getDrops().stream().map(CraftItemStack::asNMSCopy).toList();
+     }
+ 
+     // Paper start - Add BlockBreakBlockEvent
 diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
 index fd92282bb1cbe7051258f6d239e8dc0ce191baba..5d0d04f21e46d58c20badd2127fcd95c202d25c3 100644
 --- a/net/minecraft/world/level/chunk/ChunkGenerator.java

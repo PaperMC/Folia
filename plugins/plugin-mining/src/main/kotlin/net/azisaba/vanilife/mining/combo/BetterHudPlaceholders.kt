@@ -27,7 +27,7 @@ internal fun Main.setupMiningComboBetterHudPlaceholders() {
         HudPlaceholder.of(
             HudPlaceholder.PlaceholderFunction.of { hudPlayer ->
                 val player = hudPlayer.handle() as? Player ?: return@of 0
-                val counter = ComboCounterManager.getOrCreate(player)
+                val counter = ComboCounterSource.getOrCreate(player)
                 return@of counter.read()
             }
         )

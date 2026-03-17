@@ -78,10 +78,10 @@ data class UnreadableRecipe private constructor(
             )
         )
 
-        private fun register(unreadableRecipe: UnreadableRecipe): UnreadableRecipe {
-            SET.add(unreadableRecipe)
-            BY_RECIPE_ITEM[unreadableRecipe.item] = unreadableRecipe
-            return unreadableRecipe
+        private fun register(value: UnreadableRecipe): UnreadableRecipe {
+            SET.add(value)
+            BY_RECIPE_ITEM[value.item] = value
+            return value
         }
     }
 }

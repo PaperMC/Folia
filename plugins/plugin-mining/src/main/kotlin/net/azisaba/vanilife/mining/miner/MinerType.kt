@@ -27,10 +27,10 @@ data class MinerType private constructor(val enchantment: TypedKey<Enchantment>,
 
         fun byEnchantment(enchantment: TypedKey<Enchantment>): MinerType? = BY_ENCHANTMENT[enchantment]
 
-        private fun register(type: MinerType): MinerType {
-            SET.add(type)
-            BY_ENCHANTMENT[type.enchantment] = type
-            return type
+        private fun register(value: MinerType): MinerType {
+            SET.add(value)
+            BY_ENCHANTMENT[value.enchantment] = value
+            return value
         }
     }
 }

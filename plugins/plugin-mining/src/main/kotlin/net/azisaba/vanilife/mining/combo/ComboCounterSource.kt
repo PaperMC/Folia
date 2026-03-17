@@ -3,7 +3,7 @@ package net.azisaba.vanilife.mining.combo
 import org.bukkit.entity.Player
 import java.util.concurrent.ConcurrentHashMap
 
-open class ComboCounterManager {
+open class ComboCounterSource {
     private val counterByPlayer: MutableMap<Int, ComboCounter> = ConcurrentHashMap()
 
     fun getOrCreate(player: Player): ComboCounter = counterByPlayer.computeIfAbsent(player.entityId) { ComboCounter() }
@@ -12,5 +12,5 @@ open class ComboCounterManager {
         counterByPlayer.remove(player.entityId)
     }
 
-    companion object Default : ComboCounterManager()
+    companion object Default : ComboCounterSource()
 }

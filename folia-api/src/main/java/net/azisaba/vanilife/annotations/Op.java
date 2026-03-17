@@ -6,8 +6,9 @@ public enum Op {
     ADD_METHOD,
     ADD_ENUM,
     ADD_SWITCH_CASE,
+    ADD_EVENT_CALL,
     MAKE_PUBLIC,
     MAKE_PRIVATE,
     CHANGE,
-    COMPAT;
+    COMPAT
 }
