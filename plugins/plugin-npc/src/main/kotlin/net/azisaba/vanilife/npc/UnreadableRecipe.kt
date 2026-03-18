@@ -25,7 +25,7 @@ data class UnreadableRecipe private constructor(
 
     fun rollExperienceCost(random: Random): Int = minOf(rarity * 5 + random.nextInt(5, 11), 64)
 
-    companion object {
+    companion object Values {
         private val SET: MutableSet<UnreadableRecipe> = mutableSetOf()
         private val BY_RECIPE_ITEM: MutableMap<TypedKey<ServerItem>, UnreadableRecipe> = mutableMapOf()
 

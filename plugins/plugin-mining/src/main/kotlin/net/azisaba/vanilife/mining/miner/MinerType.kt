@@ -12,7 +12,7 @@ data class MinerType private constructor(val enchantment: TypedKey<Enchantment>,
         miner.perform(context, plugin)
     }
 
-    companion object {
+    companion object Values {
         private val SET: MutableSet<MinerType> = mutableSetOf()
         private val BY_ENCHANTMENT: MutableMap<TypedKey<Enchantment>, MinerType> = mutableMapOf()
 

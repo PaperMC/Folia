@@ -3,7 +3,7 @@ package net.azisaba.vanilife.fishing
 import net.azisaba.vanilife.Season
 import kotlin.random.Random
 
-fun FishType.Companion.loot(context: FishingContext, random: Random = Random.Default): FishType {
+fun FishType.Values.loot(context: FishingContext, random: Random = Random.Default): FishType {
     val weightedTypes = allTypes()
         .map { fishType -> fishType to computeWeight(fishType, context) }
         .filter { (_, weight) -> weight > 0f }

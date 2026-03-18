@@ -25,7 +25,7 @@ data class FishType(
         return registry.getOrThrow(item)
     }
 
-    companion object {
+    companion object Values {
         private val SET: MutableSet<FishType> = mutableSetOf()
 
         val CLAM: FishType = register(

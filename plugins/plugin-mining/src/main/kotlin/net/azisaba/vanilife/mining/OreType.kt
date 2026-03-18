@@ -21,7 +21,7 @@ data class OreType private constructor(val base: Material, val ingot: Material?,
         .getTag(blocks)
         .contains(blockState.type.asBlockType()!!.key())
 
-    companion object {
+    companion object Values {
         private val SET: MutableSet<OreType> = mutableSetOf()
         private val BY_BASE: MutableMap<Material, OreType> = mutableMapOf()
 
