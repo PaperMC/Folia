@@ -12,7 +12,7 @@ import net.kyori.adventure.key.Key
 object ForestryItems {
     val SMALL_TREE_STUMP: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "small_tree_stump"))
 
-    fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
+    internal fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
         event.registry().register(SMALL_TREE_STUMP, ::smallTreeStump)
     }
 

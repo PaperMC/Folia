@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.forestry.cutdown
+package net.azisaba.vanilife.forestry.timber
 
 import com.github.retrooper.packetevents.protocol.world.Location
 import com.github.retrooper.packetevents.util.Vector3d

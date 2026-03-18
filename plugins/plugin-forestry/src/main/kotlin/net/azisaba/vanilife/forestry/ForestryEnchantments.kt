@@ -12,14 +12,14 @@ import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.EquipmentSlotGroup
 
 object ForestryEnchantments {
-    val CUT_ALL: TypedKey<Enchantment> = TypedKey.create(RegistryKey.ENCHANTMENT, Key.key(Vanilife.NAMESPACE, "cut_all"))
+    val TIMBER: TypedKey<Enchantment> = TypedKey.create(RegistryKey.ENCHANTMENT, Key.key(Vanilife.NAMESPACE, "timber"))
 
     internal fun bootstrap(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>) {
-        event.registry().register(CUT_ALL) { cutAll(event, it) }
+        event.registry().register(TIMBER) { cutAll(event, it) }
     }
 
     private fun cutAll(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
-        builder.description(Component.text("一括伐採"))
+        builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_TIMBER))
             .supportedItems(event.getOrCreateTag(ItemTypeTagKeys.AXES))
             .weight(1)
             .maxLevel(1)

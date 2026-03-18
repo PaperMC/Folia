@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.forestry.cutdown
+package net.azisaba.vanilife.forestry.timber
 
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes
 import com.github.retrooper.packetevents.protocol.world.Location

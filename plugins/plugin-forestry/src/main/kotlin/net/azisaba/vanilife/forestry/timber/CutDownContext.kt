@@ -1,4 +1,4 @@
-package net.azisaba.vanilife.forestry.cutdown
+package net.azisaba.vanilife.forestry.timber
 
 import net.azisaba.vanilife.forestry.finder.DetectedTree
 import org.bukkit.Chunk
