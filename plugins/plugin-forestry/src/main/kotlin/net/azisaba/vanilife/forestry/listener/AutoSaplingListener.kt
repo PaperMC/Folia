@@ -22,7 +22,7 @@ internal class AutoSaplingListener(private val finder: TreeFinder, private val p
 
         val timberEnchantment = RegistryAccess.registryAccess()
             .getRegistry(RegistryKey.ENCHANTMENT)
-            .getOrThrow(ForestryEnchantments.TIMBER)
+            .getOrThrow(ForestryEnchantments.OAK_TIMBER)
 
         if (!itemStack.containsEnchantment(requiredEnchantment) || itemStack.containsEnchantment(timberEnchantment)) {
             return

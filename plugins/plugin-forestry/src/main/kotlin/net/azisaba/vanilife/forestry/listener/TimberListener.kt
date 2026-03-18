@@ -14,6 +14,7 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.plugin.Plugin
 
 internal class TimberListener(
+    private val enchantment: TypedKey<Enchantment>,
     private val finder: TreeFinder,
     private val animator: TimberAnimator,
     private val plugin: Plugin,
@@ -24,7 +25,7 @@ internal class TimberListener(
 
         val requiredEnchantment = RegistryAccess.registryAccess()
             .getRegistry(RegistryKey.ENCHANTMENT)
-            .getOrThrow(ForestryEnchantments.TIMBER)
+            .getOrThrow(enchantment)
 
         val blockState = event.block.state
 

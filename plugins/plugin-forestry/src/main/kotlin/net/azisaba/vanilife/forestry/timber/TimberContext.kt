@@ -14,4 +14,7 @@ internal data class TimberContext(
     val detectedTree: DetectedTree,
     val world: World = source.world,
     val chunk: Chunk = source.chunk,
+    val x: Int = source.x,
+    val y: Int = source.y,
+    val z: Int = source.z,
 )

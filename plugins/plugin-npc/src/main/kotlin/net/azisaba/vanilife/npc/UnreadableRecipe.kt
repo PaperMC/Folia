@@ -31,7 +31,7 @@ data class UnreadableRecipe private constructor(
         private val BY_RECIPE_ITEM: MutableMap<TypedKey<ServerItem>, UnreadableRecipe> = mutableMapOf()
 
         val CUT_ALL: UnreadableRecipe =
-            enchantment(NpcItems.CUT_ALL_RECIPE, 3, ForestryEnchantments.TIMBER) { random ->
+            enchantment(NpcItems.CUT_ALL_RECIPE, 3, ForestryEnchantments.OAK_TIMBER) { random ->
                 ItemStack.of(ForestryItems.SMALL_TREE_STUMP, (15..32).random(random))
             }
 
