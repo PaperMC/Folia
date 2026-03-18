@@ -9,7 +9,7 @@ import org.bukkit.Material
 import org.bukkit.plugin.Plugin
 import java.util.ArrayDeque
 
-internal data class VeinMiner(private val maxBlocks: Int, private val targetType: Material) : Miner {
+internal data class VeinMiner(private val maxBlocks: Int) : Miner {
     override suspend fun perform(context: Miner.Context, plugin: Plugin) {
         if (maxBlocks <= 0) return
 
@@ -20,6 +20,8 @@ internal data class VeinMiner(private val maxBlocks: Int, private val targetType
 
     private suspend fun performVeinMining(context: Miner.Context, plugin: Plugin) {
         val sourceLocation = context.source.location.toBlockLocation()
+        val sourceMaterial = context.source.type
+
         val queue = ArrayDeque<Location>()
         val visited = mutableSetOf(blockKeyOf(sourceLocation))
 
@@ -32,10 +34,10 @@ internal data class VeinMiner(private val maxBlocks: Int, private val targetType
             if (!visited.add(currentKey)) continue
 
             val adjacent = if (Bukkit.isOwnedByCurrentRegion(current)) {
-                breakConnectedBlock(context, current)
+                breakConnectedBlock(sourceMaterial, context, current)
             } else {
                 withContext(plugin.regionDispatcher(current)) {
-                    breakConnectedBlock(context, current)
+                    breakConnectedBlock(sourceMaterial, context, current)
                 }
             } ?: continue
 
@@ -48,9 +50,9 @@ internal data class VeinMiner(private val maxBlocks: Int, private val targetType
         }
     }
 
-    private fun breakConnectedBlock(context: Miner.Context, current: Location): List<Location>? {
+    private fun breakConnectedBlock(source: Material, context: Miner.Context, current: Location): List<Location>? {
         val block = current.block
-        if (block.type != targetType || !Miner.isMinable(block)) return null
+        if (block.type != source || !Miner.isMinable(block)) return null
 
         Miner.breakBlockWithCheck(block, context)
         return adjacentLocationsOf(current)

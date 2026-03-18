@@ -2,7 +2,7 @@ package net.azisaba.vanilife.mining.combo
 
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
-import net.azisaba.vanilife.mining.MiningBlockTypeTagKeys
+import net.azisaba.vanilife.mining.MiningBlockTypeTags
 import org.bukkit.block.Block
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -32,7 +32,7 @@ class ComboCounter internal constructor() {
 
         fun shouldIncrementCombo(block: Block): Boolean = RegistryAccess.registryAccess()
             .getRegistry(RegistryKey.BLOCK)
-            .getTag(MiningBlockTypeTagKeys.ORES)
+            .getTag(MiningBlockTypeTags.ORES)
             .contains(block.type.asBlockType()!!.key())
     }
 }

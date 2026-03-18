@@ -1,9 +1,6 @@
 package net.azisaba.vanilife.mining.listener
 
 import com.github.shynixn.mccoroutine.folia.launch
-import io.papermc.paper.registry.RegistryAccess
-import io.papermc.paper.registry.RegistryKey
-import net.azisaba.vanilife.mining.MiningBlockTypeTagKeys
 import net.azisaba.vanilife.mining.miner.Miner
 import net.azisaba.vanilife.mining.miner.MinerType
 import org.bukkit.event.EventHandler
@@ -27,10 +24,9 @@ internal class MinerListener(private val plugin: Plugin) : Listener {
             event.block,
             if (!event.player.gameMode.isInvulnerable) itemStack else null,
         )
-        val sourceType = event.block.type
 
         plugin.launch {
-            miner.createMiner(sourceType).perform(context, plugin)
+            miner.perform(context, plugin)
         }
     }
 }

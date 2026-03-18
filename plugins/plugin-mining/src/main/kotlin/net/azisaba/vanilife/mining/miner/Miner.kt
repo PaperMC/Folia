@@ -5,7 +5,7 @@ import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
 import kotlinx.coroutines.withContext
-import net.azisaba.vanilife.mining.MiningBlockTypeTagKeys
+import net.azisaba.vanilife.mining.MiningBlockTypeTags
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.block.Block
@@ -53,11 +53,11 @@ fun interface Miner {
             }
         }
 
-        fun vein(maxBlocks: Int, targetType: Material): Miner = VeinMiner(maxBlocks, targetType)
+        fun vein(maxBlocks: Int): Miner = VeinMiner(maxBlocks)
 
         internal fun isMinable(block: Block): Boolean = RegistryAccess.registryAccess()
             .getRegistry(RegistryKey.BLOCK)
-            .getTag(MiningBlockTypeTagKeys.MINER_MINABLE)
+            .getTag(MiningBlockTypeTags.MINER_MINABLE)
             .contains(block.type.asBlockType()!!.key())
 
         internal fun breakBlockWithCheck(block: Block, context: Context) {

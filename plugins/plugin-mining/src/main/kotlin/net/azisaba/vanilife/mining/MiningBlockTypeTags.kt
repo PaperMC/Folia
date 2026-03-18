@@ -10,7 +10,7 @@ import net.azisaba.vanilife.Vanilife
 import net.kyori.adventure.key.Key
 import org.bukkit.block.BlockType
 
-object MiningBlockTypeTagKeys {
+object MiningBlockTypeTags {
     val MINER_MINABLE: TagKey<BlockType> = RegistryKey.BLOCK.tagKey(Key.key(Vanilife.NAMESPACE, "miner_minable"))
     val ORES: TagKey<BlockType> = RegistryKey.BLOCK.tagKey(Key.key(Vanilife.NAMESPACE, "ores"))
 
@@ -24,7 +24,7 @@ object MiningBlockTypeTagKeys {
         addAll(tagGetter.getTag(BlockTypeTagKeys.BASE_STONE_OVERWORLD))
     }
 
-    private fun ores(tagGetter: PostFlattenTagRegistrar<BlockType>) = buildSet {
+    private fun ores(tagGetter: PostFlattenTagRegistrar<BlockType>): Set<TypedKey<BlockType>> = buildSet {
         addAll(tagGetter.getTag(BlockTypeTagKeys.COAL_ORES))
         addAll(tagGetter.getTag(BlockTypeTagKeys.COPPER_ORES))
         addAll(tagGetter.getTag(BlockTypeTagKeys.DIAMOND_ORES))
