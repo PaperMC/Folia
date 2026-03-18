@@ -9,7 +9,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 
 data class DetectedTree(
-    val trunkBlocks: Collection<BlockState>, val leafBlocks: Collection<BlockState>
+    val trunkBlocks: Collection<BlockState>, val leafBlocks: Collection<BlockState>,
 ) : Iterable<BlockState> {
     override fun iterator(): Iterator<BlockState> = (trunkBlocks + leafBlocks).iterator()
 

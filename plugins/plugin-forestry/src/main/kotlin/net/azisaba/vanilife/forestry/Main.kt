@@ -6,7 +6,6 @@ import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
 import net.azisaba.vanilife.forestry.timber.TimberAnimator
-import net.azisaba.vanilife.forestry.finder.TreeFinderRouter
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
@@ -28,7 +27,6 @@ class Main : JavaPlugin() {
         koinApp = startKoin {
             modules(module {
                 single<Plugin> { this@Main }
-                single { TreeFinderRouter.build(get()) }
                 single { TimberAnimator() }
             })
         }
