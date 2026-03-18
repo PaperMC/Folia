@@ -18,25 +18,46 @@ sealed interface TreeFinder {
     companion object Builtins {
         val COMPOSITE_DEFAULT: Composite = composite(oak(), spruce(), birch(), jungle(), acacia(), darkOak(), paleOak())
 
-        fun oak(): Single = AllAdjacent(Material.OAK_LOG, Material.OAK_LEAVES, 240, 450, 3)
+        fun oak(): Single = AllAdjacent(
+            Material.OAK_LOG, Material.OAK_LEAVES, Material.OAK_SAPLING,
+            240, 450, 5,
+        )
 
-        fun spruce(): Single = FaceAdjacent(Material.SPRUCE_LOG, Material.SPRUCE_LEAVES, 240, 450, 3)
+        fun spruce(): Single = FaceAdjacent(
+            Material.SPRUCE_LOG, Material.SPRUCE_LEAVES, Material.SPRUCE_SAPLING,
+            240, 450, 3,
+        )
 
-        fun birch(): Single = FaceAdjacent(Material.BIRCH_LOG, Material.BIRCH_LEAVES, 240, 450, 3)
+        fun birch(): Single = FaceAdjacent(
+            Material.BIRCH_LOG, Material.BIRCH_LEAVES, Material.BIRCH_SAPLING,
+            240, 450, 3,
+        )
 
-        fun jungle(): Single = FaceAdjacent(Material.JUNGLE_LOG, Material.JUNGLE_LEAVES, 640, 720, 8)
+        fun jungle(): Single = FaceAdjacent(
+            Material.JUNGLE_LOG, Material.JUNGLE_LEAVES, Material.JUNGLE_SAPLING,
+            640, 720, 8,
+        )
 
-        fun acacia(): Single = FaceAdjacent(Material.ACACIA_LOG, Material.ACACIA_LEAVES, 240, 450, 6)
+        fun acacia(): Single = FaceAdjacent(
+            Material.ACACIA_LOG, Material.ACACIA_LEAVES, Material.ACACIA_SAPLING,
+            240, 450, 6,
+        )
 
-        fun darkOak(): Single = FaceAdjacent(Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, 240, 450, 6)
+        fun darkOak(): Single = FaceAdjacent(
+            Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, Material.DARK_OAK_SAPLING,
+            240, 450, 6,
+        )
 
-        fun paleOak(): Single = FaceAdjacent(Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, 240, 450, 6)
+        fun paleOak(): Single = FaceAdjacent(
+            Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, Material.PALE_OAK_SAPLING,
+            240, 450, 6,
+        )
 
         fun composite(vararg finders: Single): Composite = Composite(finders.toList())
     }
 
     abstract class Single(
-        protected val trunk: Material, protected val leaves: Material,
+        protected val trunk: Material, protected val leaves: Material, protected val sapling: Material,
         protected val maxTrunkBlocks: Int, protected val maxLeavesBlocks: Int,
         protected val maxDeltaXZ: Int,
     ) : TreeFinder {
@@ -62,7 +83,7 @@ sealed interface TreeFinder {
                     return@withContext null
                 }
 
-                DetectedTree(trunkBlocks, expandedLeavesBlocks)
+                DetectedTree(trunkBlocks, expandedLeavesBlocks, sapling)
             }
 
         protected suspend fun fetchBlockAt(location: Location, plugin: Plugin): BlockState =
@@ -138,12 +159,9 @@ sealed interface TreeFinder {
     }
 
     class FaceAdjacent(
-        trunk: Material,
-        leaves: Material,
-        maxTrunkBlocks: Int,
-        maxLeavesBlocks: Int,
-        maxDeltaXZ: Int,
-    ) : Single(trunk, leaves, maxTrunkBlocks, maxLeavesBlocks, maxDeltaXZ) {
+        trunk: Material, leaves: Material, sapling: Material,
+        maxTrunkBlocks: Int, maxLeavesBlocks: Int, maxDeltaXZ: Int,
+    ) : Single(trunk, leaves, sapling, maxTrunkBlocks, maxLeavesBlocks, maxDeltaXZ) {
         override suspend fun fetchAdjacentBlocks(block: BlockState, plugin: Plugin): Set<BlockState> = buildSet {
             for (offset in OFFSETS) {
                 val location = block.location.add(offset.x().toDouble(), offset.y().toDouble(), offset.z().toDouble())
@@ -162,12 +180,9 @@ sealed interface TreeFinder {
     }
 
     class AllAdjacent(
-        trunk: Material,
-        leaves: Material,
-        maxTrunkBlocks: Int,
-        maxLeavesBlocks: Int,
-        maxDeltaXZ: Int,
-    ) : Single(trunk, leaves, maxTrunkBlocks, maxLeavesBlocks, maxDeltaXZ) {
+        trunk: Material, leaves: Material, sapling: Material,
+        maxTrunkBlocks: Int, maxLeavesBlocks: Int, maxDeltaXZ: Int,
+    ) : Single(trunk, leaves, sapling, maxTrunkBlocks, maxLeavesBlocks, maxDeltaXZ) {
         override suspend fun fetchAdjacentBlocks(block: BlockState, plugin: Plugin): Set<BlockState> = buildSet {
             for (dx in -1..1) {
                 for (dy in -1..1) {
