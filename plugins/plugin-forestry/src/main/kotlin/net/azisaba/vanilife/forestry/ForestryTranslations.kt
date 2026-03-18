@@ -12,7 +12,6 @@ object ForestryTranslations {
     const val ENCHANTMENT_VANILIFE_OAK_TIMBER: String = "enchantment.vanilife.oak_timber"
     const val ENCHANTMENT_VANILIFE_PALE_OAK_TIMBER: String = "enchantment.vanilife.pale_oak_timber"
     const val ENCHANTMENT_VANILIFE_SPRUCE_TIMBER: String = "enchantment.vanilife.spruce_timber"
-    const val ITEM_VANILIFE_SMALL_TREE_STUMP: String = "item.vanilife.small_tree_stump"
 
     fun us(): PackLanguage = mapOf(
         ENCHANTMENT_VANILIFE_ACACIA_TIMBER to Translation.literal("Acacia Timber"),
@@ -23,7 +22,6 @@ object ForestryTranslations {
         ENCHANTMENT_VANILIFE_OAK_TIMBER to Translation.literal("Oak Timber"),
         ENCHANTMENT_VANILIFE_PALE_OAK_TIMBER to Translation.literal("Pale Oak Timber"),
         ENCHANTMENT_VANILIFE_SPRUCE_TIMBER to Translation.literal("Spruce Timber"),
-        ITEM_VANILIFE_SMALL_TREE_STUMP to Translation.literal("Small Tree Stump"),
     )
 
     fun jp(): PackLanguage = mapOf(
@@ -35,6 +33,5 @@ object ForestryTranslations {
         ENCHANTMENT_VANILIFE_OAK_TIMBER to Translation.literal("木こり（オーク）"),
         ENCHANTMENT_VANILIFE_PALE_OAK_TIMBER to Translation.literal("木こり（ペールオーク）"),
         ENCHANTMENT_VANILIFE_SPRUCE_TIMBER to Translation.literal("木こり（トウヒ）"),
-        ITEM_VANILIFE_SMALL_TREE_STUMP to Translation.literal("ちいさな切りカブ"),
     )
 }

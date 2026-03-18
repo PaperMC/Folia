@@ -4,7 +4,6 @@ import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
 import io.papermc.paper.registry.TypedKey
 import net.azisaba.vanilife.forestry.ForestryEnchantments
-import net.azisaba.vanilife.forestry.ForestryItems
 import net.azisaba.vanilife.item.ServerItem
 import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
@@ -30,9 +29,9 @@ data class UnreadableRecipe private constructor(
         private val SET: MutableSet<UnreadableRecipe> = mutableSetOf()
         private val BY_RECIPE_ITEM: MutableMap<TypedKey<ServerItem>, UnreadableRecipe> = mutableMapOf()
 
-        val CUT_ALL: UnreadableRecipe =
+        val OAK_TIMBER: UnreadableRecipe =
             enchantment(NpcItems.CUT_ALL_RECIPE, 3, ForestryEnchantments.OAK_TIMBER) { random ->
-                ItemStack.of(ForestryItems.SMALL_TREE_STUMP, (15..32).random(random))
+                ItemStack.of(Material.RESIN_BRICKS, (48..64).random(random))
             }
 
         fun byItem(recipeItem: ServerItem): UnreadableRecipe? =

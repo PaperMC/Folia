@@ -13,8 +13,6 @@ import net.azisaba.vanilife.fishing.FishingFonts
 import net.azisaba.vanilife.fishing.FishingItemModels
 import net.azisaba.vanilife.fishing.FishingModels
 import net.azisaba.vanilife.fishing.FishingTranslations
-import net.azisaba.vanilife.forestry.ForestryItemModels
-import net.azisaba.vanilife.forestry.ForestryModels
 import net.azisaba.vanilife.forestry.ForestryTranslations
 import net.azisaba.vanilife.islands.IslandsFonts
 import net.azisaba.vanilife.mining.MiningItemModels
@@ -137,8 +135,6 @@ internal class Main : JavaPlugin() {
                 FishingItemModels.TUNA to FishingItemModels.tunaItem()
                 FishingItemModels.YELLOWTAIL to FishingItemModels.yellowtailItem()
 
-                ForestryItemModels.SMALL_TREE_STUMP to ForestryItemModels.smallTreeStump()
-
                 MiningItemModels.FROZEN_COAL to MiningItemModels.frozenCoal()
                 MiningItemModels.FROZEN_DIAMOND to MiningItemModels.frozenDiamond()
                 MiningItemModels.FROZEN_EMERALD to MiningItemModels.frozenEmerald()
@@ -256,8 +252,6 @@ internal class Main : JavaPlugin() {
                 FishingModels.SWEETFISH to FishingModels.sweetfish()
                 FishingModels.TUNA to FishingModels.tuna()
                 FishingModels.YELLOWTAIL to FishingModels.yellowtail()
-
-                ForestryModels.SMALL_TREE_STUMP to ForestryModels.smallTreeStump()
 
                 MiningModels.FROZEN_COAL to MiningModels.frozenCoal()
                 MiningModels.FROZEN_DIAMOND to MiningModels.frozenDiamond()
