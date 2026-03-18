@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.event;
 
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -57,14 +58,18 @@ public class BlockDropLootEvent extends BlockEvent {
         return this.drops.stream().map(ItemStack::clone).toList();
     }
 
-    public void setDrops(@NotNull List<ItemStack> drops) {
+    public void setDrops(final @NotNull List<ItemStack> drops) {
         this.drops.clear();
         this.drops.addAll(drops);
     }
 
-    public void mapDrops(@NotNull UnaryOperator<List<ItemStack>> operator) {
+    public void mapDrops(final @NotNull UnaryOperator<List<ItemStack>> operator) {
         final List<ItemStack> newDrops = operator.apply(this.getDrops());
         this.setDrops(newDrops);
+    }
+
+    public void filterDrops(final @NotNull Predicate<ItemStack> predicate) {
+        this.setDrops(this.getDrops().stream().filter(predicate).toList());
     }
 
     @Override

@@ -9,6 +9,7 @@ import net.azisaba.vanilife.Vanilife
 import net.azisaba.vanilife.cooking.CookingItemModels
 import net.azisaba.vanilife.cooking.CookingModels
 import net.azisaba.vanilife.cooking.CookingTranslations
+import net.azisaba.vanilife.farming.FarmingTranslations
 import net.azisaba.vanilife.fishing.FishingFonts
 import net.azisaba.vanilife.fishing.FishingItemModels
 import net.azisaba.vanilife.fishing.FishingModels
@@ -153,11 +154,11 @@ internal class Main : JavaPlugin() {
                 PackedKey.lang(
                     Vanilife.NAMESPACE,
                     Locale.US
-                ) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + ToolSwapTranslations.us() + GeneralTranslations.us())
+                ) to (CookingTranslations.us() + FarmingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + ToolSwapTranslations.us() + GeneralTranslations.us())
                 PackedKey.lang(
                     Vanilife.NAMESPACE,
                     Locale.JAPAN
-                ) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + ToolSwapTranslations.jp() + GeneralTranslations.jp())
+                ) to (CookingTranslations.jp() + FarmingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + ToolSwapTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
