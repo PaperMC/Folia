@@ -8,6 +8,7 @@ import io.papermc.paper.registry.TypedKey
 import kotlinx.coroutines.delay
 import net.azisaba.vanilife.event.BlockDropLootEvent
 import net.azisaba.vanilife.farming.Crop
+import org.bukkit.Particle
 import org.bukkit.block.data.Ageable
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.event.EventHandler
@@ -33,6 +34,15 @@ internal class AutoReplantListener(
                 val blockData = crop.unwrapBlock().createBlockData()
                 event.block.blockData = blockData
                 itemStack.damage(1, event.player)
+                event.player.spawnParticle(
+                    Particle.HAPPY_VILLAGER,
+                    event.block.location.add(0.5, 0.5, 0.5),
+                    6,
+                    0.18,
+                    0.18,
+                    0.18,
+                    0.12,
+                )
             }
         }
     }
