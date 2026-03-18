@@ -105,13 +105,14 @@ index 8da489e8179f772ed439360c3451fdff15f0dc22..bbc2de522b2b6702a7b2b0f85a9ff767
      @Override
      public MutableComponent resolve(@Nullable CommandSourceStack source, @Nullable Entity entity, int recursionDepth) throws CommandSyntaxException {
 diff --git a/net/minecraft/resources/RegistryDataLoader.java b/net/minecraft/resources/RegistryDataLoader.java
-index 4a700aa0e68044bb950710be679861230ab5223d..d44beb960f623d86bcd29c8aafc989b902f6fd98 100644
+index 4a700aa0e68044bb950710be679861230ab5223d..70ea51f01b9f264fe8d76f512555e4e7879af58e 100644
 --- a/net/minecraft/resources/RegistryDataLoader.java
 +++ b/net/minecraft/resources/RegistryDataLoader.java
-@@ -22,9 +22,11 @@ import java.util.function.BiConsumer;
+@@ -21,10 +21,11 @@ import java.util.Map.Entry;
+ import java.util.function.BiConsumer;
  import java.util.function.Function;
  import java.util.stream.Collectors;
- 
+-
 -import net.azisaba.vanilife.VanilifeBiomes;
 -import net.azisaba.vanilife.VanilifeDimensionTypes;
 -import net.azisaba.vanilife.VanilifeLevelStems;
@@ -123,31 +124,55 @@ index 4a700aa0e68044bb950710be679861230ab5223d..d44beb960f623d86bcd29c8aafc989b9
  import net.azisaba.vanilife.annotations.Modified;
  import net.azisaba.vanilife.annotations.Op;
  import net.minecraft.CrashReport;
-@@ -193,19 +195,23 @@ public class RegistryDataLoader {
+@@ -181,7 +182,6 @@ public class RegistryDataLoader {
+         return load((loader, infoLookup) -> loader.loadFromNetwork(elements, resourceProvider, infoLookup), registryLookups, registryData);
+     }
+ 
+-    @Modified(Op.CHANGE)
+     private static RegistryAccess.Frozen load(
+         RegistryDataLoader.LoadingFunction loadingFunction,
+         List<HolderLookup.RegistryLookup<?>> registryLookups,
+@@ -193,19 +193,6 @@ public class RegistryDataLoader {
              .collect(Collectors.toUnmodifiableList());
          RegistryOps.RegistryInfoLookup registryInfoLookup = createContext(registryLookups, list);
          list.forEach(loader -> loadingFunction.apply((RegistryDataLoader.Loader<?>)loader, registryInfoLookup));
 -        // Aetheria start - Register Aetheria objects in data-driven registries
-+        // Vanilife start - Register Vanilife objects in data-driven registries
+-        list.forEach(loader -> {
+-            final WritableRegistry<?> registry = loader.registry();
+-
+-            if (registry.key().equals(Registries.BIOME)) {
+-                VanilifeBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
+-            } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
+-                VanilifeDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
+-            } else if (registry.key().equals(Registries.LEVEL_STEM)) {
+-                VanilifeLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
+-            }
+-        });
+-        // Aetheria end - Register Aetheria objects in data-driven registries
          list.forEach(loader -> {
-             final WritableRegistry<?> registry = loader.registry();
+             Registry<?> registry = loader.registry();
  
-             if (registry.key().equals(Registries.BIOME)) {
-                 VanilifeBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
+@@ -398,7 +385,21 @@ public class RegistryDataLoader {
+     }
+ 
+     record Loader<T>(RegistryDataLoader.RegistryData<T> data, WritableRegistry<T> registry, Map<ResourceKey<?>, Exception> loadingErrors) {
++        @Modified(Op.CHANGE)
+         public void loadFromResources(ResourceManager resourceManager, RegistryOps.RegistryInfoLookup registryInfoLookup) {
++            // Vanilife start - Register Vanilife objects in data-driven registries
++            if (registry.key().equals(Registries.BIOME)) {
++                VanilifeBiomes.bootstrap((WritableRegistry<Biome>) registry, registryInfoLookup);
 +            } else if (registry.key().equals(Registries.CONFIGURED_FEATURE)) {
 +                VanilifeConfiguredFeatures.bootstrap((WritableRegistry<ConfiguredFeature<?, ?>>) registry, registryInfoLookup);
 +            } else if (registry.key().equals(Registries.PLACED_FEATURE)) {
 +                VanilifePlacedFeatures.bootstrap((WritableRegistry<PlacedFeature>) registry, registryInfoLookup);
-             } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
-                 VanilifeDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
-             } else if (registry.key().equals(Registries.LEVEL_STEM)) {
-                 VanilifeLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
-             }
-         });
--        // Aetheria end - Register Aetheria objects in data-driven registries
-+        // Vanilife end - Register Vanilife objects in data-driven registries
-         list.forEach(loader -> {
-             Registry<?> registry = loader.registry();
++            } else if (registry.key().equals(Registries.DIMENSION_TYPE)) {
++                VanilifeDimensionTypes.bootstrap((WritableRegistry<DimensionType>) registry, registryInfoLookup);
++            } else if (registry.key().equals(Registries.LEVEL_STEM)) {
++                VanilifeLevelStems.bootstrap((WritableRegistry<LevelStem>) registry, registryInfoLookup);
++            }
++            // Vanilife end - Register Vanilife objects in data-driven registries
+             RegistryDataLoader.loadContentsFromManager(resourceManager, registryInfoLookup, this.registry, this.data.elementCodec, this.loadingErrors);
+         }
  
 diff --git a/net/minecraft/server/Bootstrap.java b/net/minecraft/server/Bootstrap.java
 index ed675ee78be0c06c7b07ded7d3b9d87b2b4fdc15..efb850b013758fb550833926c5526312fa49d856 100644
