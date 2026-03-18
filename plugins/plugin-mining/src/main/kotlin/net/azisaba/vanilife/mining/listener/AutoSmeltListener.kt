@@ -19,12 +19,10 @@ internal class AutoSmeltListener(private val enchantment: TypedKey<Enchantment>)
 
         if (event.tool?.containsEnchantment(enchantment) == true) {
             val oreType = OreType.byBlock(event.blockState)?.takeIf(OreType::hasIngot) ?: return
-            event.mapDrops { drops ->
-                drops.map { drop ->
-                    if (drop.type == oreType.base) {
-                        ItemStack.of(oreType.ingot!!, drop.amount)
-                    } else drop
-                }
+            event.mapDrops { drop ->
+                if (drop.type == oreType.base) {
+                    ItemStack.of(oreType.ingot!!, drop.amount)
+                } else drop
             }
         }
     }

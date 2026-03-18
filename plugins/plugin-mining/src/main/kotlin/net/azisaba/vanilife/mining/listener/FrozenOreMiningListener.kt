@@ -20,12 +20,10 @@ internal class FrozenOreMiningListener(
         val biome = RegistryKey.BIOME.typedKey(event.block.biome.key())
         if (RegistryAccess.registryAccess().getRegistry(RegistryKey.BIOME).getTag(biomes).contains(biome)) {
             val oreType = OreType.byBlockWithNaturalCheck(event.blockState, coreProtectApi) ?: return
-            event.mapDrops { drops ->
-                drops.map { drop ->
-                    if (drop.type == oreType.base) {
-                        ItemStack.of(oreType.frozen, drop.amount)
-                    } else drop
-                }
+            event.mapDrops { drop ->
+                if (drop.type == oreType.base) {
+                    ItemStack.of(oreType.frozen, drop.amount)
+                } else drop
             }
         }
     }

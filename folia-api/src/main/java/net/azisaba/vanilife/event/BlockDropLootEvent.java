@@ -63,9 +63,8 @@ public class BlockDropLootEvent extends BlockEvent {
         this.drops.addAll(drops);
     }
 
-    public void mapDrops(final @NotNull UnaryOperator<List<ItemStack>> operator) {
-        final List<ItemStack> newDrops = operator.apply(this.getDrops());
-        this.setDrops(newDrops);
+    public void mapDrops(final @NotNull UnaryOperator<ItemStack> mapper) {
+        this.setDrops(this.getDrops().stream().map(mapper).toList());
     }
 
     public void filterDrops(final @NotNull Predicate<ItemStack> predicate) {

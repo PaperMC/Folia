@@ -12,6 +12,7 @@ import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.EquipmentSlotGroup
 
 object FarmingEnchantments {
+    val BAKED_POTATO_HARVEST: TypedKey<Enchantment> = RegistryKey.ENCHANTMENT.typedKey(Key.key(Vanilife.NAMESPACE, "baked_potato_harvest"))
     val BEETROOT_AUTO_REPLANT: TypedKey<Enchantment> = RegistryKey.ENCHANTMENT.typedKey(Key.key(Vanilife.NAMESPACE, "beetroot_auto_replant"))
     val NO_CROP_TRAMPLE: TypedKey<Enchantment> = RegistryKey.ENCHANTMENT.typedKey(Key.key(Vanilife.NAMESPACE, "no_crop_trample"))
     val CARROT_AUTO_REPLANT: TypedKey<Enchantment> = RegistryKey.ENCHANTMENT.typedKey(Key.key(Vanilife.NAMESPACE, "carrot_auto_replant"))
@@ -19,11 +20,26 @@ object FarmingEnchantments {
     val WHEAT_AUTO_REPLANT: TypedKey<Enchantment> = RegistryKey.ENCHANTMENT.typedKey(Key.key(Vanilife.NAMESPACE, "wheat_auto_replant"))
 
     internal fun bootstrap(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>) {
+        event.registry().register(BAKED_POTATO_HARVEST) { builder -> bakedPotatoHarvest(event, builder) }
         event.registry().register(BEETROOT_AUTO_REPLANT) { builder -> beetrootAutoReplant(event, builder) }
         event.registry().register(CARROT_AUTO_REPLANT) { builder -> carrotAutoReplant(event, builder) }
         event.registry().register(NO_CROP_TRAMPLE) { builder -> noCropTrample(event, builder) }
         event.registry().register(POTATO_AUTO_REPLANT) { builder -> potatoAutoReplant(event, builder) }
         event.registry().register(WHEAT_AUTO_REPLANT) { builder -> wheatAutoReplant(event, builder) }
+    }
+
+    private fun bakedPotatoHarvest(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder
+    ) {
+        builder.description(Component.translatable(FarmingTranslations.ENCHANTMENT_VANILIFE_BAKED_POTATO_HARVEST))
+            .supportedItems(event.getOrCreateTag(ItemTypeTagKeys.HOES))
+            .weight(1)
+            .maxLevel(1)
+            .anvilCost(1)
+            .minimumCost(EnchantmentRegistryEntry.EnchantmentCost.of(1, 1))
+            .maximumCost(EnchantmentRegistryEntry.EnchantmentCost.of(3, 1))
+            .activeSlots(EquipmentSlotGroup.ANY)
     }
 
     private fun beetrootAutoReplant(

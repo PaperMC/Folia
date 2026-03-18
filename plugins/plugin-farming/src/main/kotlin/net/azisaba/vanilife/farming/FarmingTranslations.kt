@@ -4,6 +4,7 @@ import net.azisaba.packed.lang.PackLanguage
 import net.azisaba.packed.lang.Translation
 
 object FarmingTranslations {
+    const val ENCHANTMENT_VANILIFE_BAKED_POTATO_HARVEST: String = "enchantment.vanilife.baked_potato_harvest"
     const val ENCHANTMENT_VANILIFE_BEETROOT_AUTO_REPLANT: String = "enchantment.vanilife.beetroot_auto_replant"
     const val ENCHANTMENT_VANILIFE_CARROT_AUTO_REPLANT: String = "enchantment.vanilife.carrot_auto_replant"
     const val ENCHANTMENT_VANILIFE_NO_CROP_TRAMPLE: String = "enchantment.vanilife.no_crop_trample"
@@ -11,6 +12,7 @@ object FarmingTranslations {
     const val ENCHANTMENT_VANILIFE_WHEAT_AUTO_REPLANT: String = "enchantment.vanilife.wheat_auto_replant"
 
     fun us(): PackLanguage = mapOf(
+        ENCHANTMENT_VANILIFE_BAKED_POTATO_HARVEST to Translation.literal("Baked Potato Harvest"),
         ENCHANTMENT_VANILIFE_BEETROOT_AUTO_REPLANT to Translation.literal("Beetroot Auto Replant"),
         ENCHANTMENT_VANILIFE_CARROT_AUTO_REPLANT to Translation.literal("Carrot Auto Replant"),
         ENCHANTMENT_VANILIFE_NO_CROP_TRAMPLE to Translation.literal("No Crop Trample"),
@@ -19,6 +21,7 @@ object FarmingTranslations {
     )
 
     fun jp(): PackLanguage = mapOf(
+        ENCHANTMENT_VANILIFE_BAKED_POTATO_HARVEST to Translation.literal("こんがりポテト"),
         ENCHANTMENT_VANILIFE_BEETROOT_AUTO_REPLANT to Translation.literal("収穫（ビートルート）"),
         ENCHANTMENT_VANILIFE_CARROT_AUTO_REPLANT to Translation.literal("収穫（ニンジン）"),
         ENCHANTMENT_VANILIFE_NO_CROP_TRAMPLE to Translation.literal("畑保護"),
