@@ -32,12 +32,18 @@ object ForestryEnchantments {
         event.registry().register(SPRUCE_TIMBER) { spruceTimber(event, it) }
     }
 
-    private fun acaciaTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun acaciaTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_ACACIA_TIMBER))
     }
 
-    private fun autoSapling(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun autoSapling(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_AUTO_SAPLING))
             .supportedItems(event.getOrCreateTag(ItemTypeTagKeys.AXES))
             .weight(1)
@@ -48,37 +54,58 @@ object ForestryEnchantments {
             .activeSlots(EquipmentSlotGroup.ANY)
     }
 
-    private fun birchTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun birchTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_BIRCH_TIMBER))
     }
 
-    private fun darkOakTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun darkOakTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_DARK_OAK_TIMBER))
     }
 
-    private fun jungleTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun jungleTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_JUNGLE_TIMBER))
     }
 
-    private fun oakTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun oakTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_OAK_TIMBER))
     }
 
-    private fun paleOakTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun paleOakTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_PALE_OAK_TIMBER))
     }
 
-    private fun spruceTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun spruceTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         baseTimber(event, builder)
         builder.description(Component.translatable(ForestryTranslations.ENCHANTMENT_VANILIFE_SPRUCE_TIMBER))
     }
 
-    private fun baseTimber(event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>, builder: EnchantmentRegistryEntry.Builder) {
+    private fun baseTimber(
+        event: RegistryComposeEvent<Enchantment, EnchantmentRegistryEntry.Builder>,
+        builder: EnchantmentRegistryEntry.Builder,
+    ) {
         builder.supportedItems(event.getOrCreateTag(ItemTypeTagKeys.AXES))
             .weight(1)
             .maxLevel(1)

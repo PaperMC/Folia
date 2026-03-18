@@ -19,6 +19,7 @@ import net.azisaba.vanilife.mining.MiningItemModels
 import net.azisaba.vanilife.mining.MiningModels
 import net.azisaba.vanilife.mining.MiningTranslations
 import net.azisaba.vanilife.npc.*
+import net.azisaba.vanilife.toolswap.ToolSwapTranslations
 import net.kyori.adventure.resource.ResourcePackInfo
 import net.kyori.adventure.text.Component
 import org.bukkit.plugin.java.JavaPlugin
@@ -152,11 +153,11 @@ internal class Main : JavaPlugin() {
                 PackedKey.lang(
                     Vanilife.NAMESPACE,
                     Locale.US
-                ) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
+                ) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + ToolSwapTranslations.us() + GeneralTranslations.us())
                 PackedKey.lang(
                     Vanilife.NAMESPACE,
                     Locale.JAPAN
-                ) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
+                ) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + ToolSwapTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
