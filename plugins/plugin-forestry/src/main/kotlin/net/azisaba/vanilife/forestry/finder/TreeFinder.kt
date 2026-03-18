@@ -71,8 +71,12 @@ sealed interface TreeFinder {
         fun isWithinBounds(source: BlockState, block: BlockState): Boolean =
             abs(block.x - source.x) <= maxDeltaXZ && abs(block.z - source.z) <= maxDeltaXZ
 
-        override suspend fun find(start: BlockState, plugin: Plugin): DetectedTree? =
-            withContext(plugin.regionDispatcher(start.location)) {
+        override suspend fun find(start: BlockState, plugin: Plugin): DetectedTree? {
+            if (!isTrunkBlock(start, start) && !isLeavesBlock(start, start)) {
+                return null
+            }
+
+            return withContext(plugin.regionDispatcher(start.location)) {
                 val (trunkBlocks, leavesBlocks) = collectBlocks(start, plugin)
                 if (leavesBlocks.isEmpty()) {
                     return@withContext null
@@ -85,6 +89,7 @@ sealed interface TreeFinder {
 
                 DetectedTree(trunkBlocks, expandedLeavesBlocks, sapling)
             }
+        }
 
         protected suspend fun fetchBlockAt(location: Location, plugin: Plugin): BlockState =
             if (Bukkit.isOwnedByCurrentRegion(location)) location.block.state else {
