@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.farming
 
 import net.azisaba.vanilife.farming.listener.AutoReplantListener
+import net.azisaba.vanilife.farming.listener.NoCropTrampleListener
 
 internal fun Main.setupEventListeners() {
     server.pluginManager.registerEvents(
@@ -31,4 +32,5 @@ internal fun Main.setupEventListeners() {
             plugin = this,
         ), this
     )
+    server.pluginManager.registerEvents(NoCropTrampleListener(FarmingEnchantments.NO_CROP_TRAMPLE), this)
 }
