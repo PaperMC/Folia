@@ -8,18 +8,18 @@ import me.tofaa.entitylib.container.EntityContainer
 import net.azisaba.vanilife.forestry.finder.DetectedTree
 import net.kyori.adventure.sound.Sound
 import org.bukkit.Material
-import org.bukkit.block.Block
+import org.bukkit.block.BlockState
 import org.bukkit.entity.Player
 import java.lang.Math.toRadians
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-internal class CutDownAnimator(
+internal class TimberAnimator(
     private val sound: Sound = Sound.sound(SoundEventKeys.BLOCK_CHEST_OPEN, Sound.Source.BLOCK, 0.5f, 0.1f),
     private val animationTime: Long = 20L,
 ) {
-    suspend fun animate(context: CutDownContext) {
+    suspend fun animate(context: TimberContext) {
         val pivot = pivotVec(context.detectedTree) ?: return
 
         playSound(context)
@@ -27,14 +27,15 @@ internal class CutDownAnimator(
         val entityContainer = EntityContainer.basic()
         val animationViewers = context.chunk.playersSeeingChunk.map(Player::getUniqueId)
         val rotationAxis = computeRotationAxis(context.player.yaw)
-        for (block in context.detectedTree) {
-            val wrapperBlock = WrapperCutDownBlock(block, pivot, rotationAxis, animationTime)
 
-            val spawnLocation = Location(block.x.toDouble(), block.y.toDouble(), block.z.toDouble(), 0f, 0f)
+        for (blockState in context.detectedTree) {
+            val wrapperBlock = WrapperTimberBlock(blockState, pivot, rotationAxis, animationTime)
+
+            val spawnLocation = Location(blockState.x.toDouble(), blockState.y.toDouble(), blockState.z.toDouble(), 0f, 0f)
             wrapperBlock.spawn(spawnLocation, entityContainer)
             animationViewers.forEach(wrapperBlock::addViewer)
 
-            block.type = Material.AIR
+            blockState.block.type = Material.AIR
         }
 
         delay(50L)
@@ -47,7 +48,7 @@ internal class CutDownAnimator(
     }
 
     private fun pivotVec(detectedTree: DetectedTree): Vector3d? {
-        val block = detectedTree.trunkBlocks.minByOrNull(Block::getY) ?: return null
+        val block = detectedTree.trunkBlocks.minByOrNull(BlockState::getY) ?: return null
         return Vector3d(block.x.toDouble(), block.y.toDouble(), block.z.toDouble())
     }
 
@@ -63,12 +64,12 @@ internal class CutDownAnimator(
         return Vector3d(axis.x / len, axis.y / len, axis.z / len)
     }
 
-    private fun playSound(context: CutDownContext) {
+    private fun playSound(context: TimberContext) {
         context.world.playSound(
             sound,
-            context.sourceBlock.x.toDouble(),
-            context.sourceBlock.y.toDouble(),
-            context.sourceBlock.z.toDouble(),
+            context.source.x.toDouble(),
+            context.source.y.toDouble(),
+            context.source.z.toDouble(),
         )
     }
 }

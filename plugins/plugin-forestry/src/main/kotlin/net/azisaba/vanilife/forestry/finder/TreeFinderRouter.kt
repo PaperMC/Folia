@@ -1,13 +1,14 @@
 package net.azisaba.vanilife.forestry.finder
 
 import org.bukkit.block.Block
+import org.bukkit.block.BlockState
 import org.bukkit.plugin.Plugin
 
 data class TreeFinderRouter(val finders: List<TreeFinder>) {
-    suspend fun find(start: Block): DetectedTree? =
+    suspend fun find(start: BlockState): DetectedTree? =
         findApplicableFinders(start).firstNotNullOfOrNull { finder -> finder.find(start) }
 
-    fun findApplicableFinders(block: Block) = finders.filter { it.isTrunkBlock(block, block) }
+    fun findApplicableFinders(block: BlockState) = finders.filter { it.isTrunkBlock(block, block) }
 
     companion object {
         fun build(plugin: Plugin): TreeFinderRouter = TreeFinderRouter(listOf(

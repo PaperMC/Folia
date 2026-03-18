@@ -9,24 +9,24 @@ import io.github.retrooper.packetevents.util.SpigotConversionUtil
 import me.tofaa.entitylib.container.EntityContainer
 import me.tofaa.entitylib.meta.display.BlockDisplayMeta
 import me.tofaa.entitylib.wrapper.WrapperEntity
-import org.bukkit.block.Block
+import org.bukkit.block.BlockState
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-internal class WrapperCutDownBlock(
-    private val block: Block,
+internal class WrapperTimberBlock(
+    private val blockState: BlockState,
     private val pivot: Vector3d,
     private val rotationAxis: Vector3d,
     private val animationTime: Long,
 ) : WrapperEntity(EntityTypes.BLOCK_DISPLAY) {
-    private val initialOffsetFromPivot: Vector3d = Vector3d(block.x - pivot.x, block.y - pivot.y, block.z - pivot.z)
+    private val initialOffsetFromPivot: Vector3d = Vector3d(blockState.x - pivot.x, blockState.y - pivot.y, blockState.z - pivot.z)
 
     override fun spawn(location: Location, parent: EntityContainer): Boolean {
         if (!super.spawn(location, parent)) return false
 
         consumeEntityMeta(BlockDisplayMeta::class.java) { meta ->
-            meta.blockState = SpigotConversionUtil.fromBukkitBlockData(block.blockData)
+            meta.blockState = SpigotConversionUtil.fromBukkitBlockData(blockState.blockData)
             meta.translation = Vector3f(0f, 0f, 0f)
             meta.leftRotation = Quaternion4f(0f, 0f, 0f, 1f)
             meta.interpolationDelay = 0
@@ -50,9 +50,9 @@ internal class WrapperCutDownBlock(
         )
 
         val translation = Vector3f(
-            (blockPos.x - block.x).toFloat(),
-            (blockPos.y - block.y).toFloat(),
-            (blockPos.z - block.z).toFloat(),
+            (blockPos.x - blockState.x).toFloat(),
+            (blockPos.y - blockState.y).toFloat(),
+            (blockPos.z - blockState.z).toFloat(),
         )
 
         consumeEntityMeta(BlockDisplayMeta::class.java) { meta ->
