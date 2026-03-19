@@ -12,23 +12,29 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.block.data.Orientable
+import org.bukkit.metadata.FixedMetadataValue
 import org.bukkit.plugin.Plugin
 
 object ResourcePortals {
     val FRAME_BLOCK: Material = Material.PRISMARINE
 
-    val finder: PortalFinder = PortalFinder(
-        framePredicate = { it.type == FRAME_BLOCK },
-        allowedInnerWidth = 2..21,
-        allowedInnerHeight = 3..21,
-    )
+    val finder: PortalFinder =
+        PortalFinder(
+            framePredicate = { it.type == FRAME_BLOCK },
+            allowedInnerWidth = 2..21,
+            allowedInnerHeight = 3..21,
+        )
 
-    fun createWithAnimation(plugin: Plugin, detected: DetectedPortal) {
+    fun createWithAnimation(
+        plugin: Plugin,
+        detected: DetectedPortal,
+    ) {
         val location = Location(detected.world, detected.minBound.x(), detected.minBound.y(), detected.maxBound.z())
-        val portalAxis = when (detected.orientation) {
-            DetectedPortal.Orientation.XY -> Axis.X
-            DetectedPortal.Orientation.ZY -> Axis.Z
-        }
+        val portalAxis =
+            when (detected.orientation) {
+                DetectedPortal.Orientation.XY -> Axis.X
+                DetectedPortal.Orientation.ZY -> Axis.Z
+            }
         plugin.launch(plugin.regionDispatcher(location)) {
             for (y in detected.innerYRange.reversed()) {
                 for (x in detected.innerXRange) {
@@ -40,7 +46,7 @@ object ResourcePortals {
                         // mark plugin-created portal blocks so listeners can identify them
                         try {
                             // avoid hard dependency on Bukkit metadata api at top-level; use reflection-safe call
-                            block.setMetadata("vanilife_portal", org.bukkit.metadata.FixedMetadataValue(plugin, true))
+                            block.setMetadata("vanilife_portal", FixedMetadataValue(plugin, true))
                         } catch (_: NoClassDefFoundError) {
                             // ignore if metadata API is not available in this environment (very unlikely)
                         }

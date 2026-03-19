@@ -27,19 +27,44 @@ internal data class ResourceSpawnCacheEntry(
 )
 
 internal interface ResourceSpawnRepository {
-    suspend fun find(worldId: String, seed: Long, islandX: Int, islandZ: Int): ResourceSpawnCacheEntry?
+    suspend fun find(
+        worldId: String,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    ): ResourceSpawnCacheEntry?
 
     suspend fun upsert(entry: ResourceSpawnCacheEntry): ResourceSpawnCacheEntry
 
-    suspend fun touchLastUsed(worldId: String, seed: Long, islandX: Int, islandZ: Int)
+    suspend fun touchLastUsed(
+        worldId: String,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    )
 
-    suspend fun deleteBySeed(worldId: String, seed: Long)
+    suspend fun deleteBySeed(
+        worldId: String,
+        seed: Long,
+    )
 
-    suspend fun delete(worldId: String, seed: Long, islandX: Int, islandZ: Int)
+    suspend fun delete(
+        worldId: String,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    )
 }
 
-internal class ExposedResourceSpawnRepository(private val database: Database) : ResourceSpawnRepository {
-    override suspend fun find(worldId: String, seed: Long, islandX: Int, islandZ: Int): ResourceSpawnCacheEntry? =
+internal class ExposedResourceSpawnRepository(
+    private val database: Database,
+) : ResourceSpawnRepository {
+    override suspend fun find(
+        worldId: String,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    ): ResourceSpawnCacheEntry? =
         suspendTransaction(database) {
             ResourceSpawnTable
                 .selectAll()
@@ -48,46 +73,52 @@ internal class ExposedResourceSpawnRepository(private val database: Database) : 
                         (ResourceSpawnTable.seed eq seed) and
                         (ResourceSpawnTable.islandX eq islandX) and
                         (ResourceSpawnTable.islandZ eq islandZ)
-                }
-                .firstOrNull()
+                }.firstOrNull()
                 ?.toEntry()
         }
 
-    override suspend fun upsert(entry: ResourceSpawnCacheEntry): ResourceSpawnCacheEntry = suspendTransaction(database) {
-        val updated = ResourceSpawnTable.update(
-            where = {
-                (ResourceSpawnTable.worldId eq entry.worldId) and
-                    (ResourceSpawnTable.seed eq entry.seed) and
-                    (ResourceSpawnTable.islandX eq entry.islandX) and
-                    (ResourceSpawnTable.islandZ eq entry.islandZ)
-            },
-        ) {
-            it[spawnX] = entry.spawnX
-            it[spawnY] = entry.spawnY
-            it[spawnZ] = entry.spawnZ
-            it[lastUsedAt] = entry.lastUsedAtMillis
-            it[version] = entry.version
-            it[flags] = entry.flags
-        }
-        if (updated == 0) {
-            ResourceSpawnTable.insert {
-                it[worldId] = entry.worldId
-                it[seed] = entry.seed
-                it[islandX] = entry.islandX
-                it[islandZ] = entry.islandZ
-                it[spawnX] = entry.spawnX
-                it[spawnY] = entry.spawnY
-                it[spawnZ] = entry.spawnZ
-                it[createdAt] = entry.createdAtMillis
-                it[lastUsedAt] = entry.lastUsedAtMillis
-                it[version] = entry.version
-                it[flags] = entry.flags
+    override suspend fun upsert(entry: ResourceSpawnCacheEntry): ResourceSpawnCacheEntry =
+        suspendTransaction(database) {
+            val updated =
+                ResourceSpawnTable.update(
+                    where = {
+                        (ResourceSpawnTable.worldId eq entry.worldId) and
+                            (ResourceSpawnTable.seed eq entry.seed) and
+                            (ResourceSpawnTable.islandX eq entry.islandX) and
+                            (ResourceSpawnTable.islandZ eq entry.islandZ)
+                    },
+                ) {
+                    it[spawnX] = entry.spawnX
+                    it[spawnY] = entry.spawnY
+                    it[spawnZ] = entry.spawnZ
+                    it[lastUsedAt] = entry.lastUsedAtMillis
+                    it[version] = entry.version
+                    it[flags] = entry.flags
+                }
+            if (updated == 0) {
+                ResourceSpawnTable.insert {
+                    it[worldId] = entry.worldId
+                    it[seed] = entry.seed
+                    it[islandX] = entry.islandX
+                    it[islandZ] = entry.islandZ
+                    it[spawnX] = entry.spawnX
+                    it[spawnY] = entry.spawnY
+                    it[spawnZ] = entry.spawnZ
+                    it[createdAt] = entry.createdAtMillis
+                    it[lastUsedAt] = entry.lastUsedAtMillis
+                    it[version] = entry.version
+                    it[flags] = entry.flags
+                }
             }
+            entry
         }
-        entry
-    }
 
-    override suspend fun touchLastUsed(worldId: String, seed: Long, islandX: Int, islandZ: Int) {
+    override suspend fun touchLastUsed(
+        worldId: String,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    ) {
         suspendTransaction(database) {
             ResourceSpawnTable.update(
                 where = {
@@ -102,7 +133,10 @@ internal class ExposedResourceSpawnRepository(private val database: Database) : 
         }
     }
 
-    override suspend fun deleteBySeed(worldId: String, seed: Long) {
+    override suspend fun deleteBySeed(
+        worldId: String,
+        seed: Long,
+    ) {
         suspendTransaction(database) {
             ResourceSpawnTable.deleteWhere {
                 (ResourceSpawnTable.worldId eq worldId) and (ResourceSpawnTable.seed eq seed)
@@ -110,7 +144,12 @@ internal class ExposedResourceSpawnRepository(private val database: Database) : 
         }
     }
 
-    override suspend fun delete(worldId: String, seed: Long, islandX: Int, islandZ: Int) {
+    override suspend fun delete(
+        worldId: String,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    ) {
         suspendTransaction(database) {
             ResourceSpawnTable.deleteWhere {
                 (ResourceSpawnTable.worldId eq worldId) and
@@ -121,19 +160,20 @@ internal class ExposedResourceSpawnRepository(private val database: Database) : 
         }
     }
 
-    private fun ResultRow.toEntry(): ResourceSpawnCacheEntry = ResourceSpawnCacheEntry(
-        worldId = get(ResourceSpawnTable.worldId),
-        seed = get(ResourceSpawnTable.seed),
-        islandX = get(ResourceSpawnTable.islandX),
-        islandZ = get(ResourceSpawnTable.islandZ),
-        spawnX = get(ResourceSpawnTable.spawnX),
-        spawnY = get(ResourceSpawnTable.spawnY),
-        spawnZ = get(ResourceSpawnTable.spawnZ),
-        createdAtMillis = get(ResourceSpawnTable.createdAt),
-        lastUsedAtMillis = get(ResourceSpawnTable.lastUsedAt),
-        version = get(ResourceSpawnTable.version),
-        flags = get(ResourceSpawnTable.flags),
-    )
+    private fun ResultRow.toEntry(): ResourceSpawnCacheEntry =
+        ResourceSpawnCacheEntry(
+            worldId = get(ResourceSpawnTable.worldId),
+            seed = get(ResourceSpawnTable.seed),
+            islandX = get(ResourceSpawnTable.islandX),
+            islandZ = get(ResourceSpawnTable.islandZ),
+            spawnX = get(ResourceSpawnTable.spawnX),
+            spawnY = get(ResourceSpawnTable.spawnY),
+            spawnZ = get(ResourceSpawnTable.spawnZ),
+            createdAtMillis = get(ResourceSpawnTable.createdAt),
+            lastUsedAtMillis = get(ResourceSpawnTable.lastUsedAt),
+            version = get(ResourceSpawnTable.version),
+            flags = get(ResourceSpawnTable.flags),
+        )
 }
 
 object ResourceSpawnTable : Table("resource_spawn_cache") {

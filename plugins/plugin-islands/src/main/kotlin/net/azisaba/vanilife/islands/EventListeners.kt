@@ -2,8 +2,8 @@ package net.azisaba.vanilife.islands
 
 import net.azisaba.vanilife.islands.listener.IslandPlayerListener
 import net.azisaba.vanilife.islands.portal.listener.BedTrackerListener
-import net.azisaba.vanilife.islands.portal.listener.PortalIgniteListener
 import net.azisaba.vanilife.islands.portal.listener.PortalEnterListener
+import net.azisaba.vanilife.islands.portal.listener.PortalIgniteListener
 import org.koin.core.Koin
 
 internal fun Main.setupEventListeners(koin: Koin) {

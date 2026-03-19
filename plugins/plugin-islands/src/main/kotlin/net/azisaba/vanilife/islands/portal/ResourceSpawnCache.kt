@@ -2,6 +2,7 @@ package net.azisaba.vanilife.islands.portal
 
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -27,10 +28,13 @@ internal class ResourceSpawnCache(
     private val repository: ResourceSpawnRepository,
 ) {
     private val memoryCache: MutableMap<CacheKey, ResourceSpawnCacheEntry> = ConcurrentHashMap()
-    private val inFlight = ConcurrentHashMap<CacheKey, kotlinx.coroutines.Deferred<ResourceSpawnCacheEntry>>()
+    private val inFlight = ConcurrentHashMap<CacheKey, Deferred<ResourceSpawnCacheEntry>>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    suspend fun getOrCompute(islandPos: IslandPos, world: World): ResourceSpawnCacheEntry {
+    suspend fun getOrCompute(
+        islandPos: IslandPos,
+        world: World,
+    ): ResourceSpawnCacheEntry {
         val key = CacheKey(world.key.toString(), world.seed, islandPos.x(), islandPos.z())
         memoryCache[key]?.let {
             touch(key)
@@ -43,12 +47,13 @@ internal class ResourceSpawnCache(
             return it
         }
 
-        val deferred = inFlight.computeIfAbsent(key) {
-            scope.async {
-                val computed = computeEntry(key, world)
-                repository.upsert(computed)
+        val deferred =
+            inFlight.computeIfAbsent(key) {
+                scope.async {
+                    val computed = computeEntry(key, world)
+                    repository.upsert(computed)
+                }
             }
-        }
         return try {
             deferred.await().also { memoryCache[key] = it }
         } finally {
@@ -56,33 +61,48 @@ internal class ResourceSpawnCache(
         }
     }
 
-    suspend fun overwrite(islandPos: IslandPos, world: World, x: Int, y: Int, z: Int): ResourceSpawnCacheEntry {
+    suspend fun overwrite(
+        islandPos: IslandPos,
+        world: World,
+        x: Int,
+        y: Int,
+        z: Int,
+    ): ResourceSpawnCacheEntry {
         val now = System.currentTimeMillis()
         val key = CacheKey(world.key.toString(), world.seed, islandPos.x(), islandPos.z())
         val current = repository.find(key.worldId, key.seed, key.islandX, key.islandZ)
-        val entry = ResourceSpawnCacheEntry(
-            worldId = key.worldId,
-            seed = key.seed,
-            islandX = key.islandX,
-            islandZ = key.islandZ,
-            spawnX = x,
-            spawnY = y,
-            spawnZ = z,
-            createdAtMillis = current?.createdAtMillis ?: now,
-            lastUsedAtMillis = now,
-            version = current?.version ?: 1,
-            flags = current?.flags,
-        )
+        val entry =
+            ResourceSpawnCacheEntry(
+                worldId = key.worldId,
+                seed = key.seed,
+                islandX = key.islandX,
+                islandZ = key.islandZ,
+                spawnX = x,
+                spawnY = y,
+                spawnZ = z,
+                createdAtMillis = current?.createdAtMillis ?: now,
+                lastUsedAtMillis = now,
+                version = current?.version ?: 1,
+                flags = current?.flags,
+            )
         val saved = repository.upsert(entry)
         memoryCache[key] = saved
         return saved
     }
 
-    suspend fun show(world: World, seed: Long, islandX: Int, islandZ: Int): ResourceSpawnCacheEntry? {
-        return repository.find(world.key.toString(), seed, islandX, islandZ)
-    }
+    suspend fun show(
+        world: World,
+        seed: Long,
+        islandX: Int,
+        islandZ: Int,
+    ): ResourceSpawnCacheEntry? = repository.find(world.key.toString(), seed, islandX, islandZ)
 
-    suspend fun invalidate(world: World, seed: Long, islandX: Int?, islandZ: Int?) {
+    suspend fun invalidate(
+        world: World,
+        seed: Long,
+        islandX: Int?,
+        islandZ: Int?,
+    ) {
         if (islandX != null && islandZ != null) {
             repository.delete(world.key.toString(), seed, islandX, islandZ)
             memoryCache.remove(CacheKey(world.key.toString(), seed, islandX, islandZ))
@@ -102,7 +122,10 @@ internal class ResourceSpawnCache(
         }
     }
 
-    private suspend fun computeEntry(key: CacheKey, world: World): ResourceSpawnCacheEntry {
+    private suspend fun computeEntry(
+        key: CacheKey,
+        world: World,
+    ): ResourceSpawnCacheEntry {
         val now = System.currentTimeMillis()
         val (x, z) = computeDeterministicXZ(key.islandX, key.islandZ, key.seed)
         val y = highestY(world, x, z)
@@ -123,7 +146,11 @@ internal class ResourceSpawnCache(
         )
     }
 
-    private suspend fun highestY(world: World, x: Int, z: Int): Int {
+    private suspend fun highestY(
+        world: World,
+        x: Int,
+        z: Int,
+    ): Int {
         val location = Location(world, x.toDouble(), world.minHeight.toDouble(), z.toDouble())
         return withContext(plugin.regionDispatcher(location)) {
             world.getChunkAtAsync(x shr 4, z shr 4, true).await()
@@ -131,7 +158,13 @@ internal class ResourceSpawnCache(
         }
     }
 
-    suspend fun findSafeLocation(world: World, x: Int, y: Int, z: Int, radius: Int): Location? {
+    suspend fun findSafeLocation(
+        world: World,
+        x: Int,
+        y: Int,
+        z: Int,
+        radius: Int,
+    ): Location? {
         return withContext(plugin.regionDispatcher(Location(world, x.toDouble(), y.toDouble(), z.toDouble()))) {
             for (r in 0..radius) {
                 for (dx in -r..r) {
@@ -150,7 +183,12 @@ internal class ResourceSpawnCache(
         }
     }
 
-    private fun isSafe(world: World, x: Int, y: Int, z: Int): Boolean {
+    private fun isSafe(
+        world: World,
+        x: Int,
+        y: Int,
+        z: Int,
+    ): Boolean {
         val feet = world.getBlockAt(x, y, z)
         val head = world.getBlockAt(x, y + 1, z)
         val below = world.getBlockAt(x, y - 1, z)
@@ -161,7 +199,11 @@ internal class ResourceSpawnCache(
         return true
     }
 
-    private fun computeDeterministicXZ(islandX: Int, islandZ: Int, worldSeed: Long): Pair<Int, Int> {
+    private fun computeDeterministicXZ(
+        islandX: Int,
+        islandZ: Int,
+        worldSeed: Long,
+    ): Pair<Int, Int> {
         var h = islandX.toLong() * 0x9E3779B97F4A7C15UL.toLong() xor (islandZ.toLong() * 0xC2B2AE3D27D4EB4FUL.toLong()) xor worldSeed
         if (h == 0L) h = 0xDEADBEEFL
         val random = Random(h)

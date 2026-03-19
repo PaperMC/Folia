@@ -26,64 +26,82 @@ internal data class LastBedEntry(
 )
 
 internal interface LastBedRepository {
-    suspend fun find(worldId: String, playerUuid: UUID): LastBedEntry?
+    suspend fun find(
+        worldId: String,
+        playerUuid: UUID,
+    ): LastBedEntry?
 
     suspend fun upsert(entry: LastBedEntry): LastBedEntry
 
-    suspend fun delete(worldId: String, playerUuid: UUID)
+    suspend fun delete(
+        worldId: String,
+        playerUuid: UUID,
+    )
 }
 
-internal class ExposedLastBedRepository(private val database: Database) : LastBedRepository {
-    override suspend fun find(worldId: String, playerUuid: UUID): LastBedEntry? = suspendTransaction(database) {
-        LastBedTable
-            .selectAll()
-            .where { (LastBedTable.worldId eq worldId) and (LastBedTable.playerUuid eq playerUuid) }
-            .firstOrNull()
-            ?.toEntry()
-    }
-
-    override suspend fun upsert(entry: LastBedEntry): LastBedEntry = suspendTransaction(database) {
-        val updated = LastBedTable.update(
-            where = { (LastBedTable.worldId eq entry.worldId) and (LastBedTable.playerUuid eq entry.playerUuid) },
-        ) {
-            it[x] = entry.x
-            it[y] = entry.y
-            it[z] = entry.z
-            it[yaw] = entry.yaw
-            it[pitch] = entry.pitch
-            it[updatedAt] = entry.updatedAtMillis
+internal class ExposedLastBedRepository(
+    private val database: Database,
+) : LastBedRepository {
+    override suspend fun find(
+        worldId: String,
+        playerUuid: UUID,
+    ): LastBedEntry? =
+        suspendTransaction(database) {
+            LastBedTable
+                .selectAll()
+                .where { (LastBedTable.worldId eq worldId) and (LastBedTable.playerUuid eq playerUuid) }
+                .firstOrNull()
+                ?.toEntry()
         }
-        if (updated == 0) {
-            LastBedTable.insert {
-                it[worldId] = entry.worldId
-                it[playerUuid] = entry.playerUuid
-                it[x] = entry.x
-                it[y] = entry.y
-                it[z] = entry.z
-                it[yaw] = entry.yaw
-                it[pitch] = entry.pitch
-                it[updatedAt] = entry.updatedAtMillis
+
+    override suspend fun upsert(entry: LastBedEntry): LastBedEntry =
+        suspendTransaction(database) {
+            val updated =
+                LastBedTable.update(
+                    where = { (LastBedTable.worldId eq entry.worldId) and (LastBedTable.playerUuid eq entry.playerUuid) },
+                ) {
+                    it[x] = entry.x
+                    it[y] = entry.y
+                    it[z] = entry.z
+                    it[yaw] = entry.yaw
+                    it[pitch] = entry.pitch
+                    it[updatedAt] = entry.updatedAtMillis
+                }
+            if (updated == 0) {
+                LastBedTable.insert {
+                    it[worldId] = entry.worldId
+                    it[playerUuid] = entry.playerUuid
+                    it[x] = entry.x
+                    it[y] = entry.y
+                    it[z] = entry.z
+                    it[yaw] = entry.yaw
+                    it[pitch] = entry.pitch
+                    it[updatedAt] = entry.updatedAtMillis
+                }
             }
+            entry
         }
-        entry
-    }
 
-    override suspend fun delete(worldId: String, playerUuid: UUID) {
+    override suspend fun delete(
+        worldId: String,
+        playerUuid: UUID,
+    ) {
         suspendTransaction(database) {
             LastBedTable.deleteWhere { (LastBedTable.worldId eq worldId) and (LastBedTable.playerUuid eq playerUuid) }
         }
     }
 
-    private fun ResultRow.toEntry(): LastBedEntry = LastBedEntry(
-        worldId = get(LastBedTable.worldId),
-        playerUuid = get(LastBedTable.playerUuid),
-        x = get(LastBedTable.x),
-        y = get(LastBedTable.y),
-        z = get(LastBedTable.z),
-        yaw = get(LastBedTable.yaw),
-        pitch = get(LastBedTable.pitch),
-        updatedAtMillis = get(LastBedTable.updatedAt),
-    )
+    private fun ResultRow.toEntry(): LastBedEntry =
+        LastBedEntry(
+            worldId = get(LastBedTable.worldId),
+            playerUuid = get(LastBedTable.playerUuid),
+            x = get(LastBedTable.x),
+            y = get(LastBedTable.y),
+            z = get(LastBedTable.z),
+            yaw = get(LastBedTable.yaw),
+            pitch = get(LastBedTable.pitch),
+            updatedAtMillis = get(LastBedTable.updatedAt),
+        )
 }
 
 object LastBedTable : Table("resource_last_bed") {
