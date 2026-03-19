@@ -2,11 +2,7 @@ package net.azisaba.vanilife.packhost
 
 import net.azisaba.packed.Packed
 import net.azisaba.packed.PackedKey
-import net.azisaba.packed.dsl.font
-import net.azisaba.packed.dsl.items
-import net.azisaba.packed.dsl.lang
-import net.azisaba.packed.dsl.models
-import net.azisaba.packed.dsl.sounds
+import net.azisaba.packed.dsl.*
 import net.azisaba.packed.lang
 import net.azisaba.packed.server.configureEmbeddedServer
 import net.azisaba.vanilife.Vanilife
@@ -17,15 +13,13 @@ import net.azisaba.vanilife.fishing.FishingFonts
 import net.azisaba.vanilife.fishing.FishingItemModels
 import net.azisaba.vanilife.fishing.FishingModels
 import net.azisaba.vanilife.fishing.FishingTranslations
-import net.azisaba.vanilife.forestry.ForestryItemModels
-import net.azisaba.vanilife.forestry.ForestryModels
 import net.azisaba.vanilife.forestry.ForestryTranslations
 import net.azisaba.vanilife.islands.IslandsFonts
-import net.azisaba.vanilife.npc.NpcFonts
-import net.azisaba.vanilife.npc.NpcItemModels
-import net.azisaba.vanilife.npc.NpcModels
-import net.azisaba.vanilife.npc.NpcSoundEvents
-import net.azisaba.vanilife.npc.NpcTranslations
+import net.azisaba.vanilife.mining.MiningItemModels
+import net.azisaba.vanilife.mining.MiningModels
+import net.azisaba.vanilife.mining.MiningTranslations
+import net.azisaba.vanilife.npc.*
+import net.azisaba.vanilife.toolswap.ToolSwapTranslations
 import net.kyori.adventure.resource.ResourcePackInfo
 import net.kyori.adventure.text.Component
 import org.bukkit.plugin.java.JavaPlugin
@@ -142,15 +136,28 @@ internal class Main : JavaPlugin() {
                 FishingItemModels.TUNA to FishingItemModels.tunaItem()
                 FishingItemModels.YELLOWTAIL to FishingItemModels.yellowtailItem()
 
-                ForestryItemModels.SMALL_TREE_STUMP to ForestryItemModels.smallTreeStump()
+                MiningItemModels.FROZEN_COAL to MiningItemModels.frozenCoal()
+                MiningItemModels.FROZEN_DIAMOND to MiningItemModels.frozenDiamond()
+                MiningItemModels.FROZEN_EMERALD to MiningItemModels.frozenEmerald()
+                MiningItemModels.FROZEN_LAPIS_LAZULI to MiningItemModels.frozenLapisLazuli()
+                MiningItemModels.FROZEN_RAW_COPPER to MiningItemModels.frozenRawCopper()
+                MiningItemModels.FROZEN_RAW_GOLD to MiningItemModels.frozenRawGold()
+                MiningItemModels.FROZEN_RAW_IRON to MiningItemModels.frozenRawIron()
+                MiningItemModels.FROZEN_REDSTONE to MiningItemModels.frozenRedstone()
 
                 NpcItemModels.EXPERIENCE to NpcItemModels.experience()
                 NpcItemModels.UNREADABLE_RECIPE to NpcItemModels.unreadableRecipe()
             }
 
             lang {
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.US) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + NpcTranslations.us() + GeneralTranslations.us())
-                PackedKey.lang(Vanilife.NAMESPACE, Locale.JAPAN) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + NpcTranslations.jp() + GeneralTranslations.jp())
+                PackedKey.lang(
+                    Vanilife.NAMESPACE,
+                    Locale.US
+                ) to (CookingTranslations.us() + FishingTranslations.us() + ForestryTranslations.us() + MiningTranslations.us() + NpcTranslations.us() + ToolSwapTranslations.us() + GeneralTranslations.us())
+                PackedKey.lang(
+                    Vanilife.NAMESPACE,
+                    Locale.JAPAN
+                ) to (CookingTranslations.jp() + FishingTranslations.jp() + ForestryTranslations.jp() + MiningTranslations.jp() + NpcTranslations.jp() + ToolSwapTranslations.jp() + GeneralTranslations.jp())
             }
 
             models {
@@ -247,7 +254,14 @@ internal class Main : JavaPlugin() {
                 FishingModels.TUNA to FishingModels.tuna()
                 FishingModels.YELLOWTAIL to FishingModels.yellowtail()
 
-                ForestryModels.SMALL_TREE_STUMP to ForestryModels.smallTreeStump()
+                MiningModels.FROZEN_COAL to MiningModels.frozenCoal()
+                MiningModels.FROZEN_DIAMOND to MiningModels.frozenDiamond()
+                MiningModels.FROZEN_EMERALD to MiningModels.frozenEmerald()
+                MiningModels.FROZEN_LAPIS_LAZULI to MiningModels.frozenLapisLazuli()
+                MiningModels.FROZEN_RAW_COPPER to MiningModels.frozenRawCopper()
+                MiningModels.FROZEN_RAW_GOLD to MiningModels.frozenRawGold()
+                MiningModels.FROZEN_RAW_IRON to MiningModels.frozenRawIron()
+                MiningModels.FROZEN_REDSTONE to MiningModels.frozenRedstone()
 
                 NpcModels.EXPERIENCE to NpcModels.experience()
                 NpcModels.UNREADABLE_RECIPE to NpcModels.unreadableRecipe()
@@ -261,17 +275,30 @@ internal class Main : JavaPlugin() {
             includeJavaResources(net.azisaba.vanilife.fishing.Main::class)
             includeJavaResources(net.azisaba.vanilife.forestry.Main::class)
             includeJavaResources(net.azisaba.vanilife.islands.Main::class)
+            includeJavaResources(net.azisaba.vanilife.mining.Main::class)
             includeJavaResources(net.azisaba.vanilife.npc.Main::class)
             includeJavaResources(Main::class)
 
             includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "assets", "assets")
-            includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_legacy", "bettermodel_legacy")
-            includeZip(server.pluginsFolder.toPath().resolve("BetterModel/build.zip"), "bettermodel_modern", "bettermodel_modern")
+            includeZip(
+                server.pluginsFolder.toPath().resolve("BetterModel/build.zip"),
+                "bettermodel_legacy",
+                "bettermodel_legacy"
+            )
+            includeZip(
+                server.pluginsFolder.toPath().resolve("BetterModel/build.zip"),
+                "bettermodel_modern",
+                "bettermodel_modern"
+            )
         }
 
         val configured = packed.configureEmbeddedServer(port = 8085)
         configured.embeddedServer.start(wait = false)
-        val packInfo = ResourcePackInfo.resourcePackInfo(UUID.randomUUID(), URI.create("http://localhost:8085"), configured.computeSha1Hash())
+        val packInfo = ResourcePackInfo.resourcePackInfo(
+            UUID.randomUUID(),
+            URI.create("http://localhost:8085"),
+            configured.computeSha1Hash()
+        )
 
         server.pluginManager.registerEvents(PlayerListener(packInfo), this)
     }

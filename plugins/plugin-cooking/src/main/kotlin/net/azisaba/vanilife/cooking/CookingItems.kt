@@ -12,10 +12,8 @@ import net.azisaba.vanilife.registry.data.ServerItemRegistryEntry
 import net.kyori.adventure.key.Key
 
 object CookingItems {
-    val BAMBOO_SHOOT: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot"))
-    val BAMBOO_SHOOT_RICE: TypedKey<ServerItem> =
-        RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot_rice"))
+    val BAMBOO_SHOOT: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot"))
+    val BAMBOO_SHOOT_RICE: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bamboo_shoot_rice"))
     val BANANA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "banana"))
     val BELL_PEPPER: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "bell_pepper"))
     val BLUEBERRY: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "blueberry"))
@@ -88,7 +86,7 @@ object CookingItems {
     val UDON: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "udon"))
     val YAKISOBA: TypedKey<ServerItem> = RegistryKey.SERVER_ITEM.typedKey(Key.key(Vanilife.NAMESPACE, "yakisoba"))
 
-    fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
+    internal fun bootstrap(event: RegistryComposeEvent<ServerItem, ServerItemRegistryEntry.Builder>) {
         event.registry().register(BAMBOO_SHOOT, ::bambooShoot)
         event.registry().register(BAMBOO_SHOOT_RICE, ::bambooShootRice)
         event.registry().register(BANANA, ::banana)

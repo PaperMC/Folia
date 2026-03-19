@@ -4,6 +4,30 @@ Date: Tue, 3 Mar 2026 17:50:15 +0900
 Subject: [PATCH] Server item registry
 
 
+diff --git a/src/generated/java/io/papermc/paper/registry/keys/BiomeKeys.java b/src/generated/java/io/papermc/paper/registry/keys/BiomeKeys.java
+index 983878bb6832ee22b49da23933903206e347d8f3..eb2432079d59f8504bb85abd323d2c1bf1dcb351 100644
+--- a/src/generated/java/io/papermc/paper/registry/keys/BiomeKeys.java
++++ b/src/generated/java/io/papermc/paper/registry/keys/BiomeKeys.java
+@@ -5,6 +5,9 @@ import static net.kyori.adventure.key.Key.key;
+ import io.papermc.paper.annotation.GeneratedClass;
+ import io.papermc.paper.registry.RegistryKey;
+ import io.papermc.paper.registry.TypedKey;
++import net.azisaba.vanilife.Vanilife;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import net.kyori.adventure.key.Key;
+ import org.bukkit.block.Biome;
+ import org.jspecify.annotations.NullMarked;
+@@ -480,6 +483,9 @@ public final class BiomeKeys {
+      */
+     public static final TypedKey<Biome> WOODED_BADLANDS = create(key("wooded_badlands"));
+ 
++    @Modified(Op.ADD_FIELD)
++    public static final TypedKey<Biome> GLACIAL_CAVE = create(key(Vanilife.NAMESPACE,"glacial_cave"));
++
+     private BiomeKeys() {
+     }
+ 
 diff --git a/src/main/java/com/destroystokyo/paper/SkinParts.java b/src/main/java/com/destroystokyo/paper/SkinParts.java
 index d48cddad85bf4163269aaf795e4e2d16151ea740..370680209a7fb3fd43c6b466870a7314e70bcde4 100644
 --- a/src/main/java/com/destroystokyo/paper/SkinParts.java
@@ -129,6 +153,97 @@ index 6ae47dac3496e2abf78b13ba1ae5dd0f3b2dd158..72bd14f2e30a25f1d86e4c09fcd07e75
  
      private RegistryEvents() {
      }
+diff --git a/src/main/java/org/bukkit/HeightMap.java b/src/main/java/org/bukkit/HeightMap.java
+index f334296d103415b8435a3e046e665d11a723a92d..95ac0306d56b836f054dc44c75dac3f98bcedf66 100644
+--- a/src/main/java/org/bukkit/HeightMap.java
++++ b/src/main/java/org/bukkit/HeightMap.java
+@@ -1,10 +1,14 @@
+ package org.bukkit;
+ 
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++
+ /**
+  * Further information regarding heightmaps.
+  *
+  * @see <a href="https://minecraft.wiki/w/Chunk_format">Minecraft Wiki</a>
+  */
++@Modified(Op.ADD_ENUM)
+ public enum HeightMap {
+ 
+     /**
+@@ -32,26 +36,26 @@ public enum HeightMap {
+      */
+     WORLD_SURFACE_WG,
+ 
+-    // Aetheria start - Custom heightmap types by Aetheria layer
+-    AETHERIA_OVERWORLD_MOTION_BLOCKING,
+-    AETHERIA_OVERWORLD_MOTION_BLOCKING_NO_LEAVES,
+-    AETHERIA_OVERWORLD_OCEAN_FLOOR,
+-    AETHERIA_OVERWORLD_OCEAN_FLOOR_WG,
+-    AETHERIA_OVERWORLD_WORLD_SURFACE,
+-    AETHERIA_OVERWORLD_WORLD_SURFACE_WG,
++    // Vanilife start - Custom heightmap types by resource layer
++    RESOURCE_OVERWORLD_MOTION_BLOCKING,
++    RESOURCE_OVERWORLD_MOTION_BLOCKING_NO_LEAVES,
++    RESOURCE_OVERWORLD_OCEAN_FLOOR,
++    RESOURCE_OVERWORLD_OCEAN_FLOOR_WG,
++    RESOURCE_OVERWORLD_WORLD_SURFACE,
++    RESOURCE_OVERWORLD_WORLD_SURFACE_WG,
+ 
+-    AETHERIA_NETHER_MOTION_BLOCKING,
+-    AETHERIA_NETHER_MOTION_BLOCKING_NO_LEAVES,
+-    AETHERIA_NETHER_OCEAN_FLOOR,
+-    AETHERIA_NETHER_OCEAN_FLOOR_WG,
+-    AETHERIA_NETHER_WORLD_SURFACE,
+-    AETHERIA_NETHER_WORLD_SURFACE_WG,
++    RESOURCE_NETHER_MOTION_BLOCKING,
++    RESOURCE_NETHER_MOTION_BLOCKING_NO_LEAVES,
++    RESOURCE_NETHER_OCEAN_FLOOR,
++    RESOURCE_NETHER_OCEAN_FLOOR_WG,
++    RESOURCE_NETHER_WORLD_SURFACE,
++    RESOURCE_NETHER_WORLD_SURFACE_WG,
+ 
+-    AETHERIA_END_MOTION_BLOCKING,
+-    AETHERIA_END_MOTION_BLOCKING_NO_LEAVES,
+-    AETHERIA_END_OCEAN_FLOOR,
+-    AETHERIA_END_OCEAN_FLOOR_WG,
+-    AETHERIA_END_WORLD_SURFACE,
+-    AETHERIA_END_WORLD_SURFACE_WG,
+-    // Aetheria end - Custom heightmap types by Aetheria layer
++    RESOURCE_END_MOTION_BLOCKING,
++    RESOURCE_END_MOTION_BLOCKING_NO_LEAVES,
++    RESOURCE_END_OCEAN_FLOOR,
++    RESOURCE_END_OCEAN_FLOOR_WG,
++    RESOURCE_END_WORLD_SURFACE,
++    RESOURCE_END_WORLD_SURFACE_WG,
++    // Vanilife end - Custom heightmap types by resource layer
+ }
+diff --git a/src/main/java/org/bukkit/block/Biome.java b/src/main/java/org/bukkit/block/Biome.java
+index 572f917374f871b0feab3fffc1a3c7b9e6fb0bfc..83876fbd9ecfcb054a6bebf8cef204db91d47ad8 100644
+--- a/src/main/java/org/bukkit/block/Biome.java
++++ b/src/main/java/org/bukkit/block/Biome.java
+@@ -5,7 +5,10 @@ import com.google.common.collect.Lists;
+ import io.papermc.paper.InternalAPIBridge;
+ import io.papermc.paper.registry.RegistryAccess;
+ import io.papermc.paper.registry.RegistryKey;
++import io.papermc.paper.registry.keys.BiomeKeys;
+ import java.util.Locale;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import org.bukkit.Bukkit;
+ import org.bukkit.FeatureFlag;
+ import org.bukkit.Keyed;
+@@ -156,6 +159,9 @@ public interface Biome extends OldEnum<Biome>, Keyed, net.kyori.adventure.transl
+     Biome WOODED_BADLANDS = getBiome("wooded_badlands");
+     // End generate - Biome
+ 
++    @Modified(Op.ADD_FIELD)
++    Biome GLACIAL_CAVE = RegistryAccess.registryAccess().getRegistry(RegistryKey.BIOME).getOrThrow(BiomeKeys.GLACIAL_CAVE);
++
+     /**
+      * Represents a custom Biome
+      *
 diff --git a/src/main/java/org/bukkit/block/Block.java b/src/main/java/org/bukkit/block/Block.java
 index fbee4ab2faaeba8d798aaba2e1837315ed56a184..e57825a00a3352e0d098d12d55ef07dfe35ca623 100644
 --- a/src/main/java/org/bukkit/block/Block.java

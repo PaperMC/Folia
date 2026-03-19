@@ -5,8 +5,7 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
-import net.azisaba.vanilife.forestry.cutdown.CutDownAnimator
-import net.azisaba.vanilife.forestry.finder.TreeFinderRouter
+import net.azisaba.vanilife.forestry.timber.TimberAnimator
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
@@ -28,8 +27,7 @@ class Main : JavaPlugin() {
         koinApp = startKoin {
             modules(module {
                 single<Plugin> { this@Main }
-                single { TreeFinderRouter.build(get()) }
-                single { CutDownAnimator() }
+                single { TimberAnimator() }
             })
         }
 

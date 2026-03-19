@@ -5,176 +5,207 @@ import kotlinx.coroutines.withContext
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
-import org.bukkit.block.Block
+import org.bukkit.block.BlockState
 import org.bukkit.block.data.type.Leaves
 import org.bukkit.plugin.Plugin
 import org.joml.Vector3i
 import org.joml.Vector3ic
 import kotlin.math.abs
 
-abstract class TreeFinder(private val plugin: Plugin) {
-    suspend fun find(start: Block): DetectedTree? = withContext(plugin.regionDispatcher(start.location)) {
-        val (trunkBlocks, leavesBlocks) = collectBlocks(start)
-        if (leavesBlocks.isEmpty()) {
-            return@withContext null
-        }
+sealed interface TreeFinder {
+    suspend fun find(start: BlockState, plugin: Plugin): DetectedTree?
 
-        val expandedLeavesBlocks = leavesBlocks + expandLeaves(start, leavesBlocks)
-        if (trunkBlocks.isEmpty() || expandedLeavesBlocks.isEmpty()) {
-            return@withContext null
-        }
+    companion object Builtins {
+        val COMPOSITE_DEFAULT: Composite = composite(oak(), spruce(), birch(), jungle(), acacia(), darkOak(), paleOak())
 
-        DetectedTree(trunkBlocks, expandedLeavesBlocks)
-    }
-
-    abstract fun isTrunkBlock(source: Block, block: Block): Boolean
-
-    abstract fun isLeavesBlock(source: Block, block: Block): Boolean
-
-    protected abstract fun isOverTrunkLimit(trunkBlocks: Set<Block>): Boolean
-
-    protected abstract fun isOverLeavesLimit(leavesBlocks: Set<Block>): Boolean
-
-    protected open suspend fun collectBlocks(start: Block): Pair<Set<Block>, Set<Block>> {
-        val trunkSet = mutableSetOf<Block>()
-        val leavesSet = mutableSetOf<Block>()
-
-        val queue = ArrayDeque<Block>()
-        val visitedBlocks = mutableSetOf<Block>()
-
-        queue.add(start)
-
-        while (queue.isNotEmpty()) {
-            val currentBlock = queue.removeFirst()
-            if (!visitedBlocks.add(currentBlock)) continue
-            if (!isTrunkBlock(start, currentBlock) && currentBlock != start) continue
-
-            trunkSet.add(currentBlock)
-
-            if (isOverTrunkLimit(trunkSet) || isOverLeavesLimit(leavesSet)) {
-                return emptySet<Block>() to emptySet()
-            }
-
-            for (adjacentBlock in fetchAdjacentBlocks(currentBlock)) {
-                if (isTrunkBlock(start, adjacentBlock)) {
-                    queue.add(adjacentBlock)
-                } else if (isLeavesBlock(start, adjacentBlock)) {
-                    leavesSet.add(adjacentBlock)
-                }
-            }
-        }
-
-        return trunkSet.toSet() to leavesSet.toSet()
-    }
-
-    protected open suspend fun expandLeaves(start: Block, sourceBlocks: Set<Block>): Set<Block> {
-        val resultSet = mutableSetOf<Block>()
-
-        val queue = ArrayDeque(sourceBlocks)
-        val visitedBlocks = mutableSetOf<Block>()
-
-        while (queue.isNotEmpty()) {
-            val currentBlock = queue.removeFirst()
-
-            if (isOverLeavesLimit(resultSet)) return emptySet()
-
-            for (adjacentBlock in fetchAdjacentBlocks(currentBlock)) {
-                if (adjacentBlock in visitedBlocks || !isLeavesBlock(start, adjacentBlock)) continue
-
-                resultSet.add(adjacentBlock)
-
-                visitedBlocks.add(adjacentBlock)
-                queue.add(adjacentBlock)
-            }
-        }
-
-        return resultSet.toSet()
-    }
-
-    protected suspend fun fetchBlockAt(location: Location): Block =
-        if (Bukkit.isOwnedByCurrentRegion(location)) location.block else {
-            withContext(plugin.regionDispatcher(location)) {
-                location.block
-            }
-        }
-
-    protected open suspend fun fetchAdjacentBlocks(block: Block): Set<Block> = buildSet {
-        for (offset in ADJACENT_OFFSETS) {
-            val location = block.location.add(offset.x().toDouble(), offset.y().toDouble(), offset.z().toDouble())
-            val block = fetchBlockAt(location)
-            add(block)
-        }
-    }
-
-    companion object {
-        private val ADJACENT_OFFSETS: Array<Vector3ic> = arrayOf(
-            Vector3i(0, 1, 0), Vector3i(0, -1, 0),
-            Vector3i(0, 0, -1), Vector3i(0, 0, 1),
-            Vector3i(1, 0, 0), Vector3i(-1, 0, 0),
+        fun oak(): Single = AllAdjacent(
+            Material.OAK_LOG, Material.OAK_LEAVES, Material.OAK_SAPLING,
+            240, 450, 5,
         )
 
-        fun oak(plugin: Plugin): TreeFinder = SimpleTreeFinder(Material.OAK_LOG, Material.OAK_LEAVES, 240, 450, 3, plugin)
+        fun spruce(): Single = FaceAdjacent(
+            Material.SPRUCE_LOG, Material.SPRUCE_LEAVES, Material.SPRUCE_SAPLING,
+            240, 450, 3,
+        )
 
-        fun fancyOak(plugin: Plugin): TreeFinder = FancyOakTreeFinder(plugin)
+        fun birch(): Single = FaceAdjacent(
+            Material.BIRCH_LOG, Material.BIRCH_LEAVES, Material.BIRCH_SAPLING,
+            240, 450, 3,
+        )
 
-        fun spruce(plugin: Plugin): TreeFinder =
-            SimpleTreeFinder(Material.SPRUCE_LOG, Material.SPRUCE_LEAVES, 240, 450, 3, plugin)
+        fun jungle(): Single = FaceAdjacent(
+            Material.JUNGLE_LOG, Material.JUNGLE_LEAVES, Material.JUNGLE_SAPLING,
+            640, 720, 8,
+        )
 
-        fun birch(plugin: Plugin): TreeFinder =
-            SimpleTreeFinder(Material.BIRCH_LOG, Material.BIRCH_LEAVES, 240, 450, 3, plugin)
+        fun acacia(): Single = FaceAdjacent(
+            Material.ACACIA_LOG, Material.ACACIA_LEAVES, Material.ACACIA_SAPLING,
+            240, 450, 6,
+        )
 
-        fun jungle(plugin: Plugin): TreeFinder =
-            SimpleTreeFinder(Material.JUNGLE_LOG, Material.JUNGLE_LEAVES, 640, 720, 8, plugin)
+        fun darkOak(): Single = FaceAdjacent(
+            Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, Material.DARK_OAK_SAPLING,
+            240, 450, 6,
+        )
 
-        fun acacia(plugin: Plugin): TreeFinder =
-            SimpleTreeFinder(Material.ACACIA_LOG, Material.ACACIA_LEAVES, 240, 450, 6, plugin)
+        fun paleOak(): Single = FaceAdjacent(
+            Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, Material.PALE_OAK_SAPLING,
+            240, 450, 6,
+        )
 
-        fun darkOak(plugin: Plugin): TreeFinder =
-            SimpleTreeFinder(Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, 240, 450, 6, plugin)
-
-        fun paleOak(plugin: Plugin): TreeFinder =
-            SimpleTreeFinder(Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, 240, 450, 6, plugin)
+        fun composite(vararg finders: Single): Composite = Composite(finders.toList())
     }
-}
 
-private class SimpleTreeFinder(
-    private val trunk: Material, private val leaves: Material,
-    private val maxTrunkBlocks: Int, private val maxLeavesBlocks: Int,
-    private val maxDeltaXZ: Int,
-    plugin: Plugin,
-) : TreeFinder(plugin) {
-    override fun isTrunkBlock(source: Block, block: Block): Boolean =
-        isWithinBounds(source, block) && block.type == trunk
+    abstract class Single(
+        protected val trunk: Material, protected val leaves: Material, protected val sapling: Material,
+        protected val maxTrunkBlocks: Int, protected val maxLeavesBlocks: Int,
+        protected val maxDeltaXZ: Int,
+    ) : TreeFinder {
+        fun isTrunkBlock(source: BlockState, blockState: BlockState): Boolean =
+            blockState.type == trunk && isWithinBounds(source, blockState)
 
-    override fun isLeavesBlock(source: Block, block: Block): Boolean =
-        isWithinBounds(source, block) && block.type == leaves && (block.blockData as? Leaves)?.isPersistent == false
+        fun isLeavesBlock(source: BlockState, blockState: BlockState): Boolean = blockState.type == leaves &&
+                (blockState !is Leaves || !blockState.isPersistent) &&
+                isWithinBounds(source, blockState)
 
-    override fun isOverTrunkLimit(trunkBlocks: Set<Block>): Boolean = trunkBlocks.size > maxTrunkBlocks
+        fun isWithinBounds(source: BlockState, block: BlockState): Boolean =
+            abs(block.x - source.x) <= maxDeltaXZ && abs(block.z - source.z) <= maxDeltaXZ
 
-    override fun isOverLeavesLimit(leavesBlocks: Set<Block>): Boolean = leavesBlocks.size > maxLeavesBlocks
+        override suspend fun find(start: BlockState, plugin: Plugin): DetectedTree? {
+            if (!isTrunkBlock(start, start) && !isLeavesBlock(start, start)) {
+                return null
+            }
 
-    private fun isWithinBounds(source: Block, block: Block): Boolean =
-        abs(block.x - source.x) <= maxDeltaXZ && abs(block.z - source.z) <= maxDeltaXZ
-}
+            return withContext(plugin.regionDispatcher(start.location)) {
+                val (trunkBlocks, leavesBlocks) = collectBlocks(start, plugin)
+                if (leavesBlocks.isEmpty()) {
+                    return@withContext null
+                }
 
-private class FancyOakTreeFinder(plugin: Plugin) : TreeFinder(plugin) {
-    override fun isTrunkBlock(source: Block, block: Block): Boolean = block.type == Material.OAK_LOG
+                val expandedLeavesBlocks = leavesBlocks + expandLeaves(start, leavesBlocks, plugin)
+                if (trunkBlocks.isEmpty() || expandedLeavesBlocks.isEmpty()) {
+                    return@withContext null
+                }
 
-    override fun isLeavesBlock(source: Block, block: Block): Boolean =
-        block.type == Material.OAK_LEAVES && (block.blockData as? Leaves)?.isPersistent == false
+                DetectedTree(trunkBlocks, expandedLeavesBlocks, sapling)
+            }
+        }
 
-    override fun isOverTrunkLimit(trunkBlocks: Set<Block>): Boolean = trunkBlocks.size > 360
-
-    override fun isOverLeavesLimit(leavesBlocks: Set<Block>): Boolean = leavesBlocks.size > 560
-
-    override suspend fun fetchAdjacentBlocks(block: Block): Set<Block> = buildSet {
-        for (dx in -1..1) {
-            for (dy in -1..1) {
-                for (dz in -1..1) {
-                    if (dx == 0 && dy == 0 && dz == 0) continue
-                    add(fetchBlockAt(block.location.add(dx.toDouble(), dy.toDouble(), dz.toDouble())))
+        protected suspend fun fetchBlockAt(location: Location, plugin: Plugin): BlockState =
+            if (Bukkit.isOwnedByCurrentRegion(location)) location.block.state else {
+                withContext(plugin.regionDispatcher(location)) {
+                    location.block.state
                 }
             }
+
+        protected abstract suspend fun fetchAdjacentBlocks(block: BlockState, plugin: Plugin): Set<BlockState>
+
+        private suspend fun collectBlocks(start: BlockState, plugin: Plugin): Pair<Set<BlockState>, Set<BlockState>> {
+            val trunkSet = mutableSetOf<BlockState>()
+            val leavesSet = mutableSetOf<BlockState>()
+
+            val queue = ArrayDeque<BlockState>()
+            val visitedBlocks = mutableSetOf<BlockState>()
+
+            queue.add(start)
+
+            while (queue.isNotEmpty()) {
+                val currentBlock = queue.removeFirst()
+                if (!visitedBlocks.add(currentBlock)) continue
+                if (!isTrunkBlock(start, currentBlock) && currentBlock != start) continue
+
+                trunkSet.add(currentBlock)
+
+                if (trunkSet.size > maxTrunkBlocks || leavesSet.size > maxLeavesBlocks) {
+                    return emptySet<BlockState>() to emptySet()
+                }
+
+                for (adjacentBlock in fetchAdjacentBlocks(currentBlock, plugin)) {
+                    if (isTrunkBlock(start, adjacentBlock)) {
+                        queue.add(adjacentBlock)
+                    } else if (isLeavesBlock(start, adjacentBlock)) {
+                        leavesSet.add(adjacentBlock)
+                    }
+                }
+            }
+
+            return trunkSet.toSet() to leavesSet.toSet()
+        }
+
+        private suspend fun expandLeaves(
+            start: BlockState,
+            sourceBlocks: Set<BlockState>,
+            plugin: Plugin,
+        ): Set<BlockState> {
+            val resultSet = mutableSetOf<BlockState>()
+
+            val queue = ArrayDeque(sourceBlocks)
+            val visitedBlocks = mutableSetOf<BlockState>()
+
+            while (queue.isNotEmpty()) {
+                val currentBlock = queue.removeFirst()
+
+                if (resultSet.size > maxLeavesBlocks) return emptySet()
+
+                for (adjacentBlock in fetchAdjacentBlocks(currentBlock, plugin)) {
+                    if (adjacentBlock in visitedBlocks || !isLeavesBlock(start, adjacentBlock)) {
+                        continue
+                    }
+
+                    resultSet.add(adjacentBlock)
+
+                    visitedBlocks.add(adjacentBlock)
+                    queue.add(adjacentBlock)
+                }
+            }
+
+            return resultSet.toSet()
+        }
+    }
+
+    class FaceAdjacent(
+        trunk: Material, leaves: Material, sapling: Material,
+        maxTrunkBlocks: Int, maxLeavesBlocks: Int, maxDeltaXZ: Int,
+    ) : Single(trunk, leaves, sapling, maxTrunkBlocks, maxLeavesBlocks, maxDeltaXZ) {
+        override suspend fun fetchAdjacentBlocks(block: BlockState, plugin: Plugin): Set<BlockState> = buildSet {
+            for (offset in OFFSETS) {
+                val location = block.location.add(offset.x().toDouble(), offset.y().toDouble(), offset.z().toDouble())
+                val block = fetchBlockAt(location, plugin)
+                add(block)
+            }
+        }
+
+        private companion object {
+            val OFFSETS: Array<Vector3ic> = arrayOf(
+                Vector3i(0, 1, 0), Vector3i(0, -1, 0),
+                Vector3i(0, 0, -1), Vector3i(0, 0, 1),
+                Vector3i(1, 0, 0), Vector3i(-1, 0, 0),
+            )
+        }
+    }
+
+    class AllAdjacent(
+        trunk: Material, leaves: Material, sapling: Material,
+        maxTrunkBlocks: Int, maxLeavesBlocks: Int, maxDeltaXZ: Int,
+    ) : Single(trunk, leaves, sapling, maxTrunkBlocks, maxLeavesBlocks, maxDeltaXZ) {
+        override suspend fun fetchAdjacentBlocks(block: BlockState, plugin: Plugin): Set<BlockState> = buildSet {
+            for (dx in -1..1) {
+                for (dy in -1..1) {
+                    for (dz in -1..1) {
+                        if (dx == 0 && dy == 0 && dz == 0) continue
+                        add(fetchBlockAt(block.location.add(dx.toDouble(), dy.toDouble(), dz.toDouble()), plugin))
+                    }
+                }
+            }
+        }
+    }
+
+    class Composite(val finders: List<Single>) : TreeFinder {
+        override suspend fun find(start: BlockState, plugin: Plugin): DetectedTree? =
+            filterApplicableFinders(start).firstNotNullOfOrNull { it.find(start, plugin) }
+
+        fun filterApplicableFinders(start: BlockState): List<Single> = finders.filter {
+            it.isTrunkBlock(start, start)
         }
     }
 }

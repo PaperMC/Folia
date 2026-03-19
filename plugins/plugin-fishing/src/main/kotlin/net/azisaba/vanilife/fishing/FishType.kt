@@ -582,9 +582,9 @@ data class FishType(
 
         fun allTypes(): Set<FishType> = SET.toSet()
 
-        private fun register(fishType: FishType): FishType {
-            SET.add(fishType)
-            return fishType
+        private fun register(value: FishType): FishType {
+            SET.add(value)
+            return value
         }
     }
 }

@@ -4,7 +4,7 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
-    java // TODO java launcher tasks
+    java // ToDo java launcher tasks
     alias(libs.plugins.kotlin)
     alias(libs.plugins.paperweight.patcher)
     alias(libs.plugins.serialization) apply false

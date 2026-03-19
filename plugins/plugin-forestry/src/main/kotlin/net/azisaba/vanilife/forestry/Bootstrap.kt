@@ -9,9 +9,5 @@ internal class Bootstrap : PluginBootstrap {
         context.lifecycleManager.registerEventHandler(
             RegistryEvents.ENCHANTMENT.compose().newHandler(ForestryEnchantments::bootstrap)
         )
-
-        context.lifecycleManager.registerEventHandler(
-            RegistryEvents.SERVER_ITEM.compose().newHandler(ForestryItems::bootstrap)
-        )
     }
 }

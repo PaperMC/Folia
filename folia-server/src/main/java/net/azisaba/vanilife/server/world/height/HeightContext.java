@@ -1,7 +1,7 @@
 package net.azisaba.vanilife.server.world.height;
 
-import net.azisaba.vanilife.server.world.AetheriaLayer;
-import net.azisaba.vanilife.server.world.AetheriaLayout;
+import net.azisaba.vanilife.server.world.resource.ResourceLayer;
+import net.azisaba.vanilife.server.world.resource.ResourceLayout;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.NullMarked;
@@ -68,10 +68,10 @@ public abstract class HeightContext implements HeightmapContext {
     }
 
     public static class Layered extends HeightContext {
-        private final AetheriaLayout layout;
-        private final AetheriaLayer.Type layerType;
+        private final ResourceLayout layout;
+        private final ResourceLayer.Type layerType;
 
-        public Layered(final AetheriaLayout layout, final AetheriaLayer.Type layerType) {
+        public Layered(final ResourceLayout layout, final ResourceLayer.Type layerType) {
             super(layerType.heightmapSet());
             this.layout = layout;
             this.layerType = layerType;
