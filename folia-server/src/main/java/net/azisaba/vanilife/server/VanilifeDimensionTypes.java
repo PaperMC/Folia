@@ -21,7 +21,7 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class VanilifeDimensionTypes {
-    public static final ResourceKey<DimensionType> AETHERIA = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "aetheria"));
+    public static final ResourceKey<DimensionType> RESOURCE = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "resource"));
 
     public static void bootstrap(final WritableRegistry<DimensionType> writable, final RegistryOps.RegistryInfoLookup lookup) {
         final HolderGetter<Timeline> timelines = lookup.lookup(Registries.TIMELINE)
@@ -39,7 +39,7 @@ public final class VanilifeDimensionTypes {
                 .set(EnvironmentAttributes.AMBIENT_SOUNDS, AmbientSounds.LEGACY_CAVE_SETTINGS)
                 .build();
         writable.register(
-                VanilifeDimensionTypes.AETHERIA,
+                VanilifeDimensionTypes.RESOURCE,
                 new DimensionType(
                         false,
                         true,

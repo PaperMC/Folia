@@ -3,11 +3,11 @@ package net.azisaba.vanilife.server;
 import io.papermc.paper.adventure.PaperAdventure;
 import net.azisaba.vanilife.Vanilife;
 import net.azisaba.vanilife.islands.IslandDefaults;
-import net.azisaba.vanilife.server.islands.IslandsChunkGenerator;
-import net.azisaba.vanilife.server.islands.IslandsGeneratorSettings;
-import net.azisaba.vanilife.server.world.AetheriaChunkGenerator;
-import net.azisaba.vanilife.server.world.AetheriaLayer;
-import net.azisaba.vanilife.server.world.AetheriaLayout;
+import net.azisaba.vanilife.server.world.islands.IslandsChunkGenerator;
+import net.azisaba.vanilife.server.world.islands.IslandsGeneratorSettings;
+import net.azisaba.vanilife.server.world.resource.ResourceChunkGenerator;
+import net.azisaba.vanilife.server.world.resource.ResourceLayer;
+import net.azisaba.vanilife.server.world.resource.ResourceLayout;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.WritableRegistry;
@@ -33,22 +33,22 @@ public final class VanilifeLevelStems {
     public static final ResourceKey<LevelStem> ISLANDS = ResourceKey.create(Registries.LEVEL_STEM, PaperAdventure.asVanilla(IslandDefaults.WORLD_KEY));
 
     public static void bootstrap(final WritableRegistry<LevelStem> writable, final RegistryOps.RegistryInfoLookup lookup) {
-        writable.register(VanilifeLevelStems.MAIN, VanilifeLevelStems.aetheria(lookup), RegistrationInfo.BUILT_IN);
+        writable.register(VanilifeLevelStems.MAIN, VanilifeLevelStems.resource(lookup), RegistrationInfo.BUILT_IN);
         writable.register(VanilifeLevelStems.ISLANDS, VanilifeLevelStems.islands(lookup), RegistrationInfo.BUILT_IN);
     }
 
-    private static LevelStem aetheria(final RegistryOps.RegistryInfoLookup lookup) {
+    private static LevelStem resource(final RegistryOps.RegistryInfoLookup lookup) {
         final Holder<DimensionType> dimensionType = lookup.lookup(Registries.DIMENSION_TYPE)
                 .orElseThrow()
                 .getter()
-                .getOrThrow(VanilifeDimensionTypes.AETHERIA);
-        final AetheriaChunkGenerator generator = new AetheriaChunkGenerator(
-                new AetheriaLayout(
+                .getOrThrow(VanilifeDimensionTypes.RESOURCE);
+        final ResourceChunkGenerator generator = new ResourceChunkGenerator(
+                new ResourceLayout(
                         DimensionDefaults.OVERWORLD_MIN_Y - DimensionDefaults.NETHER_GENERATION_HEIGHT,
                         List.of(
-                                AetheriaLayer.Type.nether(lookup),
-                                AetheriaLayer.Type.overworld(lookup),
-                                AetheriaLayer.Type.end(lookup)
+                                ResourceLayer.Type.nether(lookup),
+                                ResourceLayer.Type.overworld(lookup),
+                                ResourceLayer.Type.end(lookup)
                         )
                 )
         );
