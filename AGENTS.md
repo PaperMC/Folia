@@ -12,6 +12,7 @@
   - Run a development server (Folia): `./gradlew :folia-server:runDevServer`
   - Run an assembled server: `./gradlew :folia-server:runServer`
   - List available tasks: `./gradlew tasks --all`
+  - Note: `:folia-server:runServer` and `:folia-server:runDevServer` are configured to depend on plugin shadow JAR tasks (see root `build.gradle.kts` `gradle.projectsEvaluated` block). When run, generated plugin JARs are passed to the server via `--add-plugin` arguments.
 
 - Running a single test (recommended way)
   - Run a single test class in a subproject (Gradle + JUnit 5):
@@ -31,6 +32,7 @@
     - Gradle's `--tests` supports patterns/wildcards (e.g. `*Hologram*`).
     - Some projects (notably `:folia-server`) configure `useJUnitPlatform { excludeTags("Slow") }` in their `test` task. By default slow tests will be skipped there.
     - If a test task adds JVM agents (mockito agent for Java 21) or other `jvmArgumentProviders`, the task configuration will inject them automatically — prefer the Gradle task above over running tests with raw `java`.
+    - For example, `:folia-server` and `:folia-api` register a `mockitoAgent` configuration and use a `MockitoAgentProvider` added to `tasks.test`'s `jvmArgumentProviders`, so `-javaagent:` arguments are injected automatically (see `folia-server/build.gradle.kts` and `folia-api/build.gradle.kts`).
 
 - Debugging tests
   - Run with stacktrace and verbose logging: add `--stacktrace --info` or `--debug` to your Gradle command.
@@ -38,6 +40,7 @@
 
 - Lint & formatting
   - There is no enforced ktlint/detekt/spotless configuration in repository root. The project uses Kotlin and Java; prefer the Kotlin official style and IntelliJ formatter.
+  - Note: there is no enforced ktlint/detekt/spotless Gradle configuration, but an IDE ktlint configuration file exists at `.idea/ktlint-plugin.xml` (IDE-level only; not enforced by the build).
   - Recommended (not yet configured): add `ktlint` and `detekt` and wire them into `./gradlew check`.
   - Import rules: avoid wildcard imports (`*`), group and order imports sensibly (standard library -> third party -> project), and keep imports alphabetized inside groups.
 
