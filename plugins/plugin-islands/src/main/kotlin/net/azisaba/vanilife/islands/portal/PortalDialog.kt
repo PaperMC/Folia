@@ -2,6 +2,7 @@ package net.azisaba.vanilife.islands.portal
 
 import com.github.shynixn.mccoroutine.folia.launch
 import io.papermc.paper.dialog.Dialog
+import io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent
 import io.papermc.paper.registry.data.dialog.ActionButton
 import io.papermc.paper.registry.data.dialog.DialogBase
 import io.papermc.paper.registry.data.dialog.DialogRegistryEntry
@@ -9,6 +10,8 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction
 import io.papermc.paper.registry.data.dialog.type.DialogType
 import io.papermc.paper.registry.event.RegistryComposeEvent
 import io.papermc.paper.registry.keys.DialogKeys
+import io.papermc.paper.registry.keys.tags.DialogTagKeys
+import io.papermc.paper.tag.PostFlattenTagRegistrar
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.event.ClickCallback
@@ -20,13 +23,10 @@ object PortalDialog {
     private val plugin: Plugin by inject(Plugin::class.java)
     private val resourceTeleporter: ResourceTeleporter by inject(ResourceTeleporter::class.java)
     val ISLAND_PORTAL = DialogKeys.create(Key.key("vanilife:island_portal_dialog"))
-    val BACK_TO_ISLAND = Key.key("vanilife:back_to_island")
-    val STAY_IN_WORLD = Key.key("vanilife:stay_in_world")
 
     fun register(event: RegistryComposeEvent<Dialog, DialogRegistryEntry.Builder>) {
         event.registry().register(
             ISLAND_PORTAL,
-//            DialogKeys.QUICK_ACTIONS,
         ) { builder ->
             builder
                 .base(DialogBase.builder(Component.text("Back to island")).build())
@@ -68,5 +68,9 @@ object PortalDialog {
                     ),
                 )
         }
+    }
+
+    fun registerTag(event: ReloadableRegistrarEvent<PostFlattenTagRegistrar<Dialog>>) {
+        event.registrar().addToTag(DialogTagKeys.PAUSE_SCREEN_ADDITIONS, listOf(PortalDialog.ISLAND_PORTAL))
     }
 }
