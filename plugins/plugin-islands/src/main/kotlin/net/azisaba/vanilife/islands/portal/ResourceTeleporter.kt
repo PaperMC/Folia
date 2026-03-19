@@ -10,7 +10,6 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
-import java.util.logging.Level
 
 internal class ResourceTeleporter(
     private val plugin: Plugin,
@@ -26,7 +25,7 @@ internal class ResourceTeleporter(
         val world =
             Bukkit.getWorld(resourceWorldName)
                 ?: run {
-                    plugin.logger.warning(
+                    plugin.slF4JLogger.warn(
                         "Resource teleport failed: resource world '$resourceWorldName' not found for player=${player.name}",
                     )
                     return false
@@ -44,11 +43,11 @@ internal class ResourceTeleporter(
             withContext(plugin.regionDispatcher(safe)) {
                 world.getChunkAtAsync(safe.blockX shr 4, safe.blockZ shr 4, true).await()
                 val ok = player.teleportAsync(safe).await()
-                plugin.logger.info("teleportIslandToResource: player=${player.name}, ok=$ok, target=$safe")
+                plugin.slF4JLogger.debug("teleportIslandToResource: player={}, ok={}, target={}", player.name, ok, safe)
                 ok
             }
         } catch (e: Exception) {
-            plugin.logger.log(Level.SEVERE, "teleportIslandToResource failed for player=${player.name} to=$safe", e)
+            plugin.slF4JLogger.error("teleportIslandToResource failed for player=${player.name} to=$safe", e)
             false
         }
     }
@@ -57,7 +56,7 @@ internal class ResourceTeleporter(
         val resourceWorld =
             Bukkit.getWorld(resourceWorldName)
                 ?: run {
-                    plugin.logger.warning(
+                    plugin.slF4JLogger.warn(
                         "Resource teleport failed: resource world '$resourceWorldName' not found for player=${player.name}",
                     )
                     return false
@@ -70,11 +69,16 @@ internal class ResourceTeleporter(
                     withContext(plugin.regionDispatcher(bedLocation)) {
                         resourceWorld.getChunkAtAsync(bedLocation.blockX shr 4, bedLocation.blockZ shr 4, true).await()
                         val ok = player.teleportAsync(bedLocation).await()
-                        plugin.logger.info("teleportResourceToIsland(bed): player=${player.name}, ok=$ok, target=$bedLocation")
+                        plugin.slF4JLogger.debug(
+                            "teleportResourceToIsland(bed): player={}, ok={}, target={}",
+                            player.name,
+                            ok,
+                            bedLocation,
+                        )
                         ok
                     }
                 } catch (e: Exception) {
-                    plugin.logger.log(Level.SEVERE, "teleportResourceToIsland to bed failed for player=${player.name} to=$bedLocation", e)
+                    plugin.slF4JLogger.error("teleportResourceToIsland to bed failed for player=${player.name} to=$bedLocation", e)
                     false
                 }
             }
@@ -85,10 +89,15 @@ internal class ResourceTeleporter(
         val islandSpawn = island.primaryData.resolveSpawnPoint(island.pos)
         return try {
             val ok = player.teleportAsync(islandSpawn).await()
-            plugin.logger.info("teleportResourceToIsland(fallback island): player=${player.name}, ok=$ok, target=$islandSpawn")
+            plugin.slF4JLogger.debug(
+                "teleportResourceToIsland(fallback island): player={}, ok={}, target={}",
+                player.name,
+                ok,
+                islandSpawn,
+            )
             ok
         } catch (e: Exception) {
-            plugin.logger.log(Level.SEVERE, "teleportResourceToIsland to island spawn failed for player=${player.name} to=$islandSpawn", e)
+            plugin.slF4JLogger.error("teleportResourceToIsland to island spawn failed for player=${player.name} to=$islandSpawn", e)
             false
         }
     }
