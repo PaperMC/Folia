@@ -323,6 +323,43 @@ index 492b1615d96133c5082e0f16015f114299f8082f..37045ec700915896c924d159075aa58f
      }
  
      // Paper start - Add BlockBreakBlockEvent
+diff --git a/net/minecraft/world/level/block/state/BlockBehaviour.java b/net/minecraft/world/level/block/state/BlockBehaviour.java
+index c5953d5751e655e121e459aaab35e7719948e69e..79c41dbedc90eac928d27454ceb712472e83a8e6 100644
+--- a/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -15,6 +15,9 @@ import java.util.function.Function;
+ import java.util.function.Predicate;
+ import java.util.function.ToIntFunction;
+ import java.util.stream.Stream;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.event.BlockRandomTickEvent;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Holder;
+@@ -82,6 +85,8 @@ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.util.RandomSourceWrapper;
+ import org.jspecify.annotations.Nullable;
+ 
+ public abstract class BlockBehaviour implements FeatureElement {
+@@ -877,7 +882,13 @@ public abstract class BlockBehaviour implements FeatureElement {
+             this.getBlock().tick(this.asState(), level, pos, random);
+         }
+ 
++        @Modified(Op.ADD_EVENT_CALL)
+         public void randomTick(ServerLevel level, BlockPos pos, RandomSource random) {
++            // Vanilife start - Add a call to net.azisaba.vanilife.event.BlockRandomTickEvent
++            final BlockRandomTickEvent event = new BlockRandomTickEvent(CraftBlock.at(level, pos), new RandomSourceWrapper.RandomWrapper(random));
++            if (!event.callEvent()) return;
++            // Vanilife end - Add a call to net.azisaba.vanilife.event.BlockRandomTickEvent
++
+             this.getBlock().randomTick(this.asState(), level, pos, random);
+         }
+ 
 diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
 index fd92282bb1cbe7051258f6d239e8dc0ce191baba..5d0d04f21e46d58c20badd2127fcd95c202d25c3 100644
 --- a/net/minecraft/world/level/chunk/ChunkGenerator.java

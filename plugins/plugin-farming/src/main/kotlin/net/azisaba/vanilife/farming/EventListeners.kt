@@ -1,7 +1,10 @@
 package net.azisaba.vanilife.farming
 
+import net.azisaba.vanilife.farming.block.CropBlockBehaviour
 import net.azisaba.vanilife.farming.listener.AutoReplantListener
 import net.azisaba.vanilife.farming.listener.BakedPotatoHarvestListener
+import net.azisaba.vanilife.farming.listener.CropBlockListener
+import net.azisaba.vanilife.farming.listener.FarmlandListener
 import net.azisaba.vanilife.farming.listener.NoCropTrampleListener
 
 internal fun Main.setupEventListeners() {
@@ -34,5 +37,7 @@ internal fun Main.setupEventListeners() {
         ), this
     )
     server.pluginManager.registerEvents(BakedPotatoHarvestListener(FarmingEnchantments.BAKED_POTATO_HARVEST), this)
+    server.pluginManager.registerEvents(CropBlockListener(CropBlockBehaviour.Default, this), this)
+    server.pluginManager.registerEvents(FarmlandListener(FarmingItems.FERTILIZER), this)
     server.pluginManager.registerEvents(NoCropTrampleListener(FarmingEnchantments.NO_CROP_TRAMPLE), this)
 }

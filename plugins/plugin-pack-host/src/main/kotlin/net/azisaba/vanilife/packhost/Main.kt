@@ -9,6 +9,8 @@ import net.azisaba.vanilife.Vanilife
 import net.azisaba.vanilife.cooking.CookingItemModels
 import net.azisaba.vanilife.cooking.CookingModels
 import net.azisaba.vanilife.cooking.CookingTranslations
+import net.azisaba.vanilife.farming.FarmingItemModels
+import net.azisaba.vanilife.farming.FarmingModels
 import net.azisaba.vanilife.farming.FarmingTranslations
 import net.azisaba.vanilife.fishing.FishingFonts
 import net.azisaba.vanilife.fishing.FishingItemModels
@@ -117,6 +119,8 @@ internal class Main : JavaPlugin() {
                 CookingItemModels.TUNA_SUSHI_ITEM to CookingItemModels.tunaSushiItem()
                 CookingItemModels.UDON_ITEM to CookingItemModels.udonItem()
                 CookingItemModels.YAKISOBA_ITEM to CookingItemModels.yakisobaItem()
+
+                FarmingItemModels.FERTILIZER to FarmingItemModels.wateringCan()
 
                 FishingItemModels.CLAM to FishingItemModels.clamItem()
                 FishingItemModels.CRUCIAN_CARP to FishingItemModels.crucianCarpItem()
@@ -236,6 +240,8 @@ internal class Main : JavaPlugin() {
                 CookingModels.UDON to CookingModels.udon()
                 CookingModels.YAKISOBA to CookingModels.yakisoba()
 
+                FarmingModels.FERTILIZER to FarmingModels.wateringCan()
+
                 FishingModels.CLAM to FishingModels.clam()
                 FishingModels.CRUCIAN_CARP to FishingModels.crucianCarp()
                 FishingModels.EEL to FishingModels.eel()
@@ -273,6 +279,7 @@ internal class Main : JavaPlugin() {
             }
 
             includeJavaResources(net.azisaba.vanilife.cooking.Main::class)
+            includeJavaResources(net.azisaba.vanilife.farming.Main::class)
             includeJavaResources(net.azisaba.vanilife.fishing.Main::class)
             includeJavaResources(net.azisaba.vanilife.forestry.Main::class)
             includeJavaResources(net.azisaba.vanilife.islands.Main::class)

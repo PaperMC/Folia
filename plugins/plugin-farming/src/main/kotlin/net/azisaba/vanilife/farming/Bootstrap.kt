@@ -9,5 +9,8 @@ class Bootstrap : PluginBootstrap {
         context.lifecycleManager.registerEventHandler(
             RegistryEvents.ENCHANTMENT.compose().newHandler(FarmingEnchantments::bootstrap)
         )
+        context.lifecycleManager.registerEventHandler(
+            RegistryEvents.SERVER_ITEM.compose().newHandler(FarmingItems::bootstrap)
+        )
     }
 }

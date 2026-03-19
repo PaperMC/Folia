@@ -23,12 +23,7 @@ internal class AutoReplantListener(
 ) : Listener {
     @EventHandler
     fun onBlockBreak(event: BlockBreakEvent) {
-        if (!crop.isBlock(event.block.type)) return
-
-        if (!crop.isFullyGrownBlock(event.block.blockData)) {
-            event.isCancelled = true
-            return
-        }
+        if (!crop.isFullyGrownBlock(event.block.blockData)) return
 
         val enchantment = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).getOrThrow(enchantment)
         val itemStack = event.player.equipment.itemInMainHand

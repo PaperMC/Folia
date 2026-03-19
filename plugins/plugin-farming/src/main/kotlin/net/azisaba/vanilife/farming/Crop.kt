@@ -39,14 +39,19 @@ data class Crop private constructor(
 
     companion object Values {
         private val SET: MutableSet<Crop> = mutableSetOf()
+        private val BY_BLOCK: MutableMap<TypedKey<BlockType>, Crop> = mutableMapOf()
 
         val BEETROOT: Crop = register(Crop(ItemTypeKeys.BEETROOT, ItemTypeKeys.BEETROOT_SEEDS, BlockTypeKeys.BEETROOTS))
         val CARROT: Crop = register(Crop(ItemTypeKeys.CARROT, ItemTypeKeys.CARROT, BlockTypeKeys.CARROTS))
         val POTATO: Crop = register(Crop(ItemTypeKeys.POTATO, ItemTypeKeys.POTATO, BlockTypeKeys.POTATOES))
         val WHEAT: Crop = register(Crop(ItemTypeKeys.WHEAT, ItemTypeKeys.WHEAT_SEEDS, BlockTypeKeys.WHEAT))
 
+        fun byBlock(material: Material): Crop? =
+            BY_BLOCK[RegistryKey.BLOCK.typedKey(material.asBlockType()!!.key())]
+
         private fun register(value: Crop): Crop {
             SET.add(value)
+            BY_BLOCK[value.block] = value
             return value
         }
     }
