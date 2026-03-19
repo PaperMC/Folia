@@ -35,18 +35,19 @@ internal class PortalEnterListener(
 
         val hasPortalMeta = candidates.any { it.type == Material.NETHER_PORTAL && it.hasMetadata("vanilife_portal") }
 
-        val hasFrameNearby = run {
-            // scan a small neighborhood for the configured frame block to avoid false positives
-            // (prismarine is the configured frame block in ResourcePortals.FRAME_BLOCK)
-            for (dx in -2..2) {
-                for (dy in -1..1) {
-                    for (dz in -2..2) {
-                        if (base.getRelative(dx, dy, dz).type == ResourcePortals.FRAME_BLOCK) return@run true
+        val hasFrameNearby =
+            run {
+                // scan a small neighborhood for the configured frame block to avoid false positives
+                // (prismarine is the configured frame block in ResourcePortals.FRAME_BLOCK)
+                for (dx in -2..2) {
+                    for (dy in -1..1) {
+                        for (dz in -2..2) {
+                            if (base.getRelative(dx, dy, dz).type == ResourcePortals.FRAME_BLOCK) return@run true
+                        }
                     }
                 }
+                false
             }
-            false
-        }
 
         if (!hasPortalMeta && !hasFrameNearby) return // not our portal -> allow vanilla handling
 
@@ -60,17 +61,19 @@ internal class PortalEnterListener(
 
         plugin.launch {
             try {
-                val detected = ResourcePortals.finder.findPortal(plugin, base.location) ?: run {
-                    player.sendMessage(Component.text("Portal not recognized."))
-                    return@launch
-                }
+                val detected =
+                    ResourcePortals.finder.findPortal(plugin, base.location) ?: run {
+                        player.sendMessage(Component.text("Portal not recognized."))
+                        return@launch
+                    }
                 val world = detected.world
-                val success = if (world.name == resourceWorldName) {
-                    teleporter.teleportResourceToIsland(player)
-                } else {
-                    val islandPos = IslandPos.fromBlockPos(player.location.blockX, player.location.blockZ)
-                    teleporter.teleportIslandToResource(player, islandPos)
-                }
+                val success =
+                    if (world.name == resourceWorldName) {
+                        teleporter.teleportResourceToIsland(player)
+                    } else {
+                        val islandPos = IslandPos.fromBlockPos(player.location.blockX, player.location.blockZ)
+                        teleporter.teleportIslandToResource(player, islandPos)
+                    }
                 if (!success) {
                     plugin.logger.log(Level.WARNING, "Portal teleport failed for player=${player.name} to world=${world.name}")
                     player.sendMessage(Component.text("Could not connect to resource world."))

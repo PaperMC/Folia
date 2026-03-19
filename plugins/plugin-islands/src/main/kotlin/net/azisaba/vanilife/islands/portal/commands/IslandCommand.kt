@@ -17,9 +17,11 @@ internal object IslandCommand : KoinComponent {
     private val teleporter: ResourceTeleporter by inject()
 
     fun create(): LiteralCommandNode<CommandSourceStack> =
-        Commands.literal("island")
+        Commands
+            .literal("island")
             .then(
-                Commands.literal("return")
+                Commands
+                    .literal("return")
                     .executes { context ->
                         val sender = context.source.sender
                         val player = sender as? Player
@@ -35,6 +37,5 @@ internal object IslandCommand : KoinComponent {
                         }
                         Command.SINGLE_SUCCESS
                     },
-            )
-            .build()
+            ).build()
 }

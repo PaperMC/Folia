@@ -36,20 +36,23 @@ class Main : JavaPlugin() {
         PacketEvents.getAPI().init()
         EntityLib.init(SpigotEntityLibPlatform(this), APIConfig(PacketEvents.getAPI()))
 
-        koinApp = startKoin {
-            modules(module {
-                single<Plugin> { this@Main }
-                single { config }
-                single { database }
-                single<IslandRepository> { DatabaseIslandRepository(get()) }
-                single<IslandManager> { IslandManager(get(), Bukkit.getIslandsWorld(), get()) }
-                single<ResourceSpawnRepository> { ExposedResourceSpawnRepository(get()) }
-                single<LastBedRepository> { ExposedLastBedRepository(get()) }
-                single { ResourceSpawnCache(get(), get<Config>().portal, get()) }
-                single { LastBedStorage(get()) }
-                single { ResourceTeleporter(get(), get(), get(), get(), get<Config>().portal.resourceWorld) }
-            })
-        }
+        koinApp =
+            startKoin {
+                modules(
+                    module {
+                        single<Plugin> { this@Main }
+                        single { config }
+                        single { database }
+                        single<IslandRepository> { DatabaseIslandRepository(get()) }
+                        single<IslandManager> { IslandManager(get(), Bukkit.getIslandsWorld(), get()) }
+                        single<ResourceSpawnRepository> { ExposedResourceSpawnRepository(get()) }
+                        single<LastBedRepository> { ExposedLastBedRepository(get()) }
+                        single { ResourceSpawnCache(get(), get<Config>().portal, get()) }
+                        single { LastBedStorage(get()) }
+                        single { ResourceTeleporter(get(), get(), get(), get(), get<Config>().portal.resourceWorld) }
+                    },
+                )
+            }
 
         setupEventListeners(koinApp.koin)
     }
