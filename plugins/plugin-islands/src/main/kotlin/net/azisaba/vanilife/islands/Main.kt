@@ -5,13 +5,8 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
-import net.azisaba.vanilife.islands.portal.ExposedLastBedRepository
-import net.azisaba.vanilife.islands.portal.ExposedResourceSpawnRepository
-import net.azisaba.vanilife.islands.portal.LastBedRepository
-import net.azisaba.vanilife.islands.portal.LastBedStorage
-import net.azisaba.vanilife.islands.portal.ResourceSpawnCache
-import net.azisaba.vanilife.islands.portal.ResourceSpawnRepository
-import net.azisaba.vanilife.islands.portal.ResourceTeleporter
+import net.azisaba.vanilife.islands.portal.*
+import net.azisaba.vanilife.islands.portal.listener.PlayerJoinPrecomputeListener
 import net.azisaba.vanilife.islands.storage.DatabaseIslandRepository
 import net.azisaba.vanilife.islands.storage.IslandRepository
 import org.bukkit.Bukkit
@@ -20,7 +15,6 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
-import net.azisaba.vanilife.islands.portal.listener.PlayerJoinPrecomputeListener
 
 class Main : JavaPlugin() {
     private lateinit var koinApp: KoinApplication
@@ -51,7 +45,7 @@ class Main : JavaPlugin() {
                         single { ResourceSpawnCache(get(), get<Config>().portal, get()) }
                         single { LastBedStorage(get()) }
                         single { ResourceTeleporter(get(), get(), get(), get(), get<Config>().portal.resourceWorld) }
-                        single<PlayerJoinPrecomputeListener> { PlayerJoinPrecomputeListener(get(), get(), get()) }
+                        single<PlayerJoinPrecomputeListener> { PlayerJoinPrecomputeListener(get(), get(), get(), koin.get<Config>().portal.resourceWorld) }
                     },
                 )
             }

@@ -14,6 +14,7 @@ internal class PlayerJoinPrecomputeListener(
     private val plugin: Plugin,
     private val cache: ResourceSpawnCache,
     private val islandManager: IslandManager,
+    private val resourceWorldName: String,
 ) : Listener {
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -24,8 +25,8 @@ internal class PlayerJoinPrecomputeListener(
             val island = islandManager.lookupByOwner(player.uniqueId)
             if (island != null) {
                 val islandPos = island.pos
-                val resourceWorld = plugin.server.getWorld("resource") ?: return@launch
-                cache.ensureComputedAsync(islandPos, resourceWorld).await()
+                val resourceWorld = plugin.server.getWorld(resourceWorldName) ?: return@launch
+                cache.ensureComputedAsync(islandPos, resourceWorld)
             }
         }
     }
