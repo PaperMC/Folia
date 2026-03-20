@@ -35,6 +35,14 @@ public final class VanilifeLevelStems {
     public static void bootstrap(final WritableRegistry<LevelStem> writable, final RegistryOps.RegistryInfoLookup lookup) {
         writable.register(VanilifeLevelStems.MAIN, VanilifeLevelStems.resource(lookup), RegistrationInfo.BUILT_IN);
         writable.register(VanilifeLevelStems.ISLANDS, VanilifeLevelStems.islands(lookup), RegistrationInfo.BUILT_IN);
+
+        // Register ResourceY provider implementation so plugins can query per-layer highest Y
+        try {
+            Class.forName("net.azisaba.vanilife.api.ResourceYProviders");
+            net.azisaba.vanilife.api.ResourceYProviders.register(new net.azisaba.vanilife.server.world.resource.ResourceYProviderImpl());
+        } catch (ClassNotFoundException e) {
+            // API not available to register
+        }
     }
 
     private static LevelStem resource(final RegistryOps.RegistryInfoLookup lookup) {
