@@ -1,16 +1,11 @@
 package net.azisaba.vanilife.islands.portal
 
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
+import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import net.azisaba.vanilife.islands.IslandPos
 import net.azisaba.vanilife.islands.PortalConfig
+import org.bukkit.HeightMap
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
@@ -172,7 +167,7 @@ internal class ResourceSpawnCache(
                         val cx = x + dx
                         val cz = z + dz
                         world.getChunkAtAsync(cx shr 4, cz shr 4, true).await()
-                        val cy = world.getHighestBlockYAt(cx, cz) + 1
+                        val cy = world.getHighestBlockYAt(cx, cz, HeightMap.RESOURCE_OVERWORLD_MOTION_BLOCKING) + 1
                         if (isSafe(world, cx, cy, cz)) {
                             return@withContext Location(world, cx + 0.5, cy.toDouble(), cz + 0.5)
                         }
