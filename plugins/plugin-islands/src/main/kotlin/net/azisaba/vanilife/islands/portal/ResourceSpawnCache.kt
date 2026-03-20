@@ -124,7 +124,9 @@ internal class ResourceSpawnCache(
         val now = System.currentTimeMillis()
         val (x, z) = computeDeterministicXZ(key.islandX, key.islandZ, key.seed)
         val y = highestY(world, x, z)
+        plugin.slF4JLogger.info("Computed spawn loc -> {} / {} / {}", x,y,z)
         val safe = findSafeLocation(world, x, y, z, config.safeSearchRadius) ?: Location(world, x + 0.5, y.toDouble(), z + 0.5)
+        plugin.slF4JLogger.info("safe spawn loc -> {}", safe.toString())
 
         return ResourceSpawnCacheEntry(
             worldId = key.worldId,
@@ -149,7 +151,7 @@ internal class ResourceSpawnCache(
         val location = Location(world, x.toDouble(), world.minHeight.toDouble(), z.toDouble())
         return withContext(plugin.regionDispatcher(location)) {
             world.getChunkAtAsync(x shr 4, z shr 4, true).await()
-            world.getHighestBlockYAt(x, z) + 1
+            world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_OCEAN_FLOOR) + 1
         }
     }
 
