@@ -1,3 +1,4 @@
+@file:Suppress("DEPRECATION")
 package net.azisaba.vanilife.islands.portal
 
 import com.github.shynixn.mccoroutine.folia.launch
@@ -5,12 +6,7 @@ import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.delay
 import net.azisaba.vanilife.islands.portal.finder.DetectedPortal
 import net.azisaba.vanilife.islands.portal.finder.PortalFinder
-import org.bukkit.Axis
-import org.bukkit.Location
-import org.bukkit.Material
-import org.bukkit.Particle
-import org.bukkit.Sound
-import org.bukkit.SoundCategory
+import org.bukkit.*
 import org.bukkit.block.data.Orientable
 import org.bukkit.metadata.FixedMetadataValue
 import org.bukkit.plugin.Plugin
