@@ -20,6 +20,7 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
+import net.azisaba.vanilife.islands.portal.listener.PlayerJoinPrecomputeListener
 
 class Main : JavaPlugin() {
     private lateinit var koinApp: KoinApplication
@@ -50,11 +51,15 @@ class Main : JavaPlugin() {
                         single { ResourceSpawnCache(get(), get<Config>().portal, get()) }
                         single { LastBedStorage(get()) }
                         single { ResourceTeleporter(get(), get(), get(), get(), get<Config>().portal.resourceWorld) }
+                        single<PlayerJoinPrecomputeListener> { PlayerJoinPrecomputeListener(get(), get(), get()) }
                     },
                 )
             }
 
         setupEventListeners(koinApp.koin)
+
+        // Register player join precompute listener
+        server.pluginManager.registerEvents(koinApp.koin.get<PlayerJoinPrecomputeListener>(), this)
     }
 
     override fun onDisable() {

@@ -24,6 +24,19 @@ internal class ResourceSpawnCache(
 ) {
     private val memoryCache: MutableMap<CacheKey, ResourceSpawnCacheEntry> = ConcurrentHashMap()
     private val inFlight = ConcurrentHashMap<CacheKey, Deferred<ResourceSpawnCacheEntry>>()
+
+    /**
+     * Ensure computation is started and return the in-flight deferred. Caller can await it.
+     */
+    fun ensureComputedAsync(islandPos: IslandPos, world: World): Deferred<ResourceSpawnCacheEntry> {
+        val key = CacheKey(world.key.toString(), world.seed, islandPos.x(), islandPos.z())
+        return inFlight.computeIfAbsent(key) {
+            scope.async {
+                val computed = computeEntry(key, world)
+                repository.upsert(computed)
+            }
+        }
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun getOrCompute(

@@ -30,7 +30,12 @@ internal class ResourceTeleporter(
                     )
                     return false
                 }
-        val cached = cache.getOrCompute(islandPos, world)
+        // Ensure computation is started and await if necessary
+        val deferred = cache.ensureComputedAsync(islandPos, world)
+        if (!deferred.isCompleted) {
+            player.sendMessage(org.bukkit.ChatColor.YELLOW.toString() + "Computing resource spawn, please wait...")
+        }
+        val cached = deferred.await()
         val safe =
             cache.findSafeLocation(world, cached.spawnX, cached.spawnY, cached.spawnZ, 8)
                 ?: Location(world, cached.spawnX + 0.5, cached.spawnY.toDouble(), cached.spawnZ + 0.5)
