@@ -151,7 +151,7 @@ internal class ResourceSpawnCache(
         val location = Location(world, x.toDouble(), world.minHeight.toDouble(), z.toDouble())
         return withContext(plugin.regionDispatcher(location)) {
             world.getChunkAtAsync(x shr 4, z shr 4, true).await()
-            world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_OCEAN_FLOOR) + 1
+            world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_MOTION_BLOCKING) + 1
         }
     }
 
