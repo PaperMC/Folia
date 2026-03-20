@@ -151,7 +151,7 @@ internal class ResourceSpawnCache(
         val location = Location(world, x.toDouble(), world.minHeight.toDouble(), z.toDouble())
         return withContext(plugin.regionDispatcher(location)) {
             world.getChunkAtAsync(x shr 4, z shr 4, true).await()
-            world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_MOTION_BLOCKING) + 1
+            getOverworldY(world, x, z)
         }
     }
 
@@ -169,7 +169,7 @@ internal class ResourceSpawnCache(
                         val cx = x + dx
                         val cz = z + dz
                         world.getChunkAtAsync(cx shr 4, cz shr 4, true).await()
-                        val cy = world.getHighestBlockYAt(cx, cz, HeightMap.RESOURCE_OVERWORLD_MOTION_BLOCKING) + 1
+                        val cy = getOverworldY(world, cx, cz)
                         if (isSafe(world, cx, cy, cz)) {
                             return@withContext Location(world, cx + 0.5, cy.toDouble(), cz + 0.5)
                         }
@@ -178,6 +178,34 @@ internal class ResourceSpawnCache(
             }
             null
         }
+    }
+
+    private fun getOverworldY(world: World, x: Int, z: Int): Int {
+        // Prefer server-provided provider if available
+        try {
+            val providerClass = Class.forName("net.azisaba.vanilife.api.ResourceYProviders")
+            val getMethod = providerClass.getMethod("get")
+            val provider = getMethod.invoke(null)
+            if (provider != null) {
+                val providerType = provider.javaClass
+                val m = providerType.getMethod("getHighestYForLayer", org.bukkit.World::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, String::class.java)
+                val y = m.invoke(provider, world, x, z, "overworld") as Int
+                return y
+            }
+        } catch (e: ClassNotFoundException) {
+            // API not present, fall back to local scan
+        } catch (e: Exception) {
+            plugin.slF4JLogger.warn("ResourceY provider invocation failed", e)
+        }
+
+        // Fallback: Scan down from the top of the overworld layer (approx 319)
+        for (y in 319 downTo -64) {
+            val block = world.getBlockAt(x, y, z)
+            if (block.type.isSolid) {
+                return y + 1
+            }
+        }
+        return 64 // Fallback if no solid block found (e.g. ocean)
     }
 
     private fun isSafe(
@@ -206,9 +234,11 @@ internal class ResourceSpawnCache(
         val random = Random(h)
         val radius = config.baseRadius + random.nextDouble() * config.radiusVariance
         val angle = random.nextDouble() * 2.0 * PI
-        val x = (cos(angle) * radius).roundToInt()
-        val z = (sin(angle) * radius).roundToInt()
-        return x to z
+        val dx = (cos(angle) * radius).roundToInt()
+        val dz = (sin(angle) * radius).roundToInt()
+        val centerX = IslandPos(islandX, islandZ).centerBlockX()
+        val centerZ = IslandPos(islandX, islandZ).centerBlockZ()
+        return (centerX + dx) to (centerZ + dz)
     }
 
     private data class CacheKey(
