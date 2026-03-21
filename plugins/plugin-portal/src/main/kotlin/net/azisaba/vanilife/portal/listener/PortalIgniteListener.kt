@@ -8,6 +8,7 @@ import org.bukkit.block.BlockFace
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockIgniteEvent
+import org.bukkit.event.world.PortalCreateEvent
 import org.bukkit.plugin.Plugin
 
 internal class PortalIgniteListener(private val finder: PortalFinder, private val plugin: Plugin) : Listener {
@@ -23,5 +24,10 @@ internal class PortalIgniteListener(private val finder: PortalFinder, private va
             val detected = finder.findPortal(baseBlock.location, plugin) ?: return@launch
             detected.fillPortalWithAnimation(plugin)
         }
+    }
+
+    @EventHandler
+    fun onPortalCreate(event: PortalCreateEvent) {
+        event.isCancelled = true
     }
 }

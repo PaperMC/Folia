@@ -53,7 +53,7 @@ class Main : JavaPlugin() {
         setupEventListeners(koinApp.koin)
 
         // Register player join precompute listener
-        server.pluginManager.registerEvents(koinApp.koin.get<PlayerJoinPrecomputeListener>(), this)
+        // server.pluginManager.registerEvents(koinApp.koin.get<PlayerJoinPrecomputeListener>(), this)
     }
 
     override fun onDisable() {
