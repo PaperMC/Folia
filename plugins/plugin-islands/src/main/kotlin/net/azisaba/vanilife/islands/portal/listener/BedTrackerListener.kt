@@ -4,7 +4,7 @@ import com.github.shynixn.mccoroutine.folia.launch
 import net.azisaba.vanilife.islands.portal.LastBedStorage
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
-import org.bukkit.event.player.PlayerBedEnterEvent
+import org.bukkit.event.player.PlayerBedLeaveEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.plugin.Plugin
 
@@ -14,12 +14,13 @@ internal class BedTrackerListener(
     private val resourceWorldName: String,
 ) : Listener {
     @EventHandler
-    fun onBedEnter(event: PlayerBedEnterEvent) {
-        val world = event.player.world
+    fun onBedLeave(event: PlayerBedLeaveEvent) {
+        if (!event.shouldSetSpawnLocation()) return
+        val respawnLocation = event.player.respawnLocation ?: return
+        val world = respawnLocation.world ?: return
         if (world.name != resourceWorldName) return
-        val bedLocation = event.bed.location
         plugin.launch {
-            storage.setLastBed(world.key.toString(), event.player.uniqueId, bedLocation)
+            storage.setLastBed(world.key.toString(), event.player.uniqueId, respawnLocation)
         }
     }
 

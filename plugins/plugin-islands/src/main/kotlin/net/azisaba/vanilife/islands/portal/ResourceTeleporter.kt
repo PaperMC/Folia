@@ -30,18 +30,29 @@ internal class ResourceTeleporter(
                     )
                     return false
                 }
-        // Ensure computation is started and await if necessary
-        val deferred = cache.ensureComputedAsync(islandPos, world)
-        if (!deferred.isCompleted) {
-            player.sendMessage(org.bukkit.ChatColor.YELLOW.toString() + "Computing resource spawn, please wait...")
-        }
-        val cached = deferred.await()
+        val lastBed = lastBedStorage.getLastBed(world.key.toString(), player.uniqueId)
         val safe =
-            cache.findSafeLocation(world, cached.spawnX, cached.spawnY, cached.spawnZ, 8)
-                ?: Location(world, cached.spawnX + 0.5, cached.spawnY.toDouble(), cached.spawnZ + 0.5)
+            if (lastBed != null) {
+                cache.findSafeLocation(world, lastBed.x, lastBed.y, lastBed.z, 2)
+                    ?: Location(world, lastBed.x + 0.5, lastBed.y.toDouble(), lastBed.z + 0.5, lastBed.yaw, lastBed.pitch)
+            } else {
+                val deferred = cache.ensureComputedAsync(islandPos, world)
+                if (!deferred.isCompleted) {
+                    player.sendMessage(org.bukkit.ChatColor.YELLOW.toString() + "Computing resource spawn, please wait...")
+                }
+                val cached = deferred.await()
+                val resolved =
+                    cache.findSafeLocation(world, cached.spawnX, cached.spawnY, cached.spawnZ, 8)
+                        ?: Location(world, cached.spawnX + 0.5, cached.spawnY.toDouble(), cached.spawnZ + 0.5)
 
-        if (safe.blockX != cached.spawnX || safe.blockY != cached.spawnY || safe.blockZ != cached.spawnZ) {
-            cache.overwrite(islandPos, world, safe.blockX, safe.blockY, safe.blockZ)
+                if (resolved.blockX != cached.spawnX || resolved.blockY != cached.spawnY || resolved.blockZ != cached.spawnZ) {
+                    cache.overwrite(islandPos, world, resolved.blockX, resolved.blockY, resolved.blockZ)
+                }
+                resolved
+            }
+
+        if (lastBed != null && !cache.findSafeLocation(world, lastBed.x, lastBed.y, lastBed.z, 2).let { it != null }) {
+            plugin.slF4JLogger.debug("Last bed location was not safe for player={}, falling back to direct bed location", player.name)
         }
 
         return try {
@@ -93,14 +104,17 @@ internal class ResourceTeleporter(
         val island = islandManager.lookupByOwner(player.uniqueId) ?: return false
         val islandSpawn = island.primaryData.resolveSpawnPoint(island.pos)
         return try {
-            val ok = player.teleportAsync(islandSpawn).await()
-            plugin.slF4JLogger.debug(
-                "teleportResourceToIsland(fallback island): player={}, ok={}, target={}",
-                player.name,
-                ok,
-                islandSpawn,
-            )
-            ok
+            withContext(plugin.regionDispatcher(islandSpawn)) {
+                islandSpawn.world.getChunkAtAsync(islandSpawn.blockX shr 4, islandSpawn.blockZ shr 4, true).await()
+                val ok = player.teleportAsync(islandSpawn).await()
+                plugin.slF4JLogger.debug(
+                    "teleportResourceToIsland(fallback island): player={}, ok={}, target={}",
+                    player.name,
+                    ok,
+                    islandSpawn,
+                )
+                ok
+            }
         } catch (e: Exception) {
             plugin.slF4JLogger.error("teleportResourceToIsland to island spawn failed for player=${player.name} to=$islandSpawn", e)
             false
