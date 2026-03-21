@@ -373,6 +373,42 @@ index fd92282bb1cbe7051258f6d239e8dc0ce191baba..5d0d04f21e46d58c20badd2127fcd95c
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
+diff --git a/net/minecraft/world/level/chunk/status/ChunkStatus.java b/net/minecraft/world/level/chunk/status/ChunkStatus.java
+index a04f20297c984a31216cbeb1c8d049728c9b6a65..202d7f1c6a2c37c75b586d9edfa89fa9975e39a5 100644
+--- a/net/minecraft/world/level/chunk/status/ChunkStatus.java
++++ b/net/minecraft/world/level/chunk/status/ChunkStatus.java
+@@ -6,6 +6,8 @@ import com.mojang.serialization.Codec;
+ import java.util.Collections;
+ import java.util.EnumSet;
+ import java.util.List;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import net.minecraft.core.Registry;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.resources.Identifier;
+@@ -14,9 +16,20 @@ import org.jspecify.annotations.Nullable;
+ 
+ public class ChunkStatus implements ca.spottedleaf.moonrise.patches.chunk_system.level.chunk.ChunkSystemChunkStatus { // Paper - rewrite chunk system
+     public static final int MAX_STRUCTURE_DISTANCE = 8;
+-    private static final EnumSet<Heightmap.Types> WORLDGEN_HEIGHTMAPS = EnumSet.of(Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.WORLD_SURFACE_WG);
++    @Modified(Op.ADD_COLLECTION_ELEMENT)
++    private static final EnumSet<Heightmap.Types> WORLDGEN_HEIGHTMAPS = EnumSet.of(
++        Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.WORLD_SURFACE_WG,
++        Heightmap.Types.RESOURCE_OVERWORLD_OCEAN_FLOOR_WG,
++        Heightmap.Types.RESOURCE_OVERWORLD_WORLD_SURFACE_WG,
++        Heightmap.Types.RESOURCE_NETHER_OCEAN_FLOOR_WG, Heightmap.Types.RESOURCE_NETHER_WORLD_SURFACE_WG,
++        Heightmap.Types.RESOURCE_END_OCEAN_FLOOR_WG, Heightmap.Types.RESOURCE_END_WORLD_SURFACE_WG
++    );
++    @Modified(Op.ADD_COLLECTION_ELEMENT)
+     public static final EnumSet<Heightmap.Types> FINAL_HEIGHTMAPS = EnumSet.of(
+-        Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE, Heightmap.Types.MOTION_BLOCKING, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES
++        Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE, Heightmap.Types.MOTION_BLOCKING, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
++        Heightmap.Types.RESOURCE_OVERWORLD_OCEAN_FLOOR, Heightmap.Types.RESOURCE_OVERWORLD_WORLD_SURFACE, Heightmap.Types.RESOURCE_OVERWORLD_MOTION_BLOCKING, Heightmap.Types.RESOURCE_OVERWORLD_MOTION_BLOCKING_NO_LEAVES,
++        Heightmap.Types.RESOURCE_NETHER_OCEAN_FLOOR, Heightmap.Types.RESOURCE_NETHER_WORLD_SURFACE, Heightmap.Types.RESOURCE_NETHER_MOTION_BLOCKING, Heightmap.Types.RESOURCE_NETHER_MOTION_BLOCKING_NO_LEAVES,
++        Heightmap.Types.RESOURCE_END_OCEAN_FLOOR, Heightmap.Types.RESOURCE_END_WORLD_SURFACE, Heightmap.Types.RESOURCE_END_MOTION_BLOCKING, Heightmap.Types.RESOURCE_END_MOTION_BLOCKING_NO_LEAVES
+     );
+     public static final ChunkStatus EMPTY = register("empty", null, WORLDGEN_HEIGHTMAPS, ChunkType.PROTOCHUNK);
+     public static final ChunkStatus STRUCTURE_STARTS = register("structure_starts", EMPTY, WORLDGEN_HEIGHTMAPS, ChunkType.PROTOCHUNK);
 diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
 index d88c703e0eb22af1d815d712f4499305497c1180..8bf486b35f71a9a1642d28a03ee24cc201a664da 100644
 --- a/net/minecraft/world/level/levelgen/Heightmap.java

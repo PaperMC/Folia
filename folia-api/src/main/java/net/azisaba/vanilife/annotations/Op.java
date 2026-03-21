@@ -5,6 +5,7 @@ public enum Op {
     ADD_FIELD,
     ADD_METHOD,
     ADD_ENUM,
+    ADD_COLLECTION_ELEMENT,
     ADD_SWITCH_CASE,
     ADD_EVENT_CALL,
     MAKE_PUBLIC,
