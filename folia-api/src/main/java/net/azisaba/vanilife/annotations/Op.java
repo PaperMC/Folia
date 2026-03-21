@@ -10,6 +10,10 @@ public enum Op {
     ADD_EVENT_CALL,
     MAKE_PUBLIC,
     MAKE_PRIVATE,
-    CHANGE,
-    COMPAT
+    CHANGE_FIELD_INITIALIZATION,
+    COMPAT,
+
+    @Deprecated(forRemoval = true)
+    // Use more specific Op.
+    CHANGE
 }

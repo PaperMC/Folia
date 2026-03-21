@@ -1,7 +1,7 @@
-package net.azisaba.vanilife.islands.storage
+package net.azisaba.vanilife.islands.repository
 
 import net.azisaba.vanilife.islands.IslandInfoLookup
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.islands.IslandSummary
 import net.kyori.adventure.text.Component
 import org.jetbrains.exposed.v1.core.Column

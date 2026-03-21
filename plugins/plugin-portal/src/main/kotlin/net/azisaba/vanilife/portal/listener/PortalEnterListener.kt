@@ -3,7 +3,7 @@ package net.azisaba.vanilife.portal.listener
 import com.github.shynixn.mccoroutine.folia.launch
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import net.azisaba.vanilife.Vanilife
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.portal.exits.ExitForcer
 import net.azisaba.vanilife.portal.exits.getExitAnchor
 import org.bukkit.entity.Player

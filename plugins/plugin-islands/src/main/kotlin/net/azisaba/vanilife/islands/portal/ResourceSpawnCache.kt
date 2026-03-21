@@ -3,7 +3,7 @@ package net.azisaba.vanilife.islands.portal
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.islands.PortalConfig
 import org.bukkit.HeightMap
 import org.bukkit.Location

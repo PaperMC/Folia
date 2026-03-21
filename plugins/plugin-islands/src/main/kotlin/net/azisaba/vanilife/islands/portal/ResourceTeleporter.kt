@@ -3,9 +3,9 @@ package net.azisaba.vanilife.islands.portal
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
+import net.azisaba.vanilife.Vanilife
 import net.azisaba.vanilife.islands.IslandManager
-import net.azisaba.vanilife.islands.IslandPos
-import net.azisaba.vanilife.islands.storage.resolveSpawnPoint
+import net.azisaba.vanilife.world.IslandPos
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -102,7 +102,7 @@ internal class ResourceTeleporter(
         }
 
         val island = islandManager.lookupByOwner(player.uniqueId) ?: return false
-        val islandSpawn = island.primaryData.resolveSpawnPoint(island.pos)
+        val islandSpawn = island.primaryData.spawnPoint(island.pos, Vanilife.getIslandsWorld())
         return try {
             withContext(plugin.regionDispatcher(islandSpawn)) {
                 islandSpawn.world.getChunkAtAsync(islandSpawn.blockX shr 4, islandSpawn.blockZ shr 4, true).await()

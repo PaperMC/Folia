@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.islands
 
-import net.azisaba.vanilife.islands.storage.PrimaryIslandData
+import net.azisaba.vanilife.islands.repository.PrimaryIslandData
+import net.azisaba.vanilife.world.IslandPos
 import java.util.*
 
 interface IslandInfo {
@@ -11,14 +12,14 @@ interface IslandInfo {
     val primaryData: PrimaryIslandData
 }
 
-interface IslandInfoLookup {
-    suspend fun lookupByPos(islandPos: IslandPos): IslandInfo?
-
-    suspend fun lookupByOwner(ownerUuid: UUID): IslandInfo?
-}
-
 data class IslandSummary(
     override val pos: IslandPos,
     override val ownerUuid: UUID,
     override val primaryData: PrimaryIslandData
 ) : IslandInfo
+
+internal interface IslandInfoLookup {
+
+    suspend fun lookupByPos(islandPos: IslandPos): IslandInfo?
+    suspend fun lookupByOwner(ownerUuid: UUID): IslandInfo?
+}

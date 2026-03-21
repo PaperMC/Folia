@@ -1,6 +1,7 @@
 dependencies {
     compileOnly(libs.packed.core)
     compileOnly(libs.packed.resource)
+    compileOnly(project(":plugins:plugin-islands"))
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
     implementation(libs.hikaricp)

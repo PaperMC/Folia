@@ -1,8 +1,9 @@
 package net.azisaba.vanilife.server;
 
 import io.papermc.paper.adventure.PaperAdventure;
+import java.util.List;
 import net.azisaba.vanilife.Vanilife;
-import net.azisaba.vanilife.islands.IslandDefaults;
+import net.azisaba.vanilife.world.IslandDefaults;
 import net.azisaba.vanilife.server.world.islands.IslandsChunkGenerator;
 import net.azisaba.vanilife.server.world.islands.IslandsGeneratorSettings;
 import net.azisaba.vanilife.server.world.resource.ResourceChunkGenerator;
@@ -25,24 +26,14 @@ import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import org.jspecify.annotations.NullMarked;
 
-import java.util.List;
-
 @NullMarked
 public final class VanilifeLevelStems {
-    public static final ResourceKey<LevelStem> MAIN = ResourceKey.create(Registries.LEVEL_STEM, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "2026/spring"));
+    public static final ResourceKey<LevelStem> RESOURCE = ResourceKey.create(Registries.LEVEL_STEM, Identifier.fromNamespaceAndPath(Vanilife.NAMESPACE, "2026/spring"));
     public static final ResourceKey<LevelStem> ISLANDS = ResourceKey.create(Registries.LEVEL_STEM, PaperAdventure.asVanilla(IslandDefaults.WORLD_KEY));
 
     public static void bootstrap(final WritableRegistry<LevelStem> writable, final RegistryOps.RegistryInfoLookup lookup) {
-        writable.register(VanilifeLevelStems.MAIN, VanilifeLevelStems.resource(lookup), RegistrationInfo.BUILT_IN);
+        writable.register(VanilifeLevelStems.RESOURCE, VanilifeLevelStems.resource(lookup), RegistrationInfo.BUILT_IN);
         writable.register(VanilifeLevelStems.ISLANDS, VanilifeLevelStems.islands(lookup), RegistrationInfo.BUILT_IN);
-
-        // Register ResourceY provider implementation so plugins can query per-layer highest Y
-        try {
-            Class.forName("net.azisaba.vanilife.api.ResourceYProviders");
-            net.azisaba.vanilife.api.ResourceYProviders.register(new net.azisaba.vanilife.server.world.resource.ResourceYProviderImpl());
-        } catch (ClassNotFoundException e) {
-            // API not available to register
-        }
     }
 
     private static LevelStem resource(final RegistryOps.RegistryInfoLookup lookup) {

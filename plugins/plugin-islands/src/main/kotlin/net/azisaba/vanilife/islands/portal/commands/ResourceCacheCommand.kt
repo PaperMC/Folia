@@ -9,7 +9,7 @@ import com.mojang.brigadier.tree.LiteralCommandNode
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.islands.portal.ResourceSpawnCache
 import net.kyori.adventure.text.Component
 import org.bukkit.World

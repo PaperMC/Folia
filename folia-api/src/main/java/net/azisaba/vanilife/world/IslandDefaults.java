@@ -1,9 +1,10 @@
-package net.azisaba.vanilife.islands;
+package net.azisaba.vanilife.world;
 
 import net.azisaba.vanilife.Vanilife;
 import net.kyori.adventure.key.Key;
 import org.jspecify.annotations.NullMarked;
 
+// TODO: Let's think about what to do...
 @NullMarked
 public final class IslandDefaults {
     public static final int MIN_Y = 0;

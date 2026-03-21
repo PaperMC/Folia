@@ -3,8 +3,8 @@ package net.azisaba.vanilife.islands.waves
 import com.github.retrooper.packetevents.protocol.world.Location
 import com.github.retrooper.packetevents.util.Vector3d
 import net.azisaba.vanilife.islands.CoastSide
-import net.azisaba.vanilife.islands.IslandDefaults
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandDefaults
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.islands.boundaryBlock
 
 data class WavePos(val islandPos: IslandPos, val coastSide: CoastSide, val index: Int) {

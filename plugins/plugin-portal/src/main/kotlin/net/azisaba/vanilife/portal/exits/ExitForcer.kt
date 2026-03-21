@@ -2,7 +2,7 @@ package net.azisaba.vanilife.portal.exits
 
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.withContext
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandPos
 import org.bukkit.Bukkit
 import org.bukkit.HeightMap
 import org.bukkit.Location

@@ -4,7 +4,7 @@ import de.articdive.jnoise.core.api.functions.Interpolation;
 import de.articdive.jnoise.generators.noise_parameters.fade_functions.FadeFunction;
 import de.articdive.jnoise.modules.octavation.fractal_functions.FractalFunction;
 import de.articdive.jnoise.pipeline.JNoise;
-import net.azisaba.vanilife.islands.IslandDefaults;
+import net.azisaba.vanilife.world.IslandDefaults;
 import net.azisaba.vanilife.server.world.islands.IslandsGeneratorSettings;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;

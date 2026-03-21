@@ -2,8 +2,8 @@ package net.azisaba.vanilife.islands.wrack
 
 import io.papermc.paper.math.Position
 import net.azisaba.vanilife.islands.CoastSide
-import net.azisaba.vanilife.islands.IslandDefaults
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandDefaults
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.islands.boundaryBlock
 import org.bukkit.World
 import org.bukkit.plugin.Plugin
