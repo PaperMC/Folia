@@ -1,13 +1,11 @@
-package net.azisaba.vanilife.portal
+package net.azisaba.vanilife.portal.exits
 
-import com.github.shynixn.mccoroutine.folia.launch
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.withContext
 import net.azisaba.vanilife.islands.IslandPos
 import org.bukkit.Bukkit
 import org.bukkit.HeightMap
 import org.bukkit.Location
-import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.plugin.Plugin
 import kotlin.math.PI
@@ -16,8 +14,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
-class PortalForcer(
-    private val world: World,
+class ExitForcer(
+    val world: World,
     private val baseRadius: Int,
     private val radiusVariance: Int,
     private val resourceCellSpacing: Int,
@@ -71,16 +69,8 @@ class PortalForcer(
     }
 
     private fun safeYOf(x: Int, z: Int): Int? {
-        val y = world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_WORLD_SURFACE) + 1
-        val feet = world.getBlockAt(x, y, z)
-        val head = world.getBlockAt(x, y + 1, z)
-        val below = world.getBlockAt(x, y - 1, z)
-
-        if (!feet.isEmpty || !head.isEmpty) return null
-        if (!below.type.isSolid) return null
-        if (below.type == Material.LAVA || below.type == Material.MAGMA_BLOCK) return null
-        if (below.isLiquid) return null
-
-        return y
+        val surfaceY = world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_WORLD_SURFACE) + 1
+        val block = world.getBlockAt(x, surfaceY, z)
+        return if (ExitSafetyRule.test(block)) surfaceY else null
     }
 }

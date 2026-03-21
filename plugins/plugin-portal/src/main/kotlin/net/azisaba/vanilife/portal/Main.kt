@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.portal
 
 import net.azisaba.vanilife.Vanilife
+import net.azisaba.vanilife.portal.exits.ExitForcer
 import net.azisaba.vanilife.portal.finder.PortalFinder
 import net.kyori.adventure.key.Key
 import org.bukkit.Bukkit
@@ -27,7 +28,7 @@ class Main : JavaPlugin() {
                         )
                     }
                     single {
-                        PortalForcer(
+                        ExitForcer(
                             world = Bukkit.getWorld(Key.key(Vanilife.NAMESPACE, "2026/spring"))!!,
                             baseRadius = 8,
                             radiusVariance = 56,
