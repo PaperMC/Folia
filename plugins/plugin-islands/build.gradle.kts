@@ -3,7 +3,6 @@ dependencies {
     compileOnly(libs.packed.core)
     compileOnly(libs.packed.resource)
     compileOnly(libs.packetevents)
-    compileOnly(project(":folia-server"))
     implementation(libs.entitylib)
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)

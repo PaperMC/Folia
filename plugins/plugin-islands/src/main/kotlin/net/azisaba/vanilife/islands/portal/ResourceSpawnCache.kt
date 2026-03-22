@@ -3,7 +3,7 @@ package net.azisaba.vanilife.islands.portal
 import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandPos
 import net.azisaba.vanilife.islands.PortalConfig
 import org.bukkit.HeightMap
 import org.bukkit.Location
@@ -194,31 +194,7 @@ internal class ResourceSpawnCache(
     }
 
     private fun getOverworldY(world: World, x: Int, z: Int): Int {
-        // Prefer server-provided provider if available
-        try {
-            val providerClass = Class.forName("net.azisaba.vanilife.api.ResourceYProviders")
-            val getMethod = providerClass.getMethod("get")
-            val provider = getMethod.invoke(null)
-            if (provider != null) {
-                val providerType = provider.javaClass
-                val m = providerType.getMethod("getHighestYForLayer", org.bukkit.World::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, String::class.java)
-                val y = m.invoke(provider, world, x, z, "overworld") as Int
-                return y
-            }
-        } catch (e: ClassNotFoundException) {
-            // API not present, fall back to local scan
-        } catch (e: Exception) {
-            plugin.slF4JLogger.warn("ResourceY provider invocation failed", e)
-        }
-
-        // Fallback: Scan down from the top of the overworld layer (approx 319)
-        for (y in 319 downTo -64) {
-            val block = world.getBlockAt(x, y, z)
-            if (block.type.isSolid) {
-                return y + 1
-            }
-        }
-        return 64 // Fallback if no solid block found (e.g. ocean)
+        return world.getHighestBlockYAt(x, z, HeightMap.RESOURCE_OVERWORLD_WORLD_SURFACE)
     }
 
     private fun isSafe(

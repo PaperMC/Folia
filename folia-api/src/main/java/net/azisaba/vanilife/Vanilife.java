@@ -1,23 +1,24 @@
 package net.azisaba.vanilife;
 
 import java.util.Objects;
-import net.azisaba.vanilife.islands.IslandDefaults;
+import net.azisaba.vanilife.world.IslandDefaults;
+import net.azisaba.vanilife.world.IslandsWorld;
+import net.azisaba.vanilife.world.ResourceWorld;
+import net.kyori.adventure.key.Key;
 import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public final class Vanilife {
     public static final String NAMESPACE = "vanilife";
 
-    public static World getIslandsWorld() {
-        return Objects.requireNonNull(Bukkit.getWorld(IslandDefaults.WORLD_KEY));
+    public static IslandsWorld getIslandsWorld() {
+        return (IslandsWorld) Objects.requireNonNull(Bukkit.getWorld(IslandDefaults.WORLD_KEY));
     }
 
-    public static @Nullable World getResourceWorld(final int year, final Season season) {
-        // TODO: Implement resource world manager
-        return null;
+    // TODO: Implement auto wipe
+    public static ResourceWorld getResourceWorld() {
+        return (ResourceWorld) Objects.requireNonNull(Bukkit.getWorld(Key.key(NAMESPACE, "2026/spring")));
     }
 
     private Vanilife() {

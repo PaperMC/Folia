@@ -15,6 +15,7 @@ import io.papermc.paper.tag.PostFlattenTagRegistrar
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.event.ClickCallback
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.koin.java.KoinJavaComponent.inject
@@ -40,12 +41,16 @@ object PortalDialog {
                                         if (audience !is Player) return@customClick
                                         audience.closeDialog()
                                         plugin.launch {
-                                            resourceTeleporter.teleportResourceToIsland(audience)
+                                            val success = resourceTeleporter.teleportResourceToIsland(audience)
+                                            if (!success) {
+                                                audience.sendMessage(
+                                                    Component.text("Could not return to your island.", NamedTextColor.RED),
+                                                )
+                                            }
                                         }
                                     },
                                     ClickCallback.Options
                                         .builder()
-                                        .uses(1)
                                         .lifetime(ClickCallback.DEFAULT_LIFETIME)
                                         .build(),
                                 ),
@@ -60,7 +65,6 @@ object PortalDialog {
                                     },
                                     ClickCallback.Options
                                         .builder()
-                                        .uses(1)
                                         .lifetime(ClickCallback.DEFAULT_LIFETIME)
                                         .build(),
                                 ),

@@ -6,6 +6,7 @@ dependencies {
     compileOnly(project(":plugins:plugin-islands"))
     compileOnly(project(":plugins:plugin-mining"))
     compileOnly(project(":plugins:plugin-npc"))
+    compileOnly(project(":plugins:plugin-portal"))
     compileOnly(project(":plugins:plugin-tool-swap"))
     compileOnly(libs.packed.core)
     compileOnly(libs.packed.resource)

@@ -9,7 +9,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPa
 import me.tofaa.entitylib.container.EntityContainer
 import me.tofaa.entitylib.meta.display.TextDisplayMeta
 import me.tofaa.entitylib.wrapper.WrapperEntity
-import net.azisaba.vanilife.islands.IslandDefaults
+import net.azisaba.vanilife.world.IslandDefaults
 import net.azisaba.vanilife.islands.IslandsFonts
 import net.kyori.adventure.text.Component
 import kotlin.math.PI

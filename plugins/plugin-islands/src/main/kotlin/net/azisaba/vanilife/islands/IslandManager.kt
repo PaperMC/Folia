@@ -1,10 +1,11 @@
 package net.azisaba.vanilife.islands
 
-import net.azisaba.vanilife.islands.storage.IslandRepository
-import net.azisaba.vanilife.islands.storage.asWritable
+import net.azisaba.vanilife.islands.repository.IslandRepository
+import net.azisaba.vanilife.islands.repository.PrimaryIslandData
+import net.azisaba.vanilife.world.IslandPos
 import org.bukkit.World
 import org.bukkit.plugin.Plugin
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
 internal class IslandManager(
@@ -35,8 +36,20 @@ internal class IslandManager(
 
     private fun getOrCreateInstance(summary: IslandSummary): Island {
         posByOwner.putIfAbsent(summary.ownerUuid, summary.pos)
+
         return islandsByPos.computeIfAbsent(summary.pos) { islandPos ->
-            Island(islandPos, summary.ownerUuid, summary.primaryData.asWritable(islandPos, repository), plugin)
+            val primaryData = when (summary.primaryData) {
+                is PrimaryIslandData.Snapshot -> summary.primaryData.toWritable(islandPos, repository)
+                is PrimaryIslandData.Writable -> summary.primaryData
+            }
+
+            Island(
+                islandPos,
+                world,
+                summary.ownerUuid,
+                primaryData,
+                plugin,
+            )
         }
     }
 }
