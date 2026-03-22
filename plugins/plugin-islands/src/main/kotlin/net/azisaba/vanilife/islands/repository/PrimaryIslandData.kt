@@ -1,15 +1,14 @@
-package net.azisaba.vanilife.islands.storage
+package net.azisaba.vanilife.islands.repository
 
 import net.azisaba.vanilife.Vanilife
-import net.azisaba.vanilife.islands.IslandDefaults
-import net.azisaba.vanilife.islands.IslandPos
+import net.azisaba.vanilife.world.IslandDefaults
+import net.azisaba.vanilife.world.IslandPos
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.pointer.Pointer
 import net.kyori.adventure.pointer.Pointered
 import net.kyori.adventure.pointer.Pointers
 import net.kyori.adventure.pointer.PointersSupplier
 import net.kyori.adventure.text.Component
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
 import org.joml.Vector2f
@@ -23,6 +22,20 @@ sealed interface PrimaryIslandData : Pointered {
     val spawnOffset: Vector3dc
 
     val spawnRotation: Vector2fc
+
+    fun spawnPoint(islandPos: IslandPos, world: World): Location {
+        val centerX = islandPos.centerBlockX()
+        val centerY = IslandDefaults.MIN_Y + IslandDefaults.HEIGHT / 2
+        val centerZ = islandPos.centerBlockZ()
+        return Location(
+            world,
+            centerX + spawnOffset.x(),
+            centerY + spawnOffset.y(),
+            centerZ + spawnOffset.z(),
+            spawnRotation.x(),
+            spawnRotation.y()
+        )
+    }
 
     override fun pointers(): Pointers = POINTER_SUPPLIER.view(this)
 
@@ -46,7 +59,15 @@ sealed interface PrimaryIslandData : Pointered {
         override val displayName: Component? = null,
         override val spawnOffset: Vector3dc = Vector3d(),
         override val spawnRotation: Vector2fc = Vector2f(),
-    ) : PrimaryIslandData
+    ) : PrimaryIslandData {
+        internal fun toWritable(islandPos: IslandPos, repository: IslandRepository): Writable = Writable(
+            displayName,
+            spawnOffset,
+            spawnRotation,
+            islandPos,
+            repository,
+        )
+    }
 
     class Writable internal constructor(
         displayName: Component?,
@@ -76,32 +97,4 @@ sealed interface PrimaryIslandData : Pointered {
             this.spawnRotation = rotation
         }
     }
-}
-
-fun PrimaryIslandData.resolveSpawnPoint(islandPos: IslandPos): Location {
-    val centerX = islandPos.centerBlockX()
-    val centerY = IslandDefaults.MIN_Y + IslandDefaults.HEIGHT / 2
-    val centerZ = islandPos.centerBlockZ()
-    return Location(
-        Bukkit.getIslandsWorld(),
-        centerX + spawnOffset.x(),
-        centerY + spawnOffset.y(),
-        centerZ + spawnOffset.z(),
-        spawnRotation.x(),
-        spawnRotation.y()
-    )
-}
-
-internal fun PrimaryIslandData.asWritable(
-    islandPos: IslandPos,
-    repository: IslandRepository,
-): PrimaryIslandData.Writable {
-    (this as? PrimaryIslandData.Writable)?.let { return it }
-    return PrimaryIslandData.Writable(
-        displayName,
-        spawnOffset,
-        spawnRotation,
-        islandPos,
-        repository,
-    )
 }

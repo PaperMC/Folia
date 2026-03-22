@@ -5,10 +5,8 @@ import io.papermc.paper.event.player.AsyncChatEvent
 import io.papermc.paper.event.player.AsyncPlayerSpawnLocationEvent
 import io.papermc.paper.registry.keys.SoundEventKeys
 import kotlinx.coroutines.runBlocking
+import net.azisaba.vanilife.Vanilife
 import net.azisaba.vanilife.islands.IslandManager
-import net.azisaba.vanilife.islands.addPlayer
-import net.azisaba.vanilife.islands.removePlayer
-import net.azisaba.vanilife.islands.storage.resolveSpawnPoint
 import net.azisaba.vanilife.islands.wrack.WrackType
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -26,7 +24,7 @@ internal class IslandPlayerListener(private val plugin: Plugin, private val serv
         val playerUuid = event.connection.profile.id ?: return
         runBlocking {
             val island = service.lookupOrCreateByOwner(playerUuid)
-            event.spawnLocation = island.primaryData.resolveSpawnPoint(island.pos)
+            event.spawnLocation = island.primaryData.spawnPoint(island.pos, Vanilife.getIslandsWorld())
         }
     }
 
@@ -48,7 +46,7 @@ internal class IslandPlayerListener(private val plugin: Plugin, private val serv
         }
     }
 
-    // Test code
+    // @ TestCode
     @EventHandler
     fun onPlayerChat(event: AsyncChatEvent) {
         plugin.launch {

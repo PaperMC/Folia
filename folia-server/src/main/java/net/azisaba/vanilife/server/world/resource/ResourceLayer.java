@@ -92,10 +92,8 @@ public class ResourceLayer extends ProtoChunk {
 
                     chunk.setBlockState(toPos, blockState, Block.UPDATE_NONE);
 
-                    if (!blockState.isAir()) {
-                        for (final Heightmap heightmap : heightmaps) {
-                            heightmap.update(chunkX, blockY, chunkZ, blockState);
-                        }
+                    for (final Heightmap heightmap : heightmaps) {
+                        heightmap.update(chunkX, blockY, chunkZ, blockState);
                     }
                 }
             }

@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.islands.waves
 
-import net.azisaba.vanilife.islands.IslandPos
+import me.tofaa.entitylib.container.EntityContainer
+import net.azisaba.vanilife.world.IslandPos
 import java.util.*
 
 interface WaveAccessor {
@@ -12,12 +13,14 @@ interface WaveAccessor {
 }
 
 internal class IslandWaveAccessor(islandPos: IslandPos) : WaveAccessor {
+    private val wrapperEntityContainer: EntityContainer = EntityContainer.basic()
+
     private val wavesByPos: MutableMap<WavePos, WrapperWave> = HashMap(WavePos.WAVES_PER_ISLAND)
 
     init {
         for (wavePos in WavePos.posSet(islandPos)) {
             val wrapperWave = WrapperWave(wavePos)
-            wrapperWave.spawn(wavePos.location())
+            wrapperWave.spawn(wavePos.location(), wrapperEntityContainer)
             wavesByPos[wavePos] = wrapperWave
         }
     }

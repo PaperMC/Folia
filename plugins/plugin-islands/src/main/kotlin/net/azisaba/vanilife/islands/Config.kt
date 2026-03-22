@@ -31,6 +31,7 @@ internal fun Main.tomlConfig(toml: Toml = defaultToml): Config {
 @Serializable
 data class Config(
     val database: DatabaseConfig = DatabaseConfig(),
+    val portal: PortalConfig = PortalConfig(),
 )
 
 @Serializable
@@ -39,4 +40,12 @@ data class DatabaseConfig(
     @SerialName("username-env") val usernameEnv: String = "DATABASE_USERNAME",
     @SerialName("password-env") val passwordEnv: String = "DATABASE_PASSWORD",
     @SerialName("max-pool-size") val maxPoolSize: Int = 12,
+)
+
+@Serializable
+data class PortalConfig(
+    @SerialName("resource-world") val resourceWorld: String = "resources",
+    @SerialName("base-radius") val baseRadius: Int = 8,
+    @SerialName("radius-variance") val radiusVariance: Int = 56,
+    @SerialName("safe-search-radius") val safeSearchRadius: Int = 8,
 )

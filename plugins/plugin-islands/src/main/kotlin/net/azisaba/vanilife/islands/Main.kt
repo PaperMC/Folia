@@ -5,9 +5,9 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import me.tofaa.entitylib.APIConfig
 import me.tofaa.entitylib.EntityLib
 import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform
-import net.azisaba.vanilife.islands.storage.DatabaseIslandRepository
-import net.azisaba.vanilife.islands.storage.IslandRepository
-import org.bukkit.Bukkit
+import net.azisaba.vanilife.Vanilife
+import net.azisaba.vanilife.islands.repository.DatabaseIslandRepository
+import net.azisaba.vanilife.islands.repository.IslandRepository
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import org.koin.core.KoinApplication
@@ -30,13 +30,15 @@ class Main : JavaPlugin() {
         EntityLib.init(SpigotEntityLibPlatform(this), APIConfig(PacketEvents.getAPI()))
 
         koinApp = startKoin {
-            modules(module {
-                single<Plugin> { this@Main }
-                single { config }
-                single { database }
-                single<IslandRepository> { DatabaseIslandRepository(get()) }
-                single<IslandManager> { IslandManager(get(), Bukkit.getIslandsWorld(), get()) }
-            })
+            modules(
+                module {
+                    single<Plugin> { this@Main }
+                    single { config }
+                    single { database }
+                    single<IslandRepository> { DatabaseIslandRepository(get()) }
+                    single<IslandManager> { IslandManager(get(), Vanilife.getIslandsWorld(), get()) }
+                },
+            )
         }
 
         setupEventListeners(koinApp.koin)

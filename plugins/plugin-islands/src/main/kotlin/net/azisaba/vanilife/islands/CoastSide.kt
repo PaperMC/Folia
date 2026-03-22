@@ -1,6 +1,7 @@
 package net.azisaba.vanilife.islands
 
 import com.github.retrooper.packetevents.util.Quaternion4f
+import net.azisaba.vanilife.world.IslandPos
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt

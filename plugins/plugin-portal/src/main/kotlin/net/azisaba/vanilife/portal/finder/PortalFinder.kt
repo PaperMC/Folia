@@ -4,18 +4,15 @@ import com.github.shynixn.mccoroutine.folia.regionDispatcher
 import io.papermc.paper.math.BlockPosition
 import io.papermc.paper.math.Position
 import kotlinx.coroutines.withContext
+import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.BlockState
 import org.bukkit.plugin.Plugin
 
-class PortalFinder(
-    private val framePredicate: (BlockState) -> Boolean,
-    private val allowedInnerWidth: IntRange,
-    private val allowedInnerHeight: IntRange
-) {
-    suspend fun findPortal(plugin: Plugin, start: Location): DetectedPortal? {
+class PortalFinder(val frame: Material, val allowedInnerWidth: IntRange, val allowedInnerHeight: IntRange) {
+    suspend fun findPortal(start: Location, plugin: Plugin): DetectedPortal? {
         val world = start.world
         return withContext(plugin.regionDispatcher(start)) {
             if (!testFrameBlockAt(plugin, world, start.toBlock())) return@withContext null
@@ -23,14 +20,11 @@ class PortalFinder(
             for (orientation in DetectedPortal.Orientation.entries) {
                 for (dx in 0..(allowedInnerWidth.last() + 1)) {
                     for (dy in 0..(allowedInnerHeight.last() + 1)) {
-                        val minX =
-                            if (orientation == DetectedPortal.Orientation.XY) start.blockX() - dx else start.blockX
+                        val minX = if (orientation == DetectedPortal.Orientation.XY) start.blockX() - dx else start.blockX
                         val minY = start.blockY() - dy
-                        val minZ =
-                            if (orientation == DetectedPortal.Orientation.XY) start.blockZ() else start.blockZ() - dx
+                        val minZ = if (orientation == DetectedPortal.Orientation.XY) start.blockZ() else start.blockZ() - dx
 
                         val minBound = Position.block(minX, minY, minZ)
-
                         val candidate = estimateCandidate(plugin, world, minBound, orientation) ?: continue
                         if (!candidate.containsOnFrame(start.toBlock(), orientation)) continue
                         if (!validateCandidate(plugin, world, candidate, orientation)) continue
@@ -48,23 +42,31 @@ class PortalFinder(
         plugin: Plugin,
         world: World,
         candidate: Candidate,
-        orientation: DetectedPortal.Orientation
+        orientation: DetectedPortal.Orientation,
     ): Boolean {
         for (dx in 0..(candidate.innerWidth + 1)) {
             if (!testFrameBlockAt(plugin, world, candidate.toBlockPosition(dx, 0, orientation))) return false
-            if (!testFrameBlockAt(plugin, world, candidate.toBlockPosition(dx, candidate.innerHeight + 1, orientation)))
-                return false
+            if (!testFrameBlockAt(
+                    plugin,
+                    world,
+                    candidate.toBlockPosition(dx, candidate.innerHeight + 1, orientation)
+                )
+            ) return false
         }
 
         for (dy in 0..(candidate.innerHeight + 1)) {
             if (!testFrameBlockAt(plugin, world, candidate.toBlockPosition(0, dy, orientation))) return false
-            if (!testFrameBlockAt(plugin, world, candidate.toBlockPosition(candidate.innerWidth + 1, dy, orientation)))
-                return false
+            if (!testFrameBlockAt(
+                    plugin,
+                    world,
+                    candidate.toBlockPosition(candidate.innerWidth + 1, dy, orientation)
+                )
+            ) return false
         }
 
         for (dx in 1..candidate.innerWidth) {
             for (dy in 1..candidate.innerHeight) {
-                val blockState = getBlockStateAt(plugin, world, candidate.toBlockPosition(dx, dy, orientation))
+                val blockState = blockStateAt(plugin, world, candidate.toBlockPosition(dx, dy, orientation))
                 if (!blockState.type.isAir && blockState.type != Material.FIRE) return false
             }
         }
@@ -76,7 +78,7 @@ class PortalFinder(
         plugin: Plugin,
         world: World,
         minBound: BlockPosition,
-        orientation: DetectedPortal.Orientation
+        orientation: DetectedPortal.Orientation,
     ): Candidate? {
         if (!testFrameBlockAt(plugin, world, minBound)) return null
 
@@ -93,15 +95,15 @@ class PortalFinder(
         plugin: Plugin,
         world: World,
         minBound: BlockPosition,
-        orientation: DetectedPortal.Orientation
-    ) = measureLength(plugin, world, minBound, orientation, Span.WIDTH, allowedInnerWidth.last() + 2)
+        orientation: DetectedPortal.Orientation,
+    ): Int = measureLength(plugin, world, minBound, orientation, Span.WIDTH, allowedInnerWidth.last() + 2)
 
     private suspend fun measureHeight(
         plugin: Plugin,
         world: World,
         minBound: BlockPosition,
-        orientation: DetectedPortal.Orientation
-    ) = measureLength(plugin, world, minBound, orientation, Span.HEIGHT, allowedInnerHeight.last() + 2)
+        orientation: DetectedPortal.Orientation,
+    ): Int = measureLength(plugin, world, minBound, orientation, Span.HEIGHT, allowedInnerHeight.last() + 2)
 
     private suspend fun measureLength(
         plugin: Plugin,
@@ -109,7 +111,7 @@ class PortalFinder(
         minBound: BlockPosition,
         orientation: DetectedPortal.Orientation,
         span: Span,
-        limit: Int
+        limit: Int,
     ): Int {
         var length = 0
         while (length < limit) {
@@ -128,15 +130,17 @@ class PortalFinder(
         return length
     }
 
-    private suspend fun testFrameBlockAt(plugin: Plugin, world: World, pos: BlockPosition): Boolean {
-        val state = getBlockStateAt(plugin, world, pos)
-        return framePredicate(state)
-    }
+    private suspend fun testFrameBlockAt(plugin: Plugin, world: World, pos: BlockPosition): Boolean =
+        blockStateAt(plugin, world, pos).type == frame
 
-    private suspend fun getBlockStateAt(plugin: Plugin, world: World, pos: BlockPosition): BlockState {
+    private suspend fun blockStateAt(
+        plugin: Plugin,
+        world: World,
+        pos: BlockPosition,
+    ): BlockState {
         val chunkX = pos.blockX() shr 4
         val chunkZ = pos.blockZ() shr 4
-        return if (plugin.server.isOwnedByCurrentRegion(world, chunkX, chunkZ)) {
+        return if (Bukkit.isOwnedByCurrentRegion(world, chunkX, chunkZ)) {
             world.getBlockAt(pos.blockX(), pos.blockY(), pos.blockZ()).state
         } else {
             val location = Location(world, pos.x(), pos.y(), pos.z())
@@ -146,8 +150,15 @@ class PortalFinder(
 
     private enum class Span { WIDTH, HEIGHT }
 
-    private data class Candidate(val minBound: BlockPosition, val innerWidth: Int, val innerHeight: Int) {
-        fun containsOnFrame(pos: BlockPosition, orientation: DetectedPortal.Orientation): Boolean =
+    private data class Candidate(
+        val minBound: BlockPosition,
+        val innerWidth: Int,
+        val innerHeight: Int,
+    ) {
+        fun containsOnFrame(
+            pos: BlockPosition,
+            orientation: DetectedPortal.Orientation,
+        ): Boolean =
             when (orientation) {
                 DetectedPortal.Orientation.XY -> {
                     if (pos.blockZ() != minBound.blockZ()) return false
@@ -174,34 +185,47 @@ class PortalFinder(
                 }
             }
 
-        fun toDetectedPortal(world: World, orientation: DetectedPortal.Orientation): DetectedPortal {
-            val maxBound = when (orientation) {
-                DetectedPortal.Orientation.XY ->
-                    Position.block(
-                        minBound.blockX() + innerWidth + 1,
-                        minBound.blockY() + innerHeight + 1,
-                        minBound.blockZ()
-                    )
+        fun toDetectedPortal(
+            world: World,
+            orientation: DetectedPortal.Orientation,
+        ): DetectedPortal {
+            val maxBound =
+                when (orientation) {
+                    DetectedPortal.Orientation.XY -> {
+                        Position.block(
+                            minBound.blockX() + innerWidth + 1,
+                            minBound.blockY() + innerHeight + 1,
+                            minBound.blockZ(),
+                        )
+                    }
 
-                DetectedPortal.Orientation.ZY ->
-                    Position.block(
-                        minBound.blockX(),
-                        minBound.blockY() + innerHeight + 1,
-                        minBound.blockZ() + innerWidth + 1
-                    )
-            }
+                    DetectedPortal.Orientation.ZY -> {
+                        Position.block(
+                            minBound.blockX(),
+                            minBound.blockY() + innerHeight + 1,
+                            minBound.blockZ() + innerWidth + 1,
+                        )
+                    }
+                }
             return DetectedPortal(world, innerWidth, innerHeight, minBound, maxBound, orientation)
         }
 
-        fun toBlockPosition(dx: Int, dy: Int, orientation: DetectedPortal.Orientation): BlockPosition =
-            Position.block(toBlockX(dx, orientation), toBlockY(dy), toBlockZ(dx, orientation))
+        fun toBlockPosition(
+            dx: Int,
+            dy: Int,
+            orientation: DetectedPortal.Orientation,
+        ): BlockPosition = Position.block(toBlockX(dx, orientation), toBlockY(dy), toBlockZ(dx, orientation))
 
-        fun toBlockX(dx: Int, orientation: DetectedPortal.Orientation): Int =
-            if (orientation == DetectedPortal.Orientation.XY) minBound.blockX() + dx else minBound.blockX()
+        fun toBlockX(
+            dx: Int,
+            orientation: DetectedPortal.Orientation,
+        ): Int = if (orientation == DetectedPortal.Orientation.XY) minBound.blockX() + dx else minBound.blockX()
 
         fun toBlockY(dy: Int): Int = minBound.blockY() + dy
 
-        fun toBlockZ(dx: Int, orientation: DetectedPortal.Orientation): Int =
-            if (orientation == DetectedPortal.Orientation.XY) minBound.blockZ() else minBound.blockZ() + dx
+        fun toBlockZ(
+            dx: Int,
+            orientation: DetectedPortal.Orientation,
+        ): Int = if (orientation == DetectedPortal.Orientation.XY) minBound.blockZ() else minBound.blockZ() + dx
     }
 }

@@ -214,6 +214,83 @@ index bdd3062d0e2cca647c749259c8d497d05f7fed86..578bad3c53aba748601a3b7686f7cef5
          if (!command.equals(packet.command())) {
              parseResults = this.parseCommand(command);
              map = Collections.emptyMap();
+diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
+index 2c3d36a9d4bf361c516fe1fe6e29d225002b303c..1a791232f82f9a896e295a0f0565af2a363455bb 100644
+--- a/net/minecraft/world/level/Level.java
++++ b/net/minecraft/world/level/Level.java
+@@ -4,15 +4,18 @@ import com.google.common.collect.Lists;
+ import com.mojang.serialization.Codec;
+ import java.io.IOException;
+ import java.util.Collection;
+-import java.util.Iterator;
+ import java.util.List;
+ import java.util.UUID;
+ import java.util.function.Consumer;
+ import java.util.function.Predicate;
+ import java.util.stream.Collectors;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
++import net.azisaba.vanilife.server.VanilifeLevelStems;
++import net.azisaba.vanilife.server.world.IslandsWorldImpl;
++import net.azisaba.vanilife.server.world.ResourceWorldImpl;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+-import net.minecraft.ReportedException;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Holder;
+@@ -74,7 +77,6 @@ import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.lighting.LevelLightEngine;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+-import net.minecraft.world.level.redstone.CollectingNeighborUpdater;
+ import net.minecraft.world.level.redstone.Orientation;
+ import net.minecraft.world.level.saveddata.maps.MapId;
+ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+@@ -88,7 +90,6 @@ import org.apache.commons.lang3.mutable.MutableBoolean;
+ import org.jspecify.annotations.Nullable;
+ 
+ // CraftBukkit start
+-import java.util.Map;
+ import net.minecraft.server.level.ServerLevel;
+ import org.bukkit.craftbukkit.CraftServer;
+ import org.bukkit.craftbukkit.CraftWorld;
+@@ -102,6 +103,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+     public static final ResourceKey<Level> OVERWORLD = ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("overworld"));
+     public static final ResourceKey<Level> NETHER = ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether"));
+     public static final ResourceKey<Level> END = ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_end"));
++    @Modified(Op.ADD_FIELD)
++    public static final ResourceKey<Level> RESOURCE = ResourceKey.create(Registries.DIMENSION, VanilifeLevelStems.RESOURCE.identifier());
++    @Modified(Op.ADD_FIELD)
++    public static final ResourceKey<Level> ISLANDS = ResourceKey.create(Registries.DIMENSION, VanilifeLevelStems.ISLANDS.identifier());
+     public static final int MAX_LEVEL_SIZE = 30000000;
+     public static final int LONG_PARTICLE_CLIP_RANGE = 512;
+     public static final int SHORT_PARTICLE_CLIP_RANGE = 32;
+@@ -837,6 +842,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+     }
+     // Folia end - region ticking
+ 
++    @Modified(Op.CHANGE_FIELD_INITIALIZATION)
+     protected Level(
+         WritableLevelData levelData,
+         ResourceKey<Level> dimension,
+@@ -865,7 +871,15 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+         this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) levelData).getLevelName()); // Spigot
+         this.paperConfig = paperWorldConfigCreator.apply(this.spigotConfig); // Paper - create paper world config
+         this.generator = generator;
+-        this.world = new CraftWorld((ServerLevel) this, generator, biomeProvider, environment);
++        // Vanilife start - custom world wrapper
++        if (dimension == RESOURCE) {
++            this.world = new ResourceWorldImpl((ServerLevel) this, generator, biomeProvider, environment);
++        } else if (dimension == ISLANDS) {
++            this.world = new IslandsWorldImpl((ServerLevel) this, generator, biomeProvider, environment);
++        } else {
++            this.world = new CraftWorld((ServerLevel) this, generator, biomeProvider, environment);
++        }
++        // Vanilife end - custom world wrapper
+ 
+         for (SpawnCategory spawnCategory : SpawnCategory.values()) {
+             if (org.bukkit.craftbukkit.util.CraftSpawnCategory.isValidForLimits(spawnCategory)) {
 diff --git a/net/minecraft/world/level/ServerExplosion.java b/net/minecraft/world/level/ServerExplosion.java
 index 08a1be57e1057a9e961eeb8f59cd12e98ed52bab..85f9767632b21d4194076b2205422d909791c56b 100644
 --- a/net/minecraft/world/level/ServerExplosion.java
@@ -373,6 +450,42 @@ index fd92282bb1cbe7051258f6d239e8dc0ce191baba..5d0d04f21e46d58c20badd2127fcd95c
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
+diff --git a/net/minecraft/world/level/chunk/status/ChunkStatus.java b/net/minecraft/world/level/chunk/status/ChunkStatus.java
+index a04f20297c984a31216cbeb1c8d049728c9b6a65..202d7f1c6a2c37c75b586d9edfa89fa9975e39a5 100644
+--- a/net/minecraft/world/level/chunk/status/ChunkStatus.java
++++ b/net/minecraft/world/level/chunk/status/ChunkStatus.java
+@@ -6,6 +6,8 @@ import com.mojang.serialization.Codec;
+ import java.util.Collections;
+ import java.util.EnumSet;
+ import java.util.List;
++import net.azisaba.vanilife.annotations.Modified;
++import net.azisaba.vanilife.annotations.Op;
+ import net.minecraft.core.Registry;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.resources.Identifier;
+@@ -14,9 +16,20 @@ import org.jspecify.annotations.Nullable;
+ 
+ public class ChunkStatus implements ca.spottedleaf.moonrise.patches.chunk_system.level.chunk.ChunkSystemChunkStatus { // Paper - rewrite chunk system
+     public static final int MAX_STRUCTURE_DISTANCE = 8;
+-    private static final EnumSet<Heightmap.Types> WORLDGEN_HEIGHTMAPS = EnumSet.of(Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.WORLD_SURFACE_WG);
++    @Modified(Op.ADD_COLLECTION_ELEMENT)
++    private static final EnumSet<Heightmap.Types> WORLDGEN_HEIGHTMAPS = EnumSet.of(
++        Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.WORLD_SURFACE_WG,
++        Heightmap.Types.RESOURCE_OVERWORLD_OCEAN_FLOOR_WG,
++        Heightmap.Types.RESOURCE_OVERWORLD_WORLD_SURFACE_WG,
++        Heightmap.Types.RESOURCE_NETHER_OCEAN_FLOOR_WG, Heightmap.Types.RESOURCE_NETHER_WORLD_SURFACE_WG,
++        Heightmap.Types.RESOURCE_END_OCEAN_FLOOR_WG, Heightmap.Types.RESOURCE_END_WORLD_SURFACE_WG
++    );
++    @Modified(Op.ADD_COLLECTION_ELEMENT)
+     public static final EnumSet<Heightmap.Types> FINAL_HEIGHTMAPS = EnumSet.of(
+-        Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE, Heightmap.Types.MOTION_BLOCKING, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES
++        Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE, Heightmap.Types.MOTION_BLOCKING, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
++        Heightmap.Types.RESOURCE_OVERWORLD_OCEAN_FLOOR, Heightmap.Types.RESOURCE_OVERWORLD_WORLD_SURFACE, Heightmap.Types.RESOURCE_OVERWORLD_MOTION_BLOCKING, Heightmap.Types.RESOURCE_OVERWORLD_MOTION_BLOCKING_NO_LEAVES,
++        Heightmap.Types.RESOURCE_NETHER_OCEAN_FLOOR, Heightmap.Types.RESOURCE_NETHER_WORLD_SURFACE, Heightmap.Types.RESOURCE_NETHER_MOTION_BLOCKING, Heightmap.Types.RESOURCE_NETHER_MOTION_BLOCKING_NO_LEAVES,
++        Heightmap.Types.RESOURCE_END_OCEAN_FLOOR, Heightmap.Types.RESOURCE_END_WORLD_SURFACE, Heightmap.Types.RESOURCE_END_MOTION_BLOCKING, Heightmap.Types.RESOURCE_END_MOTION_BLOCKING_NO_LEAVES
+     );
+     public static final ChunkStatus EMPTY = register("empty", null, WORLDGEN_HEIGHTMAPS, ChunkType.PROTOCHUNK);
+     public static final ChunkStatus STRUCTURE_STARTS = register("structure_starts", EMPTY, WORLDGEN_HEIGHTMAPS, ChunkType.PROTOCHUNK);
 diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
 index d88c703e0eb22af1d815d712f4499305497c1180..8bf486b35f71a9a1642d28a03ee24cc201a664da 100644
 --- a/net/minecraft/world/level/levelgen/Heightmap.java

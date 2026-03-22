@@ -5,7 +5,7 @@ import de.articdive.jnoise.core.api.functions.Interpolation;
 import de.articdive.jnoise.generators.noise_parameters.fade_functions.FadeFunction;
 import de.articdive.jnoise.modules.octavation.fractal_functions.FractalFunction;
 import de.articdive.jnoise.pipeline.JNoise;
-import net.azisaba.vanilife.islands.IslandPos;
+import net.azisaba.vanilife.world.IslandPos;
 import net.azisaba.vanilife.server.world.islands.noise.IslandNoise;
 import net.azisaba.vanilife.server.world.islands.river.RiverMap;
 import net.minecraft.core.BlockPos;
