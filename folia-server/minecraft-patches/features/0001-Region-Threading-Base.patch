@@ -14176,6 +14176,14 @@ index 3bf618f1d756bad7755a87803132bd731e7c41be..a298b9babb6b42ff31781808821acd28
      // Paper start - replace random
      private static final class RandomRandomSource extends ca.spottedleaf.moonrise.common.util.ThreadUnsafeRandom {
          public RandomRandomSource() {
+@@ -227,6 +227,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+     public static final String TAG_INVULNERABLE = "Invulnerable";
+     public static final String TAG_CUSTOM_NAME = "CustomName";
+     private static final AtomicInteger ENTITY_COUNTER = new AtomicInteger();
++    private static final ThreadLocal<ServerLevel> ASYNC_TELEPORT_DESTINATION_CONTEXT = new ThreadLocal<>();
+     public static final int CONTENTS_SLOT_INDEX = 0;
+     public static final int BOARDING_COOLDOWN = 60;
+     public static final int TOTAL_AIR_SUPPLY = 300;
 @@ -321,7 +321,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
      private boolean hasGlowingTag;
      private final Set<String> tags = new io.papermc.paper.util.SizeLimitedSet<>(new it.unimi.dsi.fastutil.objects.ObjectOpenHashSet<>(), MAX_ENTITY_TAG_COUNT); // Paper - fully limit tag size - replace set impl
@@ -14698,14 +14706,32 @@ index 3bf618f1d756bad7755a87803132bd731e7c41be..a298b9babb6b42ff31781808821acd28
 +    protected Entity transformForAsyncTeleport(ServerLevel destination, Vec3 pos, Float yaw, Float pitch, Vec3 velocity) {
 +        this.removeAfterChangingDimensions(); // remove before so that any CBEntity#getHandle call affects this entity before copying
 +
-+        Entity copy = this.getType().create(destination, EntitySpawnReason.DIMENSION_TRAVEL);
-+        copy.restoreFrom(this);
++        final ServerLevel previousAsyncTeleportDestination = ASYNC_TELEPORT_DESTINATION_CONTEXT.get();
++        final Entity copy;
++
++        // Villagers rebuild their Brain during both construction and NBT restore.
++        // Keep the destination visible across both phases so AI init can defer until join.
++        ASYNC_TELEPORT_DESTINATION_CONTEXT.set(destination);
++        try {
++            copy = this.getType().create(destination, EntitySpawnReason.DIMENSION_TRAVEL);
++            copy.restoreFrom(this);
++        } finally {
++            if (previousAsyncTeleportDestination == null) {
++                ASYNC_TELEPORT_DESTINATION_CONTEXT.remove();
++            } else {
++                ASYNC_TELEPORT_DESTINATION_CONTEXT.set(previousAsyncTeleportDestination);
++            }
++        }
 +        copy.transform(pos, yaw, pitch, velocity);
 +        // vanilla code used to call remove _after_ copying, and some stuff is required to be after copy - so add hook here
 +        // for example, clearing of inventory after switching dimensions
 +        this.postRemoveAfterChangingDimensions();
 +
 +        return copy;
++    }
++
++    protected static @Nullable ServerLevel getAsyncTeleportDestinationContext() {
++        return ASYNC_TELEPORT_DESTINATION_CONTEXT.get();
 +    }
 +
 +    public final boolean teleportAsync(TeleportTransition teleportTarget, long teleportFlags,
@@ -16189,19 +16215,92 @@ index fa8f1ea38192f9ad0a961a53399f295d83af7721..6917bed9d4b34b359489046355174e6c
      }
  
 diff --git a/net/minecraft/world/entity/npc/villager/Villager.java b/net/minecraft/world/entity/npc/villager/Villager.java
-index 89844d7e804cc8a2110b694e448bc5993991bea7..8616a8f5b720eac2bb5b3d78a3b69d40bb0b5547 100644
+index 89844d7e804cc8a2110b694e448bc5993991bea7..ab2ac658a0cfd3df176db83f268b50e4bf3ba650 100644
 --- a/net/minecraft/world/entity/npc/villager/Villager.java
 +++ b/net/minecraft/world/entity/npc/villager/Villager.java
-@@ -250,7 +250,7 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+@@ -126,6 +126,7 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+     public int numberOfRestocksToday = 0;
+     private long lastRestockCheckDay;
+     private boolean assignProfessionWhenSpawned = false;
++    private @Nullable ServerLevel deferredBrainInitializationWorld;
+     private static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
+         MemoryModuleType.HOME,
+         MemoryModuleType.JOB_SITE,
+@@ -209,6 +210,10 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+ 
+     @Override
+     protected Brain<?> makeBrain(Dynamic<?> dynamic) {
++        ServerLevel asyncTeleportDestination = getAsyncTeleportDestinationContext();
++        if (asyncTeleportDestination != null) {
++            this.deferredBrainInitializationWorld = asyncTeleportDestination;
++        }
+         Brain<Villager> brain = this.brainProvider().makeBrain(dynamic);
+         this.registerBrainGoals(brain);
+         return brain;
+@@ -221,6 +226,24 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+         this.registerBrainGoals(this.getBrain());
+     }
+ 
++    private void updateBrainActivityFromSchedule(ServerLevel level, Brain<Villager> villagerBrain) {
++        villagerBrain.updateActivityFromSchedule(level.environmentAttributes(), level.getLevelData().getGameTime(), this.position());
++    }
++
++    private boolean tryCompleteDeferredBrainInitialization(ServerLevel level) {
++        ServerLevel deferredBrainInitializationWorld = this.deferredBrainInitializationWorld;
++        if (deferredBrainInitializationWorld == null) {
++            return true;
++        }
++        if (level != this.level() || level != deferredBrainInitializationWorld || !this.inWorld || !this.valid) {
++            return false;
++        }
++
++        this.updateBrainActivityFromSchedule(level, this.getBrain());
++        this.deferredBrainInitializationWorld = null;
++        return true;
++    }
++
+     private void registerBrainGoals(Brain<Villager> villagerBrain) {
+         Holder<VillagerProfession> holder = this.getVillagerData().profession();
+         if (this.isBaby()) {
+@@ -250,7 +273,9 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
          villagerBrain.setCoreActivities(ImmutableSet.of(Activity.CORE));
          villagerBrain.setDefaultActivity(Activity.IDLE);
          villagerBrain.setActiveActivityIfPossible(Activity.IDLE);
 -        villagerBrain.updateActivityFromSchedule(this.level().environmentAttributes(), this.level().getGameTime(), this.position());
-+        villagerBrain.updateActivityFromSchedule(this.level().environmentAttributes(), this.level().getLevelData().getGameTime(), this.position()); // Folia - region threading - not in the world yet
++        if (this.deferredBrainInitializationWorld == null && this.level() instanceof ServerLevel serverLevel) {
++            this.updateBrainActivityFromSchedule(serverLevel, villagerBrain); // Folia - region threading - safe when not teleporting async
++        }
      }
  
      @Override
-@@ -678,6 +678,8 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+@@ -295,9 +320,10 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+     }
+     protected void customServerAiStep(ServerLevel level, final boolean inactive) {
+         // Paper end - EAR 2
++        boolean brainReady = this.tryCompleteDeferredBrainInitialization(level);
+         ProfilerFiller profilerFiller = Profiler.get();
+         profilerFiller.push("villagerBrain");
+-        if (!inactive) this.getBrain().tick(level, this); // Paper - EAR 2
++        if (brainReady && !inactive) this.getBrain().tick(level, this); // Paper - EAR 2
+         profilerFiller.pop();
+         if (this.assignProfessionWhenSpawned) {
+             this.assignProfessionWhenSpawned = false;
+@@ -404,6 +430,14 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+         this.resetSpecialPrices();
+     }
+ 
++    @Override
++    public void postChangeDimension() {
++        super.postChangeDimension();
++        if (this.level() instanceof ServerLevel serverLevel) {
++            this.tryCompleteDeferredBrainInitialization(serverLevel);
++        }
++    }
++
+     private void resetSpecialPrices() {
+         if (!this.level().isClientSide()) {
+             for (MerchantOffer merchantOffer : this.getOffers()) {
+@@ -678,6 +712,8 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
              this.brain.getMemory(moduleType).ifPresent(pos -> {
                  ServerLevel level = server.getLevel(pos.dimension());
                  if (level != null) {
