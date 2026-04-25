@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rothes <449181985@qq.com>
+Date: Thu, 19 Mar 2026 10:12:55 +0800
+Subject: [PATCH] Fix vanish api sync error
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 0d26a26d15de61031c6277e1671a3992dbf52f2d..df1618d425fd0906d702c2c3b11cfd3b40d1e1cf 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -248,6 +248,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     private long lastSaveTime; // Paper - getLastPlayed replacement API
+     private @Nullable CraftScoreboard scoreboardOverride;
+     public final net.minecraft.network.PacketProcessor packetProcessor = new net.minecraft.network.PacketProcessor(null); // Folia
++    private final java.util.concurrent.ConcurrentLinkedDeque<UUID> removedEntities = new java.util.concurrent.ConcurrentLinkedDeque<>(); // Folia - Fix vanish api sync error
+ 
+     // Folia start - region threading
+     // used only to notify tasks for packets
+@@ -2086,9 +2087,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     // Paper end
+ 
+     public void onEntityRemove(Entity entity) {
+-        this.invertedVisibilityEntities.remove(entity.getUUID());
++    // Folia start - Fix vanish api sync error
++        if (this.invertedVisibilityEntities.isEmpty()) return; // Nothing hidden
++        this.removedEntities.add(entity.getUUID());
+     }
+ 
++    public void onTick() {
++        java.util.UUID item;
++        while ((item = this.removedEntities.poll()) != null) {
++            this.invertedVisibilityEntities.remove(item);
++        }
++    }
++    // Folia end - Fix vanish api sync error
++
+     @Override
+     public boolean canSee(Player player) {
+         return this.canSee((org.bukkit.entity.Entity) player);
