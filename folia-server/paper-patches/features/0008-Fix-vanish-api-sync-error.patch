@@ -5,7 +5,7 @@ Subject: [PATCH] Fix vanish api sync error
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 0d26a26d15de61031c6277e1671a3992dbf52f2d..0099c2caff180df81604ea5091afe4bd851a5733 100644
+index 0d26a26d15de61031c6277e1671a3992dbf52f2d..df1618d425fd0906d702c2c3b11cfd3b40d1e1cf 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -248,6 +248,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
@@ -16,7 +16,7 @@ index 0d26a26d15de61031c6277e1671a3992dbf52f2d..0099c2caff180df81604ea5091afe4bd
  
      // Folia start - region threading
      // used only to notify tasks for packets
-@@ -2086,9 +2087,18 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -2086,9 +2087,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      // Paper end
  
      public void onEntityRemove(Entity entity) {
@@ -27,8 +27,9 @@ index 0d26a26d15de61031c6277e1671a3992dbf52f2d..0099c2caff180df81604ea5091afe4bd
      }
  
 +    public void onTick() {
-+        for (int i = 0; i < this.removedEntities.size(); i++) {
-+            this.invertedVisibilityEntities.remove(this.removedEntities.removeFirst());
++        java.util.UUID item;
++        while ((item = this.removedEntities.poll()) != null) {
++            this.invertedVisibilityEntities.remove(item);
 +        }
 +    }
 +    // Folia end - Fix vanish api sync error
