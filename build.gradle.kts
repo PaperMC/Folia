@@ -77,8 +77,8 @@ subprojects {
 
     extensions.configure<PublishingExtension> {
         repositories {
-            maven("https://repo.papermc.io/repository/maven-snapshots/") {
-                name = "paperSnapshots"
+            maven("https://artifactory.papermc.io/artifactory/releases/") {
+                name = "paperReleases"
                 credentials(PasswordCredentials::class)
             }
         }
