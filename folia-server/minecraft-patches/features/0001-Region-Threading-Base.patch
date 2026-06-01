@@ -1094,10 +1094,10 @@ index 8e03419df1469c6fecfaa82fcb319a58635b39f3..b3c466fd7cb6810995f95bed66a86f2b
          // If 'k' has the highest level of all neighbors, then the power level of this
 diff --git a/io/papermc/paper/threadedregions/RegionShutdownThread.java b/io/papermc/paper/threadedregions/RegionShutdownThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f2208bcd5ccf3bd5a428e8ea3bf3ff26b3c9483b
+index 0000000000000000000000000000000000000000..132864069e4b84b199827ab931b37325fe57a3ac
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/RegionShutdownThread.java
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,235 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.moonrise.common.util.WorldUtil;
@@ -1117,6 +1117,7 @@ index 0000000000000000000000000000000000000000..f2208bcd5ccf3bd5a428e8ea3bf3ff26
 +public final class RegionShutdownThread extends ca.spottedleaf.moonrise.common.util.TickThread {
 +
 +    private static final Logger LOGGER = LogUtils.getClassLogger();
++    private static boolean IS_SHUTDOWN = false;
 +
 +    ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> shuttingDown;
 +
@@ -1125,6 +1126,10 @@ index 0000000000000000000000000000000000000000..f2208bcd5ccf3bd5a428e8ea3bf3ff26
 +        this.setUncaughtExceptionHandler((thread, thr) -> {
 +            LOGGER.error("Error shutting down server", thr);
 +        });
++    }
++
++    public static boolean isShutdown() {
++        return IS_SHUTDOWN;
 +    }
 +
 +    static ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> getRegion() {
@@ -1251,6 +1256,7 @@ index 0000000000000000000000000000000000000000..f2208bcd5ccf3bd5a428e8ea3bf3ff26
 +
 +    @Override
 +    public final void run() {
++        IS_SHUTDOWN = true;
 +        // await scheduler termination
 +        LOGGER.info("Awaiting scheduler termination for 60s...");
 +        if (TickRegions.getScheduler().halt(true, TimeUnit.SECONDS.toNanos(60L))) {
@@ -13151,7 +13157,7 @@ index 19a77c8269c3f1998985d533d9099c7e6cf76af4..e917afa054136967bca6e712237a8b36
              }
              // Spigot end
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 5b779bd2a5d836bebbc31718df6e9c735f12e41e..4924915ec3adf4d68ca537518fdffa52ec926bf7 100644
+index 5b779bd2a5d836bebbc31718df6e9c735f12e41e..018cd7ed1a449cc01be0069c05ec7224522c4b06 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -301,10 +301,10 @@ public class ServerGamePacketListenerImpl
@@ -13412,6 +13418,15 @@ index 5b779bd2a5d836bebbc31718df6e9c735f12e41e..4924915ec3adf4d68ca537518fdffa52
          if ((quitMessage != null) && !quitMessage.equals(net.kyori.adventure.text.Component.empty())) {
              this.server.getPlayerList().broadcastSystemMessage(PaperAdventure.asVanilla(quitMessage), false);
              // Paper end - Adventure
+@@ -2362,7 +2406,7 @@ public class ServerGamePacketListenerImpl
+     public void handleChat(final ServerboundChatPacket packet) {
+         // CraftBukkit start - async chat
+         // SPIGOT-3638
+-        if (this.server.isStopped()) {
++        if (io.papermc.paper.threadedregions.RegionShutdownThread.isShutdown()) { // Folia - region threading
+             return;
+         }
+         // CraftBukkit end
 @@ -2553,7 +2597,7 @@ public class ServerGamePacketListenerImpl
              this.player.resetLastActionTime();
              // CraftBukkit start
