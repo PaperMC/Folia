@@ -1572,10 +1572,10 @@ index 0000000000000000000000000000000000000000..8e25ab1c8ae026e51ce4d711c9084fdf
 \ No newline at end of file
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d5ff949f4f459c4358b0130cd20f8ed9cf24b42d
+index 0000000000000000000000000000000000000000..8b847a526d5a158efac9dfa563886058bd112a7e
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -0,0 +1,525 @@
+@@ -0,0 +1,530 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.collection.MultiThreadedQueue;
@@ -1596,6 +1596,7 @@ index 0000000000000000000000000000000000000000..d5ff949f4f459c4358b0130cd20f8ed9
 +import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.gui.PlayerListComponent;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
 +import net.minecraft.world.level.gamerules.GameRules;
@@ -1927,6 +1928,7 @@ index 0000000000000000000000000000000000000000..d5ff949f4f459c4358b0130cd20f8ed9
 +        // player ping sample
 +        // world global tick
 +        // connection tick
++        // player gui component
 +
 +        // tick player ping sample
 +        this.tickPlayerSample();
@@ -1941,6 +1943,9 @@ index 0000000000000000000000000000000000000000..d5ff949f4f459c4358b0130cd20f8ed9
 +
 +        // player list
 +        MinecraftServer.getServer().getPlayerList().tick();
++
++        // player gui component
++        PlayerListComponent.tick();
 +    }
 +
 +    private void tickPlayerSample() {
@@ -8004,7 +8009,7 @@ index 144c18c08bf8f03d907b97f968aa171a9fbf997f..be9fdca704391f8d77b87b4d75e67bb6
          }
      }
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de617785c5920d 100644
+index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..d08eafc71aacfe903ea6b6c5cf522b1bb5383160 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -202,7 +202,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -8016,6 +8021,15 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
      private static final long PREPARE_LEVELS_DEFAULT_DELAY_NANOS = 10L * TimeUtil.NANOSECONDS_PER_MILLISECOND;
      private static final int MAX_STATUS_PLAYER_SAMPLE = 12;
      public static final int SPAWN_POSITION_SEARCH_RADIUS = 5;
+@@ -220,7 +220,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     public LevelStorageSource.LevelStorageAccess storageSource;
+     public final PlayerDataStorage playerDataStorage;
+     private final SavedDataStorage savedDataStorage;
+-    private final List<Runnable> tickables = Lists.newArrayList();
++    // private final List<Runnable> tickables = Lists.newArrayList(); // Folia - region threading
+     // Paper - per-level GameRules
+     private MetricsRecorder metricsRecorder = InactiveMetricsRecorder.INSTANCE;
+     private Consumer<ProfileResults> onMetricsRecordingStopped = results -> this.stopRecordingMetrics();
 @@ -242,8 +242,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      private volatile boolean running = true;
      private volatile boolean isRestarting = false; // Paper - flag to signify we're attempting to restart
@@ -8698,14 +8712,14 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
          profiler.popPush("debugSubscribers");
          this.debugSubscribers.tick();
          if (this.tickRateManager.runsNormally()) {
-@@ -1881,13 +1967,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1881,13 +1967,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          profiler.popPush("server gui refresh");
  
 -        for (Runnable tickable : this.tickables) {
-+        if (false) for (Runnable tickable : this.tickables) { // Folia - region threading - TODO WTF is this?
-             tickable.run();
-         }
+-            tickable.run();
+-        }
++        // Folia - region threading
  
          profiler.popPush("send chunks");
  
@@ -8714,7 +8728,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
              player.connection.chunkSender.sendNextChunks(player);
              player.connection.resumeFlushing();
          }
-@@ -1912,11 +1998,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1912,16 +1996,20 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      public void forceGameTimeSynchronization() {
          ProfilerFiller profiler = Profiler.get();
          profiler.push("timeSync");
@@ -8734,7 +8748,13 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
          profiler.pop();
      }
  
-@@ -2188,11 +2278,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     public void addTickable(final Runnable tickable) {
+-        this.tickables.add(tickable);
++        throw new UnsupportedOperationException("Unsupported in region threading"); // Folia - region threading
+     }
+ 
+     protected void setId(final String serverId) {
+@@ -2188,11 +2276,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              int count = 0;
  
              for (ServerPlayer player : this.getPlayerList().getPlayers()) {
@@ -8750,7 +8770,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
                  count++;
                  // Paper end - Expand PlayerGameModeChangeEvent
              }
-@@ -2213,7 +2305,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2213,7 +2303,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public int getTickCount() {
@@ -8759,7 +8779,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
      }
  
      public boolean isUnderSpawnProtection(final ServerLevel level, final BlockPos pos, final Player player) {
-@@ -2249,6 +2341,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2249,6 +2339,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void invalidateStatus() {
@@ -8775,7 +8795,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
          this.lastServerStatus = 0L;
      }
  
-@@ -2263,6 +2364,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2263,6 +2362,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      public void executeIfPossible(final Runnable command) {
@@ -8783,7 +8803,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
          if (this.isStopped()) {
              throw new io.papermc.paper.util.ServerStopRejectedExecutionException("Server already shutting down"); // Paper - do not prematurely disconnect players on stop
          } else {
-@@ -2634,7 +2736,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2634,7 +2734,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public long getAverageTickTimeNanos() {
@@ -8797,7 +8817,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
      }
  
      public long[] getTickTimesNanos() {
-@@ -2882,13 +2989,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2882,13 +2987,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public ProfileResults stopTimeProfiler() {
@@ -8812,7 +8832,7 @@ index 440e5d2c199c6e8cbab2d5c92256cccfd0c555fe..31a54b693b6646062446962667de6177
      }
  
      public int getMaxChainedNeighborUpdates() {
-@@ -3178,24 +3279,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -3178,24 +3277,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      // Paper start - API to check if the server is sleeping
      public boolean isTickPaused() {
@@ -10417,6 +10437,45 @@ index bc857ea218018e5cf651ecd81093b4b4e566034e..5f89d29eaeeb4c63b8b9e034d440204f
          this.notificationManager().serverShuttingDown();
          super.stopServer();
          //Util.shutdownExecutors(); // Paper - Improved watchdog support; moved into super
+diff --git a/net/minecraft/server/gui/PlayerListComponent.java b/net/minecraft/server/gui/PlayerListComponent.java
+index 37c9f983ae89c497f44a1b7967d741abf909e0a0..b20a019b55c840852cc3feef11d81cfbc56f9283 100644
+--- a/net/minecraft/server/gui/PlayerListComponent.java
++++ b/net/minecraft/server/gui/PlayerListComponent.java
+@@ -10,18 +10,26 @@ public class PlayerListComponent extends JList<String> {
+ 
+     public PlayerListComponent(final MinecraftServer server) {
+         this.server = server;
+-        server.addTickable(this::tick);
++    // Folia start - region threading
++        COMPONENT_REF.set(this);
+     }
+ 
+-    public void tick() {
+-        if (this.tickCount++ % 20 == 0) {
+-            Vector<String> players = new Vector<>();
++    private static final java.util.concurrent.atomic.AtomicReference<PlayerListComponent> COMPONENT_REF = new java.util.concurrent.atomic.AtomicReference<>(null);
++    private static int TICK = 0;
+ 
+-            for (int i = 0; i < this.server.getPlayerList().getPlayers().size(); i++) {
+-                players.add(this.server.getPlayerList().getPlayers().get(i).getGameProfile().name());
+-            }
++    public static void tick() {
++        // if the component ref isn't set, the gui was never enabled
++        if (TICK++ % 20 != 0 || COMPONENT_REF.get() == null) return;
+ 
+-            this.setListData(players);
++        final Vector<String> players = new java.util.Vector<>();
++
++        final java.util.List<net.minecraft.server.level.ServerPlayer> playerList = net.minecraft.server.MinecraftServer.getServer().getPlayerList().players;
++
++        for (final net.minecraft.server.level.ServerPlayer entityPlayer : playerList) {
++            players.add(entityPlayer.gameProfile.name());
+         }
++
++        COMPONENT_REF.get().setListData(players);
+     }
++    // Folia end - region threading
+ }
 diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
 index 455e77bee02fb2d0907bf6f895fef99c186ac9bc..d3ab6ce5a5539c6b93bf5ccf8409137eb58f9487 100644
 --- a/net/minecraft/server/level/ChunkMap.java
