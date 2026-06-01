@@ -13790,7 +13790,7 @@ index 82cef084ebdb4d42eb8ace1e6b0e595074928a87..66376b4b268f6d751e6a36a347ed24c1
              parsedDate = defaultValue;
          }
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e600475e7bb 100644
+index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7ab01542a43866f06f5fcfc53017648ac18f3384 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -112,10 +112,10 @@ public abstract class PlayerList {
@@ -13887,7 +13887,15 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          this.server.invalidateStatus();
          MutableComponent component;
          if (player.getGameProfile().name().equalsIgnoreCase(oldName)) {
-@@ -243,7 +301,7 @@ public abstract class PlayerList {
+@@ -225,6 +283,7 @@ public abstract class PlayerList {
+         this.players.add(player);
+         this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
+         this.playersByUUID.put(player.getUUID(), player);
++        player.lastSave = System.nanoTime(); // Folia - region threading
+         // this.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player))); // CraftBukkit - replaced with loop below
+         // Paper start - Fire PlayerJoinEvent when Player is actually ready; correctly register player BEFORE PlayerJoinEvent, so the entity is valid and doesn't require tick delay hacks
+         player.suppressTrackerForLogin = true;
+@@ -243,7 +302,7 @@ public abstract class PlayerList {
          this.cserver.getPluginManager().callEvent(playerJoinEvent);
  
          if (!player.connection.isAcceptingMessages()) {
@@ -13896,7 +13904,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          }
  
          final net.kyori.adventure.text.Component jm = playerJoinEvent.joinMessage();
-@@ -258,8 +316,7 @@ public abstract class PlayerList {
+@@ -258,8 +317,7 @@ public abstract class PlayerList {
          ClientboundPlayerInfoUpdatePacket packet = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player)); // Paper - Add Listing API for Player
  
          final List<ServerPlayer> onlinePlayers = Lists.newArrayListWithExpectedSize(this.players.size() - 1); // Paper - Use single player info update packet on join
@@ -13906,7 +13914,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
  
              if (entityplayer1.getBukkitEntity().canSee(bukkitPlayer)) {
                  // Paper start - Add Listing API for Player
-@@ -309,7 +366,7 @@ public abstract class PlayerList {
+@@ -309,7 +367,7 @@ public abstract class PlayerList {
          // Paper start - Configurable player collision; Add to collideRule team if needed
          final net.minecraft.world.scores.Scoreboard scoreboard = this.getServer().getLevel(Level.OVERWORLD).getScoreboard();
          final PlayerTeam collideRuleTeam = scoreboard.getPlayerTeam(this.collideRuleTeamName);
@@ -13915,7 +13923,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
              scoreboard.addPlayerToTeam(player.getScoreboardName(), collideRuleTeam);
          }
          // Paper end - Configurable player collision
-@@ -418,7 +475,7 @@ public abstract class PlayerList {
+@@ -418,7 +476,7 @@ public abstract class PlayerList {
  
      protected void save(final ServerPlayer player) {
          if (!player.getBukkitEntity().isPersistent()) return; // CraftBukkit
@@ -13924,7 +13932,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          this.playerIo.save(player);
          ServerStatsCounter stats = player.getStats(); // CraftBukkit
          if (stats != null) {
-@@ -452,7 +509,7 @@ public abstract class PlayerList {
+@@ -452,7 +510,7 @@ public abstract class PlayerList {
          // CraftBukkit end
  
          // Paper start - Configurable player collision; Remove from collideRule team if needed
@@ -13933,7 +13941,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
              final net.minecraft.world.scores.Scoreboard scoreBoard = this.server.getLevel(Level.OVERWORLD).getScoreboard();
              final PlayerTeam team = scoreBoard.getPlayersTeam(this.collideRuleTeamName);
              if (player.getTeam() == team && team != null) {
-@@ -500,6 +557,7 @@ public abstract class PlayerList {
+@@ -500,6 +558,7 @@ public abstract class PlayerList {
  
          level.removePlayerImmediately(player, Entity.RemovalReason.UNLOADED_WITH_PLAYER);
          player.retireScheduler(); // Paper - Folia schedulers
@@ -13941,7 +13949,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          player.getAdvancements().stopListening();
          this.players.remove(player);
          this.playersByName.remove(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
-@@ -518,8 +576,7 @@ public abstract class PlayerList {
+@@ -518,8 +577,7 @@ public abstract class PlayerList {
          // CraftBukkit start
          // this.broadcastAll(new ClientboundPlayerInfoRemovePacket(List.of(player.getUUID())));
          ClientboundPlayerInfoRemovePacket packet = new ClientboundPlayerInfoRemovePacket(List.of(player.getUUID()));
@@ -13951,7 +13959,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
  
              if (otherPlayer.getBukkitEntity().canSee(player.getBukkitEntity())) {
                  otherPlayer.connection.send(packet);
-@@ -542,7 +599,7 @@ public abstract class PlayerList {
+@@ -542,7 +600,7 @@ public abstract class PlayerList {
          }
      }
      // Paper end - PlayerLoginEvent
@@ -13960,7 +13968,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          LoginResult whitelistEventResult; // Paper
          // Paper start - Fix MC-158900
          UserBanListEntry ban1;
-@@ -551,7 +608,7 @@ public abstract class PlayerList {
+@@ -551,7 +609,7 @@ public abstract class PlayerList {
              // Paper end - Fix MC-158900
              MutableComponent reason = Component.translatable("multiplayer.disconnect.banned.reason", ban.getReasonMessage());
              if (ban.getExpires() != null) {
@@ -13969,7 +13977,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
              }
  
              return new LoginResult(reason, org.bukkit.event.player.PlayerLoginEvent.Result.KICK_BANNED); // Paper - PlayerLoginEvent
-@@ -563,12 +620,12 @@ public abstract class PlayerList {
+@@ -563,12 +621,12 @@ public abstract class PlayerList {
              IpBanListEntry ban = this.ipBans.get(address);
              MutableComponent reason = Component.translatable("multiplayer.disconnect.banned_ip.reason", ban.getReasonMessage());
              if (ban.getExpires() != null) {
@@ -13984,7 +13992,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          }
      }
  
-@@ -587,15 +644,18 @@ public abstract class PlayerList {
+@@ -587,15 +645,18 @@ public abstract class PlayerList {
              dupes.add(serverPlayer);
          }
  
@@ -14006,7 +14014,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          ServerPlayer.RespawnResult result = serverPlayer.findRespawnPositionAndUseSpawnBlock0(!keepAllPlayerData, TeleportTransition.DO_NOTHING, respawnReason);
          if (result == null) { // disconnected player during the respawn event
              return serverPlayer;
-@@ -737,10 +797,10 @@ public abstract class PlayerList {
+@@ -737,10 +798,10 @@ public abstract class PlayerList {
      public void tick() {
          if (++this.sendAllPlayerInfoIn > 600) {
              // CraftBukkit start
@@ -14020,7 +14028,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
              }
              // CraftBukkit end
              this.sendAllPlayerInfoIn = 0;
-@@ -758,8 +818,8 @@ public abstract class PlayerList {
+@@ -758,8 +819,8 @@ public abstract class PlayerList {
      }
  
      public void broadcastAll(Packet packet, Level world) {
@@ -14031,7 +14039,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          }
  
      }
-@@ -796,8 +856,7 @@ public abstract class PlayerList {
+@@ -796,8 +857,7 @@ public abstract class PlayerList {
          if (team == null) {
              this.broadcastSystemMessage(message, false);
          } else {
@@ -14041,7 +14049,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
                  if (targetPlayer.getTeam() != team) {
                      targetPlayer.sendSystemMessage(message);
                  }
-@@ -806,10 +865,11 @@ public abstract class PlayerList {
+@@ -806,10 +866,11 @@ public abstract class PlayerList {
      }
  
      public String[] getPlayerNamesArray() {
@@ -14056,7 +14064,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          }
  
          return names;
-@@ -836,7 +896,9 @@ public abstract class PlayerList {
+@@ -836,7 +897,9 @@ public abstract class PlayerList {
              );
          ServerPlayer player = this.getPlayer(nameAndId.id());
          if (player != null) {
@@ -14067,7 +14075,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          }
      }
  
-@@ -844,7 +906,11 @@ public abstract class PlayerList {
+@@ -844,7 +907,11 @@ public abstract class PlayerList {
          if (this.ops.remove(nameAndId)) {
              ServerPlayer player = this.getPlayer(nameAndId.id());
              if (player != null) {
@@ -14080,7 +14088,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
              }
          }
      }
-@@ -874,8 +940,8 @@ public abstract class PlayerList {
+@@ -874,8 +941,8 @@ public abstract class PlayerList {
      }
  
      // Paper start - whitelist verify event / login event
@@ -14091,7 +14099,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          final io.papermc.paper.event.player.PlayerServerFullCheckEvent fullCheckEvent = new io.papermc.paper.event.player.PlayerServerFullCheckEvent(
              new com.destroystokyo.paper.profile.CraftPlayerProfile(nameAndId),
              io.papermc.paper.adventure.PaperAdventure.asAdventure(currentResult.message),
-@@ -932,8 +998,7 @@ public abstract class PlayerList {
+@@ -932,8 +999,7 @@ public abstract class PlayerList {
          final ResourceKey<Level> dimension,
          final Packet<?> packet
      ) {
@@ -14101,7 +14109,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
              // CraftBukkit start - Test if player receiving packet can see the source of the packet
              if (except != null && !player.getBukkitEntity().canSee(except.getBukkitEntity())) {
                 continue;
-@@ -956,12 +1021,18 @@ public abstract class PlayerList {
+@@ -956,12 +1022,18 @@ public abstract class PlayerList {
      }
      public void saveAll(final int interval) {
          // Paper end - Incremental chunk and player saving
@@ -14119,11 +14127,11 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
 +                continue;
 +            }
 +            // Folia end - region threading
-+            if (interval == -1 || now - player.lastSave >= timeInterval) { // Folia - region threading
++            if (interval == -1 || player.lastSave == ServerPlayer.LAST_SAVE_ABSENT || now - player.lastSave >= timeInterval) { // Folia - region threading
                  this.save(player);
                  if (interval != -1 && ++numSaved >= io.papermc.paper.configuration.GlobalConfiguration.get().playerAutoSave.maxPerTick()) {
                      break;
-@@ -969,7 +1040,7 @@ public abstract class PlayerList {
+@@ -969,7 +1041,7 @@ public abstract class PlayerList {
              }
              }
          // Paper end - Incremental chunk and player saving
@@ -14132,7 +14140,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
      }
  
      public UserWhiteList getWhiteList() {
-@@ -1079,6 +1150,20 @@ public abstract class PlayerList {
+@@ -1079,6 +1151,20 @@ public abstract class PlayerList {
      }
  
      public void removeAll(boolean isRestarting) {
@@ -14153,7 +14161,7 @@ index 82748af2479b0f8f15e39d1ad1ccd2a0e583bcdd..7de3f5694185ae26439a8262224a9e60
          // Paper end
          // CraftBukkit start - disconnect safely
          for (ServerPlayer player : this.players) {
-@@ -1088,7 +1173,7 @@ public abstract class PlayerList {
+@@ -1088,7 +1174,7 @@ public abstract class PlayerList {
          // CraftBukkit end
  
          // Paper start - Configurable player collision; Remove collideRule team if it exists
