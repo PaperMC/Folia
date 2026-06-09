@@ -7413,10 +7413,10 @@ index 527ad5bc90aebf7344b5a7741c792d701794f335..28776f3363810259f8c3bfdfd9f8c045
      }
  
 diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
-index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06bb1a7065 100644
+index a882caec9d4ad21605eaafeb2872786eef5c3031..746db6d6e6e58b8c7ec227503be11dbe43b23a79 100644
 --- a/net/minecraft/commands/Commands.java
 +++ b/net/minecraft/commands/Commands.java
-@@ -198,15 +198,15 @@ public class Commands {
+@@ -198,15 +198,17 @@ public class Commands {
          AdvancementCommands.register(this.dispatcher);
          AttributeCommand.register(this.dispatcher, context);
          ExecuteCommand.register(this.dispatcher, context);
@@ -7426,10 +7426,11 @@ index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06
 -        CloneCommands.register(this.dispatcher, context);
 +        //CloneCommands.register(this.dispatcher, context); // Folia - region threading - TODO
          DamageCommand.register(this.dispatcher, context);
--        DataCommands.register(this.dispatcher);
++        // Folia start - region threading
+         DataCommands.register(this.dispatcher);
 -        DataPackCommand.register(this.dispatcher, context);
 -        DebugCommand.register(this.dispatcher);
-+        DataCommands.register(this.dispatcher); // Folia - region threading
++        // Folia end - region threading
 +        //DataPackCommand.register(this.dispatcher, context); // Folia - region threading - TODO
 +        //DebugCommand.register(this.dispatcher); // Folia - region threading - TODO
          DefaultGameModeCommands.register(this.dispatcher);
@@ -7438,7 +7439,7 @@ index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06
          DifficultyCommand.register(this.dispatcher);
          EffectCommands.register(this.dispatcher, context);
          EmoteCommands.register(this.dispatcher);
-@@ -215,53 +215,53 @@ public class Commands {
+@@ -215,53 +217,57 @@ public class Commands {
          FillCommand.register(this.dispatcher, context);
          FillBiomeCommand.register(this.dispatcher, context);
          ForceLoadCommand.register(this.dispatcher);
@@ -7454,8 +7455,9 @@ index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06
          KillCommand.register(this.dispatcher);
          ListPlayersCommand.register(this.dispatcher);
          LocateCommand.register(this.dispatcher, context);
--        LootCommand.register(this.dispatcher, context);
-+        LootCommand.register(this.dispatcher, context); // Folia - region threading
++        // Folia start - region threading
+         LootCommand.register(this.dispatcher, context);
++        // Folia end - region threading
          MsgCommand.register(this.dispatcher);
          SwingCommand.register(this.dispatcher);
          ParticleCommand.register(this.dispatcher, context);
@@ -7487,10 +7489,11 @@ index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06
          StopSoundCommand.register(this.dispatcher);
          StopwatchCommand.register(this.dispatcher);
          SummonCommand.register(this.dispatcher, context);
--        TagCommand.register(this.dispatcher);
++        // Folia start - region threading
+         TagCommand.register(this.dispatcher);
 -        TeamCommand.register(this.dispatcher, context);
 -        TeamMsgCommand.register(this.dispatcher);
-+        TagCommand.register(this.dispatcher); // Folia - region threading
++        // Folia end - region threading
 +        //TeamCommand.register(this.dispatcher, context); // Folia - region threading - TODO later
 +        //TeamMsgCommand.register(this.dispatcher); // Folia - region threading - TODO later
          TeleportCommand.register(this.dispatcher);
@@ -7508,7 +7511,7 @@ index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06
          WeatherCommand.register(this.dispatcher);
          WorldBorderCommand.register(this.dispatcher);
          if (JvmProfiler.INSTANCE.isAvailable()) {
-@@ -292,8 +292,8 @@ public class Commands {
+@@ -292,8 +298,8 @@ public class Commands {
              OpCommand.register(this.dispatcher);
              PardonCommand.register(this.dispatcher);
              PardonIpCommand.register(this.dispatcher);
@@ -7519,7 +7522,7 @@ index a882caec9d4ad21605eaafeb2872786eef5c3031..1e1cb2aaec7037d16f3e91092e013c06
              SaveOffCommand.register(this.dispatcher);
              SaveOnCommand.register(this.dispatcher);
              SetPlayerIdleTimeoutCommand.register(this.dispatcher);
-@@ -514,9 +514,11 @@ public class Commands {
+@@ -514,9 +520,11 @@ public class Commands {
          }
          // Paper start - Perf: Async command map building
          new com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent<CommandSourceStack>(player.getBukkitEntity(), (RootCommandNode) root, false).callEvent(); // Paper - Brigadier API
@@ -9625,6 +9628,653 @@ index ceef214b551114ba030f0f4b4aaf28aaa8013a3f..a4cfbbbe2a2c3219c0dc996f7b8acd5a
          }
  
          if (victims.size() == 1) {
+diff --git a/net/minecraft/server/commands/LootCommand.java b/net/minecraft/server/commands/LootCommand.java
+index 1d5d3b5af5057cfa2c7b9b495932042e4f5a71ad..2a255d914227a749fe90c7fc7fb62cfae13811f4 100644
+--- a/net/minecraft/server/commands/LootCommand.java
++++ b/net/minecraft/server/commands/LootCommand.java
+@@ -8,8 +8,14 @@ import com.mojang.brigadier.context.CommandContext;
+ import com.mojang.brigadier.exceptions.CommandSyntaxException;
+ import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
+ import java.util.Collection;
++// Folia start - region threading
++import java.util.Collections;
++// Folia end - region threading
+ import java.util.List;
+ import java.util.Optional;
++// Folia start - region threading
++import java.util.concurrent.atomic.AtomicInteger;
++// Folia end - region threading
+ import net.minecraft.commands.CommandBuildContext;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.Commands;
+@@ -54,6 +60,7 @@ public class LootCommand {
+     );
+
+     public static void register(final CommandDispatcher<CommandSourceStack> dispatcher, final CommandBuildContext context) {
++        // Folia start - region threading
+         dispatcher.register(
+             addTargets(
+                 Commands.literal("loot").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)),
+@@ -67,7 +74,7 @@ public class LootCommand {
+                                                 c -> dropFishingLoot(
+                                                     c,
+                                                     ResourceOrIdArgument.getLootTable(c, "loot_table"),
+-                                                    BlockPosArgument.getLoadedBlockPos(c, "pos"),
++                                                    BlockPosArgument.getBlockPos(c, "pos"),
+                                                     ItemStack.EMPTY,
+                                                     output
+                                                 )
+@@ -78,7 +85,7 @@ public class LootCommand {
+                                                         c -> dropFishingLoot(
+                                                             c,
+                                                             ResourceOrIdArgument.getLootTable(c, "loot_table"),
+-                                                            BlockPosArgument.getLoadedBlockPos(c, "pos"),
++                                                            BlockPosArgument.getBlockPos(c, "pos"),
+                                                             ItemArgument.getItem(c, "tool").createItemStack(1),
+                                                             output
+                                                         )
+@@ -90,7 +97,7 @@ public class LootCommand {
+                                                         c -> dropFishingLoot(
+                                                             c,
+                                                             ResourceOrIdArgument.getLootTable(c, "loot_table"),
+-                                                            BlockPosArgument.getLoadedBlockPos(c, "pos"),
++                                                            BlockPosArgument.getBlockPos(c, "pos"),
+                                                             getSourceHandItem(c.getSource(), EquipmentSlot.MAINHAND),
+                                                             output
+                                                         )
+@@ -102,7 +109,7 @@ public class LootCommand {
+                                                         c -> dropFishingLoot(
+                                                             c,
+                                                             ResourceOrIdArgument.getLootTable(c, "loot_table"),
+-                                                            BlockPosArgument.getLoadedBlockPos(c, "pos"),
++                                                            BlockPosArgument.getBlockPos(c, "pos"),
+                                                             getSourceHandItem(c.getSource(), EquipmentSlot.OFFHAND),
+                                                             output
+                                                         )
+@@ -129,12 +136,12 @@ public class LootCommand {
+                         Commands.literal("mine")
+                             .then(
+                                 Commands.argument("pos", BlockPosArgument.blockPos())
+-                                    .executes(c -> dropBlockLoot(c, BlockPosArgument.getLoadedBlockPos(c, "pos"), ItemStack.EMPTY, output))
++                                    .executes(c -> dropBlockLoot(c, BlockPosArgument.getBlockPos(c, "pos"), ItemStack.EMPTY, output))
+                                     .then(
+                                         Commands.argument("tool", ItemArgument.item(context))
+                                             .executes(
+                                                 c -> dropBlockLoot(
+-                                                    c, BlockPosArgument.getLoadedBlockPos(c, "pos"), ItemArgument.getItem(c, "tool").createItemStack(1), output
++                                                    c, BlockPosArgument.getBlockPos(c, "pos"), ItemArgument.getItem(c, "tool").createItemStack(1), output
+                                                 )
+                                             )
+                                     )
+@@ -143,7 +150,7 @@ public class LootCommand {
+                                             .executes(
+                                                 c -> dropBlockLoot(
+                                                     c,
+-                                                    BlockPosArgument.getLoadedBlockPos(c, "pos"),
++                                                    BlockPosArgument.getBlockPos(c, "pos"),
+                                                     getSourceHandItem(c.getSource(), EquipmentSlot.MAINHAND),
+                                                     output
+                                                 )
+@@ -154,7 +161,7 @@ public class LootCommand {
+                                             .executes(
+                                                 c -> dropBlockLoot(
+                                                     c,
+-                                                    BlockPosArgument.getLoadedBlockPos(c, "pos"),
++                                                    BlockPosArgument.getBlockPos(c, "pos"),
+                                                     getSourceHandItem(c.getSource(), EquipmentSlot.OFFHAND),
+                                                     output
+                                                 )
+@@ -162,11 +169,13 @@ public class LootCommand {
+                                     )
+                             )
+                     )
+-            )
++                )
+         );
++        // Folia end - region threading
+     }
+
+     private static <T extends ArgumentBuilder<CommandSourceStack, T>> T addTargets(final T root, final LootCommand.TailProvider tail) {
++        // Folia start - region threading
+         return root.then(
+                 Commands.literal("replace")
+                     .then(
+@@ -177,13 +186,19 @@ public class LootCommand {
+                                         tail.construct(
+                                                 Commands.argument("slot", SlotArgument.slot()),
+                                                 (c, drops, callback) -> entityReplace(
+-                                                    EntityArgument.getEntities(c, "entities"), SlotArgument.getSlot(c, "slot"), drops.size(), drops, callback
++                                                    c.getSource(),
++                                                    EntityArgument.getEntities(c, "entities"),
++                                                    SlotArgument.getSlot(c, "slot"),
++                                                    drops.size(),
++                                                    drops,
++                                                    callback
+                                                 )
+                                             )
+                                             .then(
+                                                 tail.construct(
+                                                     Commands.argument("count", IntegerArgumentType.integer(0)),
+                                                     (c, drops, callback) -> entityReplace(
++                                                        c.getSource(),
+                                                         EntityArgument.getEntities(c, "entities"),
+                                                         SlotArgument.getSlot(c, "slot"),
+                                                         IntegerArgumentType.getInteger(c, "count"),
+@@ -204,7 +219,7 @@ public class LootCommand {
+                                                 Commands.argument("slot", SlotArgument.slot()),
+                                                 (c, drops, callback) -> blockReplace(
+                                                     c.getSource(),
+-                                                    BlockPosArgument.getLoadedBlockPos(c, "targetPos"),
++                                                    BlockPosArgument.getBlockPos(c, "targetPos"),
+                                                     SlotArgument.getSlot(c, "slot"),
+                                                     drops.size(),
+                                                     drops,
+@@ -216,7 +231,7 @@ public class LootCommand {
+                                                     Commands.argument("count", IntegerArgumentType.integer(0)),
+                                                     (c, drops, callback) -> blockReplace(
+                                                         c.getSource(),
+-                                                        BlockPosArgument.getLoadedBlockPos(c, "targetPos"),
++                                                        BlockPosArgument.getBlockPos(c, "targetPos"),
+                                                         IntegerArgumentType.getInteger(c, "slot"),
+                                                         IntegerArgumentType.getInteger(c, "count"),
+                                                         drops,
+@@ -233,7 +248,7 @@ public class LootCommand {
+                     .then(
+                         tail.construct(
+                             Commands.argument("targetPos", BlockPosArgument.blockPos()),
+-                            (c, drops, callback) -> blockDistribute(c.getSource(), BlockPosArgument.getLoadedBlockPos(c, "targetPos"), drops, callback)
++                            (c, drops, callback) -> blockDistribute(c.getSource(), BlockPosArgument.getBlockPos(c, "targetPos"), drops, callback)
+                         )
+                     )
+             )
+@@ -242,7 +257,7 @@ public class LootCommand {
+                     .then(
+                         tail.construct(
+                             Commands.argument("players", EntityArgument.players()),
+-                            (c, drops, callback) -> playerGive(EntityArgument.getPlayers(c, "players"), drops, callback)
++                            (c, drops, callback) -> playerGive(c.getSource(), EntityArgument.getPlayers(c, "players"), drops, callback)
+                         )
+                     )
+             )
+@@ -255,9 +270,12 @@ public class LootCommand {
+                         )
+                     )
+             );
++        // Folia end - region threading
+     }
+
++    // Folia start - region threading
+     private static Container getContainer(final CommandSourceStack source, final BlockPos pos) throws CommandSyntaxException {
++        ensureLoaded(source, pos);
+         BlockEntity blockEntity = source.getLevel().getBlockEntity(pos);
+         if (!(blockEntity instanceof Container)) {
+             throw ItemCommands.ERROR_TARGET_NOT_A_CONTAINER.create(pos.getX(), pos.getY(), pos.getZ());
+@@ -265,8 +283,20 @@ public class LootCommand {
+             return (Container)blockEntity;
+         }
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static int blockDistribute(final CommandSourceStack source, final BlockPos pos, final List<ItemStack> drops, final LootCommand.Callback callback) throws CommandSyntaxException {
++        scheduleAt(source, pos, () -> blockDistributeNow(source, pos, drops, callback));
++        return 1;
++    }
++
++    private static void blockDistributeNow(
++        final CommandSourceStack source,
++        final BlockPos pos,
++        final List<ItemStack> drops,
++        final LootCommand.Callback callback
++    ) throws CommandSyntaxException {
+         Container container = getContainer(source, pos);
+         List<ItemStack> usedItems = Lists.newArrayListWithCapacity(drops.size());
+
+@@ -278,8 +308,8 @@ public class LootCommand {
+         }
+
+         callback.accept(usedItems);
+-        return usedItems.size();
+     }
++    // Folia end - region threading
+
+     private static boolean distributeToContainer(final Container container, final ItemStack itemStack) {
+         boolean changed = false;
+@@ -306,6 +336,7 @@ public class LootCommand {
+         return changed;
+     }
+
++    // Folia start - region threading
+     private static int blockReplace(
+         final CommandSourceStack source,
+         final BlockPos pos,
+@@ -313,6 +344,18 @@ public class LootCommand {
+         final int slotCount,
+         final List<ItemStack> drops,
+         final LootCommand.Callback callback
++    ) throws CommandSyntaxException {
++        scheduleAt(source, pos, () -> blockReplaceNow(source, pos, startSlot, slotCount, drops, callback));
++        return 1;
++    }
++
++    private static void blockReplaceNow(
++        final CommandSourceStack source,
++        final BlockPos pos,
++        final int startSlot,
++        final int slotCount,
++        final List<ItemStack> drops,
++        final LootCommand.Callback callback
+     ) throws CommandSyntaxException {
+         Container container = getContainer(source, pos);
+         int maxSlot = container.getContainerSize();
+@@ -323,37 +366,85 @@ public class LootCommand {
+                 int slot = startSlot + i;
+                 ItemStack toAdd = i < drops.size() ? drops.get(i) : ItemStack.EMPTY;
+                 if (container.canPlaceItem(slot, toAdd)) {
+-                    container.setItem(slot, toAdd);
++                    container.setItem(slot, toAdd.copy());
+                     usedItems.add(toAdd);
+                 }
+             }
+
+             callback.accept(usedItems);
+-            return usedItems.size();
+         } else {
+             throw ItemCommands.ERROR_TARGET_INAPPLICABLE_SLOT.create(startSlot);
+         }
+     }
++    // Folia end - region threading
+
+     private static boolean canMergeItems(final ItemStack a, final ItemStack b) {
+         return a.getCount() <= a.getMaxStackSize() && ItemStack.isSameItemSameComponents(a, b);
+     }
+
+-    private static int playerGive(final Collection<ServerPlayer> players, final List<ItemStack> drops, final LootCommand.Callback callback) throws CommandSyntaxException {
+-        List<ItemStack> usedItems = Lists.newArrayListWithCapacity(drops.size());
++    // Folia start - region threading
++    private static int playerGive(
++        final CommandSourceStack source,
++        final Collection<ServerPlayer> players,
++        final List<ItemStack> drops,
++        final LootCommand.Callback callback
++    ) throws CommandSyntaxException {
++        final List<ItemStack> usedItems = Collections.synchronizedList(Lists.newArrayListWithCapacity(drops.size()));
++        final AtomicInteger remaining = new AtomicInteger(players.size());
++
++        for (ServerPlayer player : players) {
++            final List<ItemStack> playerDrops = copyItemStacks(drops);
++            if (!player.getBukkitEntity().taskScheduler.schedule(
++                scheduledPlayer -> {
++                    final ServerPlayer currentPlayer = (ServerPlayer)scheduledPlayer;
++                    for (ItemStack drop : playerDrops) {
++                        if (currentPlayer.getInventory().add(drop.copy())) {
++                            usedItems.add(drop.copy());
++                        }
++                    }
++                    finishOutput(source, callback, usedItems, remaining);
++                },
++                retiredPlayer -> finishOutput(source, callback, usedItems, remaining),
++                1L
++            )) {
++                finishOutput(source, callback, usedItems, remaining);
++            }
++        }
+
+-        for (ItemStack drop : drops) {
+-            for (ServerPlayer player : players) {
+-                if (player.getInventory().add(drop.copy())) {
+-                    usedItems.add(drop);
++        return players.size();
++    }
++
++    private static void finishOutput(
++        final CommandSourceStack source,
++        final LootCommand.Callback callback,
++        final List<ItemStack> usedItems,
++        final AtomicInteger remaining
++    ) {
++        if (remaining.decrementAndGet() == 0) {
++            try {
++                final List<ItemStack> result;
++                synchronized (usedItems) {
++                    result = List.copyOf(usedItems);
+                 }
++                callback.accept(result);
++            } catch (final CommandSyntaxException exception) {
++                sendFailure(source, exception);
+             }
+         }
++    }
+
+-        callback.accept(usedItems);
+-        return usedItems.size();
++    private static void ensureLoaded(final CommandSourceStack source, final BlockPos pos) throws CommandSyntaxException {
++        final ServerLevel level = source.getLevel();
++        if (!level.hasChunkAt(pos)) {
++            throw BlockPosArgument.ERROR_NOT_LOADED.create();
++        }
++        if (!level.isInWorldBounds(pos)) {
++            throw BlockPosArgument.ERROR_OUT_OF_WORLD.create();
++        }
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static void setSlots(final Entity entity, final List<ItemStack> itemsToSet, final int startSlot, final int count, final List<ItemStack> usedItems) {
+         for (int i = 0; i < count; i++) {
+             ItemStack item = i < itemsToSet.size() ? itemsToSet.get(i) : ItemStack.EMPTY;
+@@ -363,35 +454,92 @@ public class LootCommand {
+             }
+         }
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static int entityReplace(
+-        final Collection<? extends Entity> entities, final int startSlot, final int count, final List<ItemStack> drops, final LootCommand.Callback callback
++        final CommandSourceStack source,
++        final Collection<? extends Entity> entities,
++        final int startSlot,
++        final int count,
++        final List<ItemStack> drops,
++        final LootCommand.Callback callback
+     ) throws CommandSyntaxException {
+-        List<ItemStack> usedItems = Lists.newArrayListWithCapacity(drops.size());
++        final List<ItemStack> usedItems = Collections.synchronizedList(Lists.newArrayListWithCapacity(drops.size()));
++        final AtomicInteger remaining = new AtomicInteger(entities.size());
+
+         for (Entity entity : entities) {
+-            if (entity instanceof ServerPlayer player) {
+-                setSlots(entity, drops, startSlot, count, usedItems);
+-                player.containerMenu.broadcastChanges();
+-            } else {
+-                setSlots(entity, drops, startSlot, count, usedItems);
++            final List<ItemStack> entityDrops = copyItemStacks(drops);
++            if (!entity.getBukkitEntity().taskScheduler.schedule(
++                scheduledEntity -> {
++                    setSlots(scheduledEntity, entityDrops, startSlot, count, usedItems);
++                    if (scheduledEntity instanceof ServerPlayer player) {
++                        player.containerMenu.broadcastChanges();
++                    }
++                    finishOutput(source, callback, usedItems, remaining);
++                },
++                retiredEntity -> finishOutput(source, callback, usedItems, remaining),
++                1L
++            )) {
++                finishOutput(source, callback, usedItems, remaining);
+             }
+         }
+
+-        callback.accept(usedItems);
+-        return usedItems.size();
++        return entities.size();
++    }
++
++    private static List<ItemStack> copyItemStacks(final List<ItemStack> stacks) {
++        final List<ItemStack> copy = Lists.newArrayListWithCapacity(stacks.size());
++        for (final ItemStack stack : stacks) {
++            copy.add(stack.copy());
++        }
++        return copy;
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static int dropInWorld(final CommandSourceStack source, final Vec3 pos, final List<ItemStack> drops, final LootCommand.Callback callback) throws CommandSyntaxException {
+-        ServerLevel level = source.getLevel();
+-        drops.forEach(drop -> {
+-            ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, drop.copy());
+-            entity.setDefaultPickUpDelay();
+-            level.addFreshEntity(entity);
+-        });
+-        callback.accept(drops);
+-        return drops.size();
++        final ServerLevel level = source.getLevel();
++        level.moonrise$loadChunksAsync(
++            BlockPos.containing(pos),
++            0,
++            net.minecraft.world.level.chunk.status.ChunkStatus.FULL,
++            ca.spottedleaf.concurrentutil.util.Priority.NORMAL,
++            chunks -> {
++                try {
++                    drops.forEach(drop -> {
++                        ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, drop.copy());
++                        entity.setDefaultPickUpDelay();
++                        level.addFreshEntity(entity);
++                    });
++                    callback.accept(drops);
++                } catch (final CommandSyntaxException exception) {
++                    sendFailure(source, exception);
++                }
++            }
++        );
++        return 1;
++    }
++
++    private static void scheduleAt(final CommandSourceStack source, final BlockPos pos, final LootCommand.CommandAction action) {
++        io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueOrExecuteTickTask(
++            source.getLevel(),
++            pos.getX() >> 4,
++            pos.getZ() >> 4,
++            () -> {
++                try {
++                    action.run();
++                } catch (final CommandSyntaxException exception) {
++                    sendFailure(source, exception);
++                }
++            }
++        );
++    }
++
++    private static void sendFailure(final CommandSourceStack source, final CommandSyntaxException exception) {
++        source.sendFailure((Component)exception.getRawMessage());
+     }
++    // Folia end - region threading
+
+     private static void callback(final CommandSourceStack source, final List<ItemStack> drops) {
+         if (drops.size() == 1) {
+@@ -418,20 +566,35 @@ public class LootCommand {
+         }
+     }
+
++    // Folia start - region threading
+     private static ItemStack getSourceHandItem(final CommandSourceStack source, final EquipmentSlot slot) throws CommandSyntaxException {
+         Entity entity = source.getEntityOrException();
+         if (entity instanceof LivingEntity) {
+-            return ((LivingEntity)entity).getItemBySlot(slot);
++            return ((LivingEntity)entity).getItemBySlot(slot).copy();
+         } else {
+             throw ERROR_NO_HELD_ITEMS.create(entity.getDisplayName());
+         }
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static int dropBlockLoot(
+         final CommandContext<CommandSourceStack> context, final BlockPos pos, final ItemInstance tool, final LootCommand.DropConsumer output
+     ) throws CommandSyntaxException {
+-        CommandSourceStack source = context.getSource();
+-        ServerLevel level = source.getLevel();
++        final CommandSourceStack source = context.getSource();
++        scheduleAt(source, pos, () -> dropBlockLootNow(context, pos, tool, output));
++        return 1;
++    }
++
++    private static void dropBlockLootNow(
++        final CommandContext<CommandSourceStack> context,
++        final BlockPos pos,
++        final ItemInstance tool,
++        final LootCommand.DropConsumer output
++    ) throws CommandSyntaxException {
++        final CommandSourceStack source = context.getSource();
++        final ServerLevel level = source.getLevel();
++        ensureLoaded(source, pos);
+         BlockState blockState = level.getBlockState(pos);
+         BlockEntity blockEntity = level.getBlockEntity(pos);
+         Optional<ResourceKey<LootTable>> lootTable = blockState.getBlock().getLootTable();
+@@ -442,46 +605,106 @@ public class LootCommand {
+                 .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
+                 .withParameter(LootContextParams.BLOCK_STATE, blockState)
+                 .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockEntity)
+-                .withOptionalParameter(LootContextParams.THIS_ENTITY, source.getEntity())
+                 .withParameter(LootContextParams.TOOL, tool);
++            final Entity sourceEntity = source.getEntity();
++            if (sourceEntity != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(sourceEntity)) {
++                lootParams.withParameter(LootContextParams.THIS_ENTITY, sourceEntity);
++            }
+             List<ItemStack> drops = blockState.getDrops(lootParams);
+-            return output.accept(context, drops, usedItems -> callback(source, usedItems, lootTable.get()));
++            output.accept(context, drops, usedItems -> callback(source, usedItems, lootTable.get()));
+         }
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static int dropKillLoot(final CommandContext<CommandSourceStack> context, final Entity target, final LootCommand.DropConsumer output) throws CommandSyntaxException {
++        final CommandSourceStack source = context.getSource();
++        if (!target.getBukkitEntity().taskScheduler.schedule(
++            scheduledTarget -> {
++                try {
++                    dropKillLootNow(context, scheduledTarget, output);
++                } catch (final CommandSyntaxException exception) {
++                    sendFailure(source, exception);
++                }
++            },
++            retiredTarget -> source.sendFailure((Component)EntityArgument.NO_ENTITIES_FOUND.create().getRawMessage()),
++            1L
++        )) {
++            source.sendFailure((Component)EntityArgument.NO_ENTITIES_FOUND.create().getRawMessage());
++        }
++        return 1;
++    }
++
++    private static void dropKillLootNow(
++        final CommandContext<CommandSourceStack> context,
++        final Entity target,
++        final LootCommand.DropConsumer output
++    ) throws CommandSyntaxException {
+         Optional<ResourceKey<LootTable>> lootTableId = target.getLootTable();
+         if (lootTableId.isEmpty()) {
+             throw ERROR_NO_ENTITY_LOOT_TABLE.create(target.getDisplayName());
+         } else {
+             CommandSourceStack source = context.getSource();
+-            LootParams.Builder builder = new LootParams.Builder(source.getLevel());
++            LootParams.Builder builder = new LootParams.Builder((ServerLevel)target.level());
+             Entity killer = source.getEntity();
+-            if (killer instanceof Player player) {
++            if (killer instanceof Player player && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(killer)) {
+                 builder.withParameter(LootContextParams.LAST_DAMAGE_PLAYER, player);
+             }
+
+             builder.withParameter(LootContextParams.DAMAGE_SOURCE, target.damageSources().magic());
+-            builder.withOptionalParameter(LootContextParams.DIRECT_ATTACKING_ENTITY, killer);
+-            builder.withOptionalParameter(LootContextParams.ATTACKING_ENTITY, killer);
++            if (killer != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(killer)) {
++                builder.withParameter(LootContextParams.DIRECT_ATTACKING_ENTITY, killer);
++                builder.withParameter(LootContextParams.ATTACKING_ENTITY, killer);
++            }
+             builder.withParameter(LootContextParams.THIS_ENTITY, target);
+             builder.withParameter(LootContextParams.ORIGIN, source.getPosition());
+             LootParams lootParams = builder.create(LootContextParamSets.ENTITY);
+             LootTable lootTable = source.getServer().reloadableRegistries().getLootTable(lootTableId.get());
+             List<ItemStack> drops = lootTable.getRandomItems(lootParams);
+-            return output.accept(context, drops, usedItems -> callback(source, usedItems, lootTableId.get()));
++            output.accept(context, drops, usedItems -> callback(source, usedItems, lootTableId.get()));
+         }
+     }
++    // Folia end - region threading
+
++    // Folia start - region threading
+     private static int dropChestLoot(final CommandContext<CommandSourceStack> context, final Holder<LootTable> lootTable, final LootCommand.DropConsumer output) throws CommandSyntaxException {
+-        CommandSourceStack source = context.getSource();
+-        LootParams lootParams = new LootParams.Builder(source.getLevel())
+-            .withOptionalParameter(LootContextParams.THIS_ENTITY, source.getEntity())
+-            .withParameter(LootContextParams.ORIGIN, source.getPosition())
+-            .create(LootContextParamSets.CHEST);
+-        return drop(context, lootTable, lootParams, output);
++        final CommandSourceStack source = context.getSource();
++        final Entity sourceEntity = source.getEntity();
++        if (sourceEntity == null) {
++            scheduleAt(source, BlockPos.containing(source.getPosition()), () -> dropChestLootNow(context, lootTable, output, null));
++        } else if (!sourceEntity.getBukkitEntity().taskScheduler.schedule(
++            scheduledEntity -> {
++                try {
++                    dropChestLootNow(context, lootTable, output, scheduledEntity);
++                } catch (final CommandSyntaxException exception) {
++                    sendFailure(source, exception);
++                }
++            },
++            retiredEntity -> source.sendFailure((Component)EntityArgument.NO_ENTITIES_FOUND.create().getRawMessage()),
++            1L
++        )) {
++            source.sendFailure((Component)EntityArgument.NO_ENTITIES_FOUND.create().getRawMessage());
++        }
++        return 1;
+     }
+
++    private static void dropChestLootNow(
++        final CommandContext<CommandSourceStack> context,
++        final Holder<LootTable> lootTable,
++        final LootCommand.DropConsumer output,
++        final Entity sourceEntity
++    ) throws CommandSyntaxException {
++        final CommandSourceStack source = context.getSource();
++        final ServerLevel level = sourceEntity == null ? source.getLevel() : (ServerLevel)sourceEntity.level();
++        final LootParams.Builder builder = new LootParams.Builder(level).withParameter(LootContextParams.ORIGIN, source.getPosition());
++        if (sourceEntity != null) {
++            builder.withParameter(LootContextParams.THIS_ENTITY, sourceEntity);
++        }
++        drop(context, lootTable, builder.create(LootContextParamSets.CHEST), output);
++    }
++    // Folia end - region threading
++
++    // Folia start - region threading
+     private static int dropFishingLoot(
+         final CommandContext<CommandSourceStack> context,
+         final Holder<LootTable> lootTable,
+@@ -489,14 +712,21 @@ public class LootCommand {
+         final ItemInstance tool,
+         final LootCommand.DropConsumer output
+     ) throws CommandSyntaxException {
+-        CommandSourceStack source = context.getSource();
+-        LootParams lootParams = new LootParams.Builder(source.getLevel())
+-            .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
+-            .withParameter(LootContextParams.TOOL, tool)
+-            .withOptionalParameter(LootContextParams.THIS_ENTITY, source.getEntity())
+-            .create(LootContextParamSets.FISHING);
+-        return drop(context, lootTable, lootParams, output);
++        final CommandSourceStack source = context.getSource();
++        scheduleAt(source, pos, () -> {
++            ensureLoaded(source, pos);
++            final LootParams.Builder builder = new LootParams.Builder(source.getLevel())
++                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
++                .withParameter(LootContextParams.TOOL, tool);
++            final Entity sourceEntity = source.getEntity();
++            if (sourceEntity != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(sourceEntity)) {
++                builder.withParameter(LootContextParams.THIS_ENTITY, sourceEntity);
++            }
++            drop(context, lootTable, builder.create(LootContextParamSets.FISHING), output);
++        });
++        return 1;
+     }
++    // Folia end - region threading
+
+     private static int drop(
+         final CommandContext<CommandSourceStack> context, final Holder<LootTable> lootTable, final LootParams lootParams, final LootCommand.DropConsumer output
+@@ -511,6 +741,13 @@ public class LootCommand {
+         void accept(List<ItemStack> setItems) throws CommandSyntaxException;
+     }
+
++    // Folia start - region threading
++    @FunctionalInterface
++    private interface CommandAction {
++        void run() throws CommandSyntaxException;
++    }
++    // Folia end - region threading
++
+     @FunctionalInterface
+     private interface DropConsumer {
+         int accept(CommandContext<CommandSourceStack> context, List<ItemStack> drops, LootCommand.Callback successCallback) throws CommandSyntaxException;
 diff --git a/net/minecraft/server/commands/PlaceCommand.java b/net/minecraft/server/commands/PlaceCommand.java
 index eab9553e89b781332a1026a037d2c5e9d70bd9b7..a56bfc933b9faeefceaccab5f1095e176dd2b5d1 100644
 --- a/net/minecraft/server/commands/PlaceCommand.java
@@ -9979,6 +10629,238 @@ index fd598900ae35b9fd0509281c24ee9f503b78a4e1..c39d67b454b80f90346c7940746beab3
                      throw ERROR_DUPLICATE_UUID.create();
                  } else {
                      return entity;
+diff --git a/net/minecraft/server/commands/TagCommand.java b/net/minecraft/server/commands/TagCommand.java
+index 92b6f655533cc2d401bc7835439dda42be5805ec..a842fec1e1f311bea2f78b0188f483bc529f2d03 100644
+--- a/net/minecraft/server/commands/TagCommand.java
++++ b/net/minecraft/server/commands/TagCommand.java
+@@ -1,15 +1,18 @@
+ package net.minecraft.server.commands;
+
+-import com.google.common.collect.Sets;
+ import com.mojang.brigadier.CommandDispatcher;
+ import com.mojang.brigadier.arguments.StringArgumentType;
+ import com.mojang.brigadier.exceptions.CommandSyntaxException;
+ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+ import java.util.Collection;
+ import java.util.Set;
++// Folia start - region threading
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicReference;
++// Folia end - region threading
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.Commands;
+-import net.minecraft.commands.SharedSuggestionProvider;
+ import net.minecraft.commands.arguments.EntityArgument;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.network.chat.ComponentUtils;
+@@ -20,6 +23,7 @@ public class TagCommand {
+     private static final SimpleCommandExceptionType ERROR_REMOVE_FAILED = new SimpleCommandExceptionType(Component.translatable("commands.tag.remove.failed"));
+
+     public static void register(final CommandDispatcher<CommandSourceStack> dispatcher) {
++        // Folia start - region threading
+         dispatcher.register(
+             Commands.literal("tag")
+                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+@@ -36,7 +40,6 @@ public class TagCommand {
+                             Commands.literal("remove")
+                                 .then(
+                                     Commands.argument("name", StringArgumentType.word())
+-                                        .suggests((c, p) -> SharedSuggestionProvider.suggest(getTags(EntityArgument.getEntities(c, "targets")), p))
+                                         .executes(
+                                             c -> removeTag(c.getSource(), EntityArgument.getEntities(c, "targets"), StringArgumentType.getString(c, "name"))
+                                         )
+@@ -45,87 +48,144 @@ public class TagCommand {
+                         .then(Commands.literal("list").executes(c -> listTags(c.getSource(), EntityArgument.getEntities(c, "targets"))))
+                 )
+         );
++        // Folia end - region threading
+     }
+
+-    private static Collection<String> getTags(final Collection<? extends Entity> entities) {
+-        Set<String> result = Sets.newHashSet();
+-
+-        for (Entity entity : entities) {
+-            result.addAll(entity.entityTags());
+-        }
+-
+-        return result;
+-    }
+-
++    // Folia start - region threading
+     private static int addTag(final CommandSourceStack source, final Collection<? extends Entity> targets, final String name) throws CommandSyntaxException {
+-        int count = 0;
++        final AtomicInteger remaining = new AtomicInteger(targets.size());
++        final AtomicInteger changed = new AtomicInteger();
++        final AtomicReference<Component> singleDisplayName = new AtomicReference<>();
+
+         for (Entity entity : targets) {
+-            if (entity.addTag(name)) {
+-                count++;
++            if (!entity.getBukkitEntity().taskScheduler.schedule(
++                scheduledEntity -> {
++                    singleDisplayName.compareAndSet(null, scheduledEntity.getDisplayName());
++                    if (scheduledEntity.addTag(name)) {
++                        changed.incrementAndGet();
++                    }
++                    finishMutation(source, targets.size(), name, true, remaining, changed, singleDisplayName);
++                },
++                retiredEntity -> finishMutation(source, targets.size(), name, true, remaining, changed, singleDisplayName),
++                1L
++            )) {
++                finishMutation(source, targets.size(), name, true, remaining, changed, singleDisplayName);
+             }
+         }
+
+-        if (count == 0) {
+-            throw ERROR_ADD_FAILED.create();
+-        } else {
+-            if (targets.size() == 1) {
+-                source.sendSuccess(() -> Component.translatable("commands.tag.add.success.single", name, targets.iterator().next().getDisplayName()), true);
+-            } else {
+-                source.sendSuccess(() -> Component.translatable("commands.tag.add.success.multiple", name, targets.size()), true);
+-            }
+-
+-            return count;
+-        }
++        return targets.size();
+     }
+
+     private static int removeTag(final CommandSourceStack source, final Collection<? extends Entity> targets, final String name) throws CommandSyntaxException {
+-        int count = 0;
++        final AtomicInteger remaining = new AtomicInteger(targets.size());
++        final AtomicInteger changed = new AtomicInteger();
++        final AtomicReference<Component> singleDisplayName = new AtomicReference<>();
+
+         for (Entity entity : targets) {
+-            if (entity.removeTag(name)) {
+-                count++;
++            if (!entity.getBukkitEntity().taskScheduler.schedule(
++                scheduledEntity -> {
++                    singleDisplayName.compareAndSet(null, scheduledEntity.getDisplayName());
++                    if (scheduledEntity.removeTag(name)) {
++                        changed.incrementAndGet();
++                    }
++                    finishMutation(source, targets.size(), name, false, remaining, changed, singleDisplayName);
++                },
++                retiredEntity -> finishMutation(source, targets.size(), name, false, remaining, changed, singleDisplayName),
++                1L
++            )) {
++                finishMutation(source, targets.size(), name, false, remaining, changed, singleDisplayName);
+             }
+         }
+
+-        if (count == 0) {
+-            throw ERROR_REMOVE_FAILED.create();
+-        } else {
+-            if (targets.size() == 1) {
+-                source.sendSuccess(() -> Component.translatable("commands.tag.remove.success.single", name, targets.iterator().next().getDisplayName()), true);
+-            } else {
+-                source.sendSuccess(() -> Component.translatable("commands.tag.remove.success.multiple", name, targets.size()), true);
+-            }
++        return targets.size();
++    }
+
+-            return count;
++    private static void finishMutation(
++        final CommandSourceStack source,
++        final int targetCount,
++        final String name,
++        final boolean add,
++        final AtomicInteger remaining,
++        final AtomicInteger changed,
++        final AtomicReference<Component> singleDisplayName
++    ) {
++        if (remaining.decrementAndGet() != 0) {
++            return;
++        }
++
++        final int changedCount = changed.get();
++        if (changedCount == 0) {
++            source.sendFailure((Component)(add ? ERROR_ADD_FAILED : ERROR_REMOVE_FAILED).create().getRawMessage());
++        } else if (targetCount == 1) {
++            source.sendSuccess(
++                () -> Component.translatable(
++                    add ? "commands.tag.add.success.single" : "commands.tag.remove.success.single",
++                    name,
++                    singleDisplayName.get()
++                ),
++                true
++            );
++        } else {
++            source.sendSuccess(
++                () -> Component.translatable(
++                    add ? "commands.tag.add.success.multiple" : "commands.tag.remove.success.multiple",
++                    name,
++                    changedCount
++                ),
++                true
++            );
+         }
+     }
+
+     private static int listTags(final CommandSourceStack source, final Collection<? extends Entity> targets) {
+-        Set<String> tags = Sets.newHashSet();
++        final Set<String> tags = ConcurrentHashMap.newKeySet();
++        final AtomicInteger remaining = new AtomicInteger(targets.size());
++        final AtomicReference<Component> singleDisplayName = new AtomicReference<>();
+
+         for (Entity entity : targets) {
+-            tags.addAll(entity.entityTags());
++            if (!entity.getBukkitEntity().taskScheduler.schedule(
++                scheduledEntity -> {
++                    singleDisplayName.compareAndSet(null, scheduledEntity.getDisplayName());
++                    tags.addAll(scheduledEntity.entityTags());
++                    finishList(source, targets.size(), remaining, singleDisplayName, tags);
++                },
++                retiredEntity -> finishList(source, targets.size(), remaining, singleDisplayName, tags),
++                1L
++            )) {
++                finishList(source, targets.size(), remaining, singleDisplayName, tags);
++            }
++        }
++
++        return targets.size();
++    }
++
++    private static void finishList(
++        final CommandSourceStack source,
++        final int targetCount,
++        final AtomicInteger remaining,
++        final AtomicReference<Component> singleDisplayName,
++        final Set<String> tags
++    ) {
++        if (remaining.decrementAndGet() != 0) {
++            return;
+         }
+
+-        if (targets.size() == 1) {
+-            Entity entity = targets.iterator().next();
++        if (targetCount == 1) {
+             if (tags.isEmpty()) {
+-                source.sendSuccess(() -> Component.translatable("commands.tag.list.single.empty", entity.getDisplayName()), false);
++                source.sendSuccess(() -> Component.translatable("commands.tag.list.single.empty", singleDisplayName.get()), false);
+             } else {
+                 source.sendSuccess(
+-                    () -> Component.translatable("commands.tag.list.single.success", entity.getDisplayName(), tags.size(), ComponentUtils.formatList(tags)),
++                    () -> Component.translatable("commands.tag.list.single.success", singleDisplayName.get(), tags.size(), ComponentUtils.formatList(tags)),
+                     false
+                 );
+             }
+         } else if (tags.isEmpty()) {
+-            source.sendSuccess(() -> Component.translatable("commands.tag.list.multiple.empty", targets.size()), false);
++            source.sendSuccess(() -> Component.translatable("commands.tag.list.multiple.empty", targetCount), false);
+         } else {
+             source.sendSuccess(
+-                () -> Component.translatable("commands.tag.list.multiple.success", targets.size(), tags.size(), ComponentUtils.formatList(tags)), false
++                () -> Component.translatable("commands.tag.list.multiple.success", targetCount, tags.size(), ComponentUtils.formatList(tags)), false
+             );
+         }
+-
+-        return tags.size();
+     }
++    // Folia end - region threading
+ }
 diff --git a/net/minecraft/server/commands/TeleportCommand.java b/net/minecraft/server/commands/TeleportCommand.java
 index 7047a0da56459cda404702cf4dbc69e537683ff8..bfc012df8bf64cc9d2be36b2a4e97973468aed8f 100644
 --- a/net/minecraft/server/commands/TeleportCommand.java
@@ -10356,6 +11238,447 @@ index c4cab535a0c72272f7857d6b7aea1afd7f756b62..c3410b5a10c7f86323778f88e5ab71ec
      }
  
      private static String formatTicksToSeconds(final long ticks) {
+diff --git a/net/minecraft/server/commands/data/BlockDataAccessor.java b/net/minecraft/server/commands/data/BlockDataAccessor.java
+index 1b0ad9375986fe35795fc75f8eecfecaacc0cc13..35814bca1316009f0c0be95966620a32fb24cd63 100644
+--- a/net/minecraft/server/commands/data/BlockDataAccessor.java
++++ b/net/minecraft/server/commands/data/BlockDataAccessor.java
+@@ -40,6 +40,35 @@ public class BlockDataAccessor implements DataAccessor {
+             }
+         }
+
++        // Folia start - region threading
++        @Override
++        public void accessAsync(
++            final CommandContext<CommandSourceStack> context,
++            final java.util.function.Consumer<DataAccessor> success,
++            final java.util.function.Consumer<CommandSyntaxException> failure
++        ) {
++            final BlockPos pos = BlockPosArgument.getBlockPos(context, argPrefix + "Pos");
++            final net.minecraft.server.level.ServerLevel level = context.getSource().getLevel();
++            io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueOrExecuteTickTask(
++                level,
++                pos.getX() >> 4,
++                pos.getZ() >> 4,
++                () -> {
++                    try {
++                        BlockPosArgument.getLoadedBlockPos(context, level, argPrefix + "Pos");
++                        final BlockEntity entity = level.getBlockEntity(pos);
++                        if (entity == null) {
++                            throw BlockDataAccessor.ERROR_NOT_A_BLOCK_ENTITY.create();
++                        }
++                        success.accept(new BlockDataAccessor(entity, pos));
++                    } catch (final CommandSyntaxException exception) {
++                        failure.accept(exception);
++                    }
++                }
++            );
++        }
++        // Folia end - region threading
++
+         @Override
+         public ArgumentBuilder<CommandSourceStack, ?> wrap(
+             final ArgumentBuilder<CommandSourceStack, ?> parent,
+diff --git a/net/minecraft/server/commands/data/DataCommands.java b/net/minecraft/server/commands/data/DataCommands.java
+index 15ff510b513f62e50ac276fe50ecb7ad39c42a67..8fde358738662040112f49c8706dae8d94484d42 100644
+--- a/net/minecraft/server/commands/data/DataCommands.java
++++ b/net/minecraft/server/commands/data/DataCommands.java
+@@ -63,6 +63,7 @@ public class DataCommands {
+         .collect(ImmutableList.toImmutableList());
+
+     public static void register(final CommandDispatcher<CommandSourceStack> dispatcher) {
++        // Folia start - region threading
+         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("data").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS));
+
+         for (DataCommands.DataProvider targetProvider : TARGET_PROVIDERS) {
+@@ -71,25 +72,41 @@ public class DataCommands {
+                         Commands.literal("merge"),
+                         p -> p.then(
+                             Commands.argument("nbt", CompoundTagArgument.compoundTag())
+-                                .executes(c -> mergeData(c.getSource(), targetProvider.access(c), CompoundTagArgument.getCompoundTag(c, "nbt")))
++                                .executes(
++                                    c -> access(
++                                        c,
++                                        targetProvider,
++                                        accessor -> mergeData(c.getSource(), accessor, CompoundTagArgument.getCompoundTag(c, "nbt"))
++                                    )
++                                )
+                         )
+                     )
+                 )
+                 .then(
+                     targetProvider.wrap(
+                         Commands.literal("get"),
+-                        p -> p.executes(c -> getData(c.getSource(), targetProvider.access(c)))
++                        p -> p.executes(c -> access(c, targetProvider, accessor -> getData(c.getSource(), accessor)))
+                             .then(
+                                 Commands.argument("path", NbtPathArgument.nbtPath())
+-                                    .executes(c -> getData(c.getSource(), targetProvider.access(c), NbtPathArgument.getPath(c, "path")))
++                                    .executes(
++                                        c -> access(
++                                            c,
++                                            targetProvider,
++                                            accessor -> getData(c.getSource(), accessor, NbtPathArgument.getPath(c, "path"))
++                                        )
++                                    )
+                                     .then(
+                                         Commands.argument("scale", DoubleArgumentType.doubleArg())
+                                             .executes(
+-                                                c -> getNumeric(
+-                                                    c.getSource(),
+-                                                    targetProvider.access(c),
+-                                                    NbtPathArgument.getPath(c, "path"),
+-                                                    DoubleArgumentType.getDouble(c, "scale")
++                                                c -> access(
++                                                    c,
++                                                    targetProvider,
++                                                    accessor -> getNumeric(
++                                                        c.getSource(),
++                                                        accessor,
++                                                        NbtPathArgument.getPath(c, "path"),
++                                                        DoubleArgumentType.getDouble(c, "scale")
++                                                    )
+                                                 )
+                                             )
+                                     )
+@@ -101,7 +118,13 @@ public class DataCommands {
+                         Commands.literal("remove"),
+                         p -> p.then(
+                             Commands.argument("path", NbtPathArgument.nbtPath())
+-                                .executes(c -> removeData(c.getSource(), targetProvider.access(c), NbtPathArgument.getPath(c, "path")))
++                                .executes(
++                                    c -> access(
++                                        c,
++                                        targetProvider,
++                                        accessor -> removeData(c.getSource(), accessor, NbtPathArgument.getPath(c, "path"))
++                                    )
++                                )
+                         )
+                     )
+                 )
+@@ -161,6 +184,7 @@ public class DataCommands {
+         }
+
+         dispatcher.register(root);
++        // Folia end - region threading
+     }
+
+     private static String getAsText(final Tag tag) throws CommandSyntaxException {
+@@ -185,6 +209,7 @@ public class DataCommands {
+     private static ArgumentBuilder<CommandSourceStack, ?> decorateModification(
+         final BiConsumer<ArgumentBuilder<CommandSourceStack, ?>, DataCommands.DataManipulatorDecorator> nodeSupplier
+     ) {
++        // Folia start - region threading
+         LiteralArgumentBuilder<CommandSourceStack> modify = Commands.literal("modify");
+
+         for (DataCommands.DataProvider targetProvider : TARGET_PROVIDERS) {
+@@ -198,10 +223,26 @@ public class DataCommands {
+                             targetPathNode,
+                             manipulator -> sourceProvider.wrap(
+                                 Commands.literal("from"),
+-                                s -> s.executes(c -> manipulateData(c, targetProvider, manipulator, getSingletonSource(c, sourceProvider)))
++                                s -> s.executes(
++                                        c -> manipulateData(
++                                            c,
++                                            targetProvider,
++                                            manipulator,
++                                            sourceProvider,
++                                            source -> Collections.singletonList(source.getData())
++                                        )
++                                    )
+                                     .then(
+                                         Commands.argument("sourcePath", NbtPathArgument.nbtPath())
+-                                            .executes(c -> manipulateData(c, targetProvider, manipulator, resolveSourcePath(c, sourceProvider)))
++                                            .executes(
++                                                c -> manipulateData(
++                                                    c,
++                                                    targetProvider,
++                                                    manipulator,
++                                                    sourceProvider,
++                                                    source -> resolveSourcePath(c, source)
++                                                )
++                                            )
+                                     )
+                             )
+                         );
+@@ -210,13 +251,23 @@ public class DataCommands {
+                             manipulator -> sourceProvider.wrap(
+                                 Commands.literal("string"),
+                                 s -> s.executes(
+-                                        c -> manipulateData(c, targetProvider, manipulator, stringifyTagList(getSingletonSource(c, sourceProvider), str -> str))
++                                        c -> manipulateData(
++                                            c,
++                                            targetProvider,
++                                            manipulator,
++                                            sourceProvider,
++                                            source -> stringifyTagList(Collections.singletonList(source.getData()), str -> str)
++                                        )
+                                     )
+                                     .then(
+                                         Commands.argument("sourcePath", NbtPathArgument.nbtPath())
+                                             .executes(
+                                                 c -> manipulateData(
+-                                                    c, targetProvider, manipulator, stringifyTagList(resolveSourcePath(c, sourceProvider), str -> str)
++                                                    c,
++                                                    targetProvider,
++                                                    manipulator,
++                                                    sourceProvider,
++                                                    source -> stringifyTagList(resolveSourcePath(c, source), str -> str)
+                                                 )
+                                             )
+                                             .then(
+@@ -226,8 +277,9 @@ public class DataCommands {
+                                                             c,
+                                                             targetProvider,
+                                                             manipulator,
+-                                                            stringifyTagList(
+-                                                                resolveSourcePath(c, sourceProvider),
++                                                            sourceProvider,
++                                                            source -> stringifyTagList(
++                                                                resolveSourcePath(c, source),
+                                                                 str -> substring(str, IntegerArgumentType.getInteger(c, "start"))
+                                                             )
+                                                         )
+@@ -239,8 +291,9 @@ public class DataCommands {
+                                                                     c,
+                                                                     targetProvider,
+                                                                     manipulator,
+-                                                                    stringifyTagList(
+-                                                                        resolveSourcePath(c, sourceProvider),
++                                                                    sourceProvider,
++                                                                    source -> stringifyTagList(
++                                                                        resolveSourcePath(c, source),
+                                                                         str -> substring(
+                                                                             str,
+                                                                             IntegerArgumentType.getInteger(c, "start"),
+@@ -268,6 +321,7 @@ public class DataCommands {
+         }
+
+         return modify;
++        // Folia end - region threading
+     }
+
+     private static String validatedSubstring(final String input, final int start, final int end) throws CommandSyntaxException {
+@@ -294,13 +348,8 @@ public class DataCommands {
+         return index >= 0 ? index : length + index;
+     }
+
+-    private static List<Tag> getSingletonSource(final CommandContext<CommandSourceStack> context, final DataCommands.DataProvider sourceProvider) throws CommandSyntaxException {
+-        DataAccessor source = sourceProvider.access(context);
+-        return Collections.singletonList(source.getData());
+-    }
+-
+-    private static List<Tag> resolveSourcePath(final CommandContext<CommandSourceStack> context, final DataCommands.DataProvider sourceProvider) throws CommandSyntaxException {
+-        DataAccessor source = sourceProvider.access(context);
++    // Folia start - region threading
++    private static List<Tag> resolveSourcePath(final CommandContext<CommandSourceStack> context, final DataAccessor source) throws CommandSyntaxException {
+         NbtPathArgument.NbtPath sourcePath = NbtPathArgument.getPath(context, "sourcePath");
+         return sourcePath.get(source.getData());
+     }
+@@ -310,8 +359,42 @@ public class DataCommands {
+         final DataCommands.DataProvider targetProvider,
+         final DataCommands.DataManipulator manipulator,
+         final List<Tag> source
++    ) {
++        return access(context, targetProvider, target -> manipulateData(context, target, manipulator, copyTags(source)));
++    }
++
++    private static int manipulateData(
++        final CommandContext<CommandSourceStack> context,
++        final DataCommands.DataProvider targetProvider,
++        final DataCommands.DataManipulator manipulator,
++        final DataCommands.DataProvider sourceProvider,
++        final DataCommands.DataSource sourceOperation
++    ) {
++        try {
++            sourceProvider.accessAsync(
++                context,
++                source -> {
++                    try {
++                        final List<Tag> sourceData = copyTags(sourceOperation.get(source));
++                        access(context, targetProvider, target -> manipulateData(context, target, manipulator, sourceData));
++                    } catch (final CommandSyntaxException exception) {
++                        sendFailure(context.getSource(), exception);
++                    }
++                },
++                exception -> sendFailure(context.getSource(), exception)
++            );
++        } catch (final CommandSyntaxException exception) {
++            sendFailure(context.getSource(), exception);
++        }
++        return 1;
++    }
++
++    private static int manipulateData(
++        final CommandContext<CommandSourceStack> context,
++        final DataAccessor target,
++        final DataCommands.DataManipulator manipulator,
++        final List<Tag> source
+     ) throws CommandSyntaxException {
+-        DataAccessor target = targetProvider.access(context);
+         NbtPathArgument.NbtPath targetPath = NbtPathArgument.getPath(context, "targetPath");
+         CompoundTag targetData = target.getData();
+         int result = manipulator.modify(context, targetData, targetPath, source);
+@@ -324,6 +407,42 @@ public class DataCommands {
+         }
+     }
+
++    private static List<Tag> copyTags(final List<Tag> tags) {
++        final List<Tag> copy = new ArrayList<>(tags.size());
++        for (final Tag tag : tags) {
++            copy.add(tag.copy());
++        }
++        return copy;
++    }
++
++    private static int access(
++        final CommandContext<CommandSourceStack> context,
++        final DataCommands.DataProvider provider,
++        final DataCommands.AccessorOperation operation
++    ) {
++        try {
++            provider.accessAsync(
++                context,
++                accessor -> {
++                    try {
++                        operation.run(accessor);
++                    } catch (final CommandSyntaxException exception) {
++                        sendFailure(context.getSource(), exception);
++                    }
++                },
++                exception -> sendFailure(context.getSource(), exception)
++            );
++        } catch (final CommandSyntaxException exception) {
++            sendFailure(context.getSource(), exception);
++        }
++        return 1;
++    }
++
++    private static void sendFailure(final CommandSourceStack source, final CommandSyntaxException exception) {
++        source.sendFailure((Component)exception.getRawMessage());
++    }
++    // Folia end - region threading
++
+     private static int removeData(final CommandSourceStack source, final DataAccessor accessor, final NbtPathArgument.NbtPath path) throws CommandSyntaxException {
+         CompoundTag result = accessor.getData();
+         int count = path.remove(result);
+@@ -405,9 +524,29 @@ public class DataCommands {
+         ArgumentBuilder<CommandSourceStack, ?> create(DataCommands.DataManipulator manipulator);
+     }
+
++    // Folia start - region threading
++    @FunctionalInterface
++    private interface AccessorOperation {
++        void run(DataAccessor accessor) throws CommandSyntaxException;
++    }
++
++    @FunctionalInterface
++    private interface DataSource {
++        List<Tag> get(DataAccessor accessor) throws CommandSyntaxException;
++    }
++    // Folia end - region threading
++
+     public interface DataProvider {
+         DataAccessor access(CommandContext<CommandSourceStack> context) throws CommandSyntaxException;
+
++        // Folia start - region threading
++        void accessAsync(
++            CommandContext<CommandSourceStack> context,
++            java.util.function.Consumer<DataAccessor> success,
++            java.util.function.Consumer<CommandSyntaxException> failure
++        ) throws CommandSyntaxException;
++        // Folia end - region threading
++
+         ArgumentBuilder<CommandSourceStack, ?> wrap(
+             ArgumentBuilder<CommandSourceStack, ?> parent, Function<ArgumentBuilder<CommandSourceStack, ?>, ArgumentBuilder<CommandSourceStack, ?>> function
+         );
+diff --git a/net/minecraft/server/commands/data/EntityDataAccessor.java b/net/minecraft/server/commands/data/EntityDataAccessor.java
+index 178b1becb538f1fc9a8955c87a8a078d53c77d70..28f6cbd1763e4a9cc087c2f199903de085b80eb4 100644
+--- a/net/minecraft/server/commands/data/EntityDataAccessor.java
++++ b/net/minecraft/server/commands/data/EntityDataAccessor.java
+@@ -32,6 +32,24 @@ public class EntityDataAccessor implements DataAccessor {
+             return new EntityDataAccessor(EntityArgument.getEntity(context, arg));
+         }
+
++        // Folia start - region threading
++        @Override
++        public void accessAsync(
++            final CommandContext<CommandSourceStack> context,
++            final java.util.function.Consumer<DataAccessor> success,
++            final java.util.function.Consumer<CommandSyntaxException> failure
++        ) throws CommandSyntaxException {
++            final Entity entity = EntityArgument.getEntity(context, arg);
++            if (!entity.getBukkitEntity().taskScheduler.schedule(
++                scheduledEntity -> success.accept(new EntityDataAccessor(scheduledEntity)),
++                retiredEntity -> failure.accept(EntityArgument.NO_ENTITIES_FOUND.create()),
++                1L
++            )) {
++                failure.accept(EntityArgument.NO_ENTITIES_FOUND.create());
++            }
++        }
++        // Folia end - region threading
++
+         @Override
+         public ArgumentBuilder<CommandSourceStack, ?> wrap(
+             final ArgumentBuilder<CommandSourceStack, ?> parent,
+diff --git a/net/minecraft/server/commands/data/StorageDataAccessor.java b/net/minecraft/server/commands/data/StorageDataAccessor.java
+index 1967b08727464cbc9d7908a030e86f79f276aaf6..5096d3a5f7b3dc0308cd88d7a6ed9f708d8f9567 100644
+--- a/net/minecraft/server/commands/data/StorageDataAccessor.java
++++ b/net/minecraft/server/commands/data/StorageDataAccessor.java
+@@ -2,12 +2,10 @@ package net.minecraft.server.commands.data;
+
+ import com.mojang.brigadier.builder.ArgumentBuilder;
+ import com.mojang.brigadier.context.CommandContext;
+-import com.mojang.brigadier.suggestion.SuggestionProvider;
+ import java.util.Locale;
+ import java.util.function.Function;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.Commands;
+-import net.minecraft.commands.SharedSuggestionProvider;
+ import net.minecraft.commands.arguments.IdentifierArgument;
+ import net.minecraft.commands.arguments.NbtPathArgument;
+ import net.minecraft.nbt.CompoundTag;
+@@ -18,21 +16,37 @@ import net.minecraft.resources.Identifier;
+ import net.minecraft.world.level.storage.CommandStorage;
+
+ public class StorageDataAccessor implements DataAccessor {
+-    private static final SuggestionProvider<CommandSourceStack> SUGGEST_STORAGE = (c, p) -> SharedSuggestionProvider.suggestResource(getGlobalTags(c).keys(), p);
++    // Folia start - region threading
++    // Command storage is owned by the global region, so suggestions cannot read it from a region thread.
++    // Folia end - region threading
+     public static final Function<String, DataCommands.DataProvider> PROVIDER = arg -> new DataCommands.DataProvider() {
+         @Override
+         public DataAccessor access(final CommandContext<CommandSourceStack> context) {
+             return new StorageDataAccessor(StorageDataAccessor.getGlobalTags(context), IdentifierArgument.getId(context, arg));
+         }
+
++        // Folia start - region threading
++        @Override
++        public void accessAsync(
++            final CommandContext<CommandSourceStack> context,
++            final java.util.function.Consumer<DataAccessor> success,
++            final java.util.function.Consumer<com.mojang.brigadier.exceptions.CommandSyntaxException> failure
++        ) {
++            final Identifier id = IdentifierArgument.getId(context, arg);
++            io.papermc.paper.threadedregions.RegionizedServer.getInstance().addTask(
++                () -> success.accept(new StorageDataAccessor(StorageDataAccessor.getGlobalTags(context), id))
++            );
++        }
++        // Folia end - region threading
++
+         @Override
+         public ArgumentBuilder<CommandSourceStack, ?> wrap(
+             final ArgumentBuilder<CommandSourceStack, ?> parent,
+             final Function<ArgumentBuilder<CommandSourceStack, ?>, ArgumentBuilder<CommandSourceStack, ?>> function
+         ) {
+-            return parent.then(
+-                Commands.literal("storage").then(function.apply(Commands.argument(arg, IdentifierArgument.id()).suggests(StorageDataAccessor.SUGGEST_STORAGE)))
+-            );
++            // Folia start - region threading
++            return parent.then(Commands.literal("storage").then(function.apply(Commands.argument(arg, IdentifierArgument.id()))));
++            // Folia end - region threading
+         }
+     };
+     private final CommandStorage storage;
 diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
 index bc857ea218018e5cf651ecd81093b4b4e566034e..5f89d29eaeeb4c63b8b9e034d440204f518efec2 100644
 --- a/net/minecraft/server/dedicated/DedicatedServer.java
