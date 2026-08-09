@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PluginsKers <ikers@foxmail.com>
+Date: Sun, 9 Aug 2026 17:34:46 +0800
+Subject: [PATCH] fix: Validate region ownership for AI sensor targets
+
+Nearest living entity sensors retain direct entity references across scan intervals. Region ownership can change before cached targets are read, while target events can also replace them.
+
+Validate ownership at collection, cached visibility, and follow behavior boundaries.
+
+diff --git a/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java b/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java
+index 801ba5da1fa5fb8b2fc6e76053cf150c040f455a..8a380353919ee24ae4ac2b895afa3a1fceeb5499 100644
+--- a/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java
++++ b/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java
+@@ -27,6 +27,12 @@ public class BabyFollowAdult {
+                             return false;
+                         } else {
+                             LivingEntity adult = i.get(nearestAdult);
++                            // Folia start - AI target memories can outlive region ownership
++                            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(adult)) {
++                                nearestAdult.erase();
++                                return false;
++                            }
++                            // Folia end - AI target memories can outlive region ownership
+                             if (body.closerThan(adult, followRange.maxInclusive() + 1) && !body.closerThan(adult, followRange.minInclusive())) {
+                                 // CraftBukkit start
+                                 org.bukkit.event.entity.EntityTargetLivingEntityEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callEntityTargetLivingEvent(body, adult, org.bukkit.event.entity.EntityTargetEvent.TargetReason.FOLLOW_LEADER);
+@@ -37,6 +43,11 @@ public class BabyFollowAdult {
+                                     walkTarget.erase();
+                                     return true;
+                                 }
++                                // Folia start - plugins can replace targets across region boundaries
++                                if (!org.bukkit.Bukkit.isOwnedByCurrentRegion(event.getTarget())) {
++                                    return false;
++                                }
++                                // Folia end - plugins can replace targets across region boundaries
+                                 adult = ((org.bukkit.craftbukkit.entity.CraftLivingEntity) event.getTarget()).getHandle();
+                                 // CraftBukkit end
+                                 WalkTarget target = new WalkTarget(
+diff --git a/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java b/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java
+index 5c967b55f6ad3b660e9cdf74fadd90c5ea67afb9..d96435c74048372335f882f483b5cffd9cceea2e 100644
+--- a/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java
++++ b/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java
+@@ -32,6 +32,14 @@ public class NearestVisibleLivingEntities {
+         return EMPTY;
+     }
+ 
++    // Folia start - sensor memories can outlive region ownership
++    private boolean isMatchingAndVisible(final LivingEntity entity, final Predicate<LivingEntity> filter) {
++        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(entity)
++            && filter.test(entity)
++            && this.lineOfSightTest.test(entity);
++    }
++    // Folia end - sensor memories can outlive region ownership
++
+     @VisibleForDebug
+     public List<LivingEntity> nearbyEntities() {
+         return this.nearbyEntities;
+@@ -39,7 +47,7 @@ public class NearestVisibleLivingEntities {
+ 
+     public Optional<LivingEntity> findClosest(final Predicate<LivingEntity> filter) {
+         for (LivingEntity nearbyEntity : this.nearbyEntities) {
+-            if (filter.test(nearbyEntity) && this.lineOfSightTest.test(nearbyEntity)) {
++            if (this.isMatchingAndVisible(nearbyEntity, filter)) { // Folia - validate cached sensor entity ownership
+                 return Optional.of(nearbyEntity);
+             }
+         }
+@@ -48,20 +56,22 @@ public class NearestVisibleLivingEntities {
+     }
+ 
+     public Iterable<LivingEntity> findAll(final Predicate<LivingEntity> filter) {
+-        return Iterables.filter(this.nearbyEntities, entity -> filter.test(entity) && this.lineOfSightTest.test(entity));
++        return Iterables.filter(this.nearbyEntities, entity -> this.isMatchingAndVisible(entity, filter)); // Folia - validate cached sensor entity ownership
+     }
+ 
+     public Stream<LivingEntity> find(final Predicate<LivingEntity> filter) {
+-        return this.nearbyEntities.stream().filter(entity -> filter.test(entity) && this.lineOfSightTest.test(entity));
++        return this.nearbyEntities.stream().filter(entity -> this.isMatchingAndVisible(entity, filter)); // Folia - validate cached sensor entity ownership
+     }
+ 
+     public boolean contains(final LivingEntity targetEntity) {
+-        return this.nearbyEntities.contains(targetEntity) && this.lineOfSightTest.test(targetEntity);
++        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(targetEntity)
++            && this.nearbyEntities.contains(targetEntity)
++            && this.lineOfSightTest.test(targetEntity); // Folia - sensor memories can outlive region ownership
+     }
+ 
+     public boolean contains(final Predicate<LivingEntity> filter) {
+         for (LivingEntity nearbyEntity : this.nearbyEntities) {
+-            if (filter.test(nearbyEntity) && this.lineOfSightTest.test(nearbyEntity)) {
++            if (this.isMatchingAndVisible(nearbyEntity, filter)) { // Folia - validate cached sensor entity ownership
+                 return true;
+             }
+         }
+diff --git a/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java b/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
+index 3578ece216827fd5d8c1206c689fc608e97b50df..ce4289340f730a09463504d20055863f2da61e20 100644
+--- a/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
++++ b/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
+@@ -17,7 +17,11 @@ public class NearestLivingEntitySensor<T extends LivingEntity> extends Sensor<T>
+     protected void doTick(final ServerLevel level, final T body) {
+         double followRange = body.getAttributeValue(Attributes.FOLLOW_RANGE);
+         AABB boundingBox = body.getBoundingBox().inflate(followRange, followRange, followRange);
+-        List<LivingEntity> livingEntities = level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive());
++        List<LivingEntity> livingEntities = level.getEntitiesOfClass(
++            LivingEntity.class,
++            boundingBox,
++            mob -> mob != body && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(mob) && mob.isAlive() // Folia - only the owning region may read entity state
++        );
+         livingEntities.sort(Comparator.comparingDouble(body::distanceToSqr));
+         Brain<?> brain = body.getBrain();
+         brain.setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, livingEntities);
