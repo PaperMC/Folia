@@ -14,6 +14,7 @@ rootProject.name = "folia"
 
 include("folia-api")
 include("folia-server")
+include("folia-checkstyle")
 
 gradle.lifecycle.beforeProject {
     val mcVersion = providers.gradleProperty("mcVersion").get().trim()
