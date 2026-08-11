@@ -16441,6 +16441,26 @@ index 525280c15e8ac32c9fdcf0c62ff1343f5aeaddcd..ef32d9bd91cf9a09441f3ef75dac1e40
              return Bee.this.savedFlowerPos != null && !Bee.this.hasHome() && this.wantsToGoToKnownFlower() && !Bee.this.closerThan(Bee.this.savedFlowerPos, 2);
          }
  
+diff --git a/net/minecraft/world/entity/animal/fox/Fox.java b/net/minecraft/world/entity/animal/fox/Fox.java
+index dbe9cb45c7687a9f8da3f2d8b779d15bbe9a3473..4fbdb8bd394f31ede688897541b94ed6fbd30449 100644
+--- a/net/minecraft/world/entity/animal/fox/Fox.java
++++ b/net/minecraft/world/entity/animal/fox/Fox.java
+@@ -917,8 +917,13 @@ public class Fox extends Animal {
+                 // CraftBukkit end - call EntityBreedEvent
+ 
+                 if (loveCause != null) {
+-                    loveCause.awardStat(Stats.ANIMALS_BRED);
+-                    CriteriaTriggers.BRED_ANIMALS.trigger(loveCause, this.animal, this.partner, offspring);
++                    // Folia start - region threading
++                    final Animal partner = this.partner;
++                    loveCause.getBukkitEntity().taskScheduler.scheduleOrExecute((ServerPlayer entityPlayer) -> {
++                        entityPlayer.awardStat(Stats.ANIMALS_BRED);
++                        CriteriaTriggers.BRED_ANIMALS.trigger(entityPlayer, this.animal, partner, offspring);
++                    });
++                    // Folia end - region threading
+                 }
+ 
+                 this.animal.setAge(6000);
 diff --git a/net/minecraft/world/entity/animal/happyghast/HappyGhast.java b/net/minecraft/world/entity/animal/happyghast/HappyGhast.java
 index ee400d1bfd24cc738ca02c1ec50332d7cfc9c266..ae2763b9c852d85b6054fc1fc7c989b064bc30fe 100644
 --- a/net/minecraft/world/entity/animal/happyghast/HappyGhast.java
