@@ -15654,6 +15654,24 @@ index b7a74cfa848511b756187568fb30177a445b5026..03b7e93ca056c3ea91df28c89bf9007b
          final @Nullable EntityReference<StoredEntityType> ref,
          final UUIDLookup<? extends UniquelyIdentifyable> uuidLookup,
          final Class<StoredEntityType> entityClass
+diff --git a/net/minecraft/world/entity/Leashable.java b/net/minecraft/world/entity/Leashable.java
+index 98034a4c96bf2972316078d3b3a49140921aab50..278ff63532717d0bc34f7110a60e4a95e56642b1 100644
+--- a/net/minecraft/world/entity/Leashable.java
++++ b/net/minecraft/world/entity/Leashable.java
+@@ -94,11 +94,11 @@ public interface Leashable {
+             Optional<BlockPos> pos = leashData.delayedLeashInfo.right();
+             if (leashUuid.isPresent()) {
+                 Entity leasher = serverLevel.getEntity(leashUuid.get());
+-                if (leasher != null) {
++                if (leasher != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(leasher)) { // Folia - region threading
+                     setLeashedTo(entity, leasher, true);
+                     return;
+                 }
+-            } else if (pos.isPresent()) {
++            } else if (pos.isPresent() && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, pos.get())) { // Folia - region threading
+                 setLeashedTo(entity, LeashFenceKnotEntity.getOrCreateKnot(serverLevel, pos.get()), true);
+                 return;
+             }
 diff --git a/net/minecraft/world/entity/LivingEntity.java b/net/minecraft/world/entity/LivingEntity.java
 index 3a4da514c163e7565fc241835db52c464a5c4734..1cb8265c1313ad4893d45c344b03007fc4e2de4b 100644
 --- a/net/minecraft/world/entity/LivingEntity.java
