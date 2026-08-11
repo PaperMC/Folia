@@ -477,6 +477,22 @@ index c2174c8ae594fe8ec7741ecdbb53e9acc2bbf5b2..0762cfa9748ed6feff74abe060756d7a
                  .thenCompose(Function.identity())
                  .join()
                  .getList(),
+diff --git a/src/main/java/io/papermc/paper/datapack/PaperDatapack.java b/src/main/java/io/papermc/paper/datapack/PaperDatapack.java
+index bbd709529c58d8b690f56c6f523008d7a04bfbcd..61bc9b7f192d7a5715b2772f1fb6cbdbc9d9a030 100644
+--- a/src/main/java/io/papermc/paper/datapack/PaperDatapack.java
++++ b/src/main/java/io/papermc/paper/datapack/PaperDatapack.java
+@@ -28,6 +28,11 @@ public class PaperDatapack extends PaperDiscoveredDatapack implements Datapack {
+ 
+     @Override
+     public void setEnabled(final boolean enabled) {
++        // Folia start - region threading
++        if (true) {
++            throw new UnsupportedOperationException("Unsupported in region threading");
++        }
++        // Folia end - region threading
+         final MinecraftServer server = MinecraftServer.getServer();
+         final List<Pack> enabledPacks = new ArrayList<>(server.getPackRepository().getSelectedPacks());
+         final Pack packToChange = server.getPackRepository().getPack(this.getName());
 diff --git a/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java b/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java
 index 661e0c324caca4b4fc6fcb31645a03193ab3dec4..8b5f80419efb0d80445306e8b4b397bed935ab97 100644
 --- a/src/main/java/io/papermc/paper/entity/PaperSchoolableFish.java
@@ -793,7 +809,7 @@ index f659aba1587d70b8d4011e66f40f480ff4deeeb4..532076c7358aa355ce5144075fe6bd79
                  MinecraftServer.LOGGER.warn("Asynchronous " + reason + "!", new IllegalStateException());
              }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..ede5ab54621b44e5bf0d4f6297294e55c2473895 100644
+index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..c047875cf8544d138d43d9458dad8ba8185b37b9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -306,7 +306,7 @@ public final class CraftServer implements Server {
@@ -859,7 +875,31 @@ index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..ede5ab54621b44e5bf0d4f6297294e55
          CommandSourceStack sourceStack = VanillaCommandWrapper.getListener(rawSender);
  
          String command = StringUtils.normalizeSpace(commandLine.trim());
-@@ -1164,6 +1197,7 @@ public final class CraftServer implements Server {
+@@ -948,6 +981,11 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public void reload() {
++        // Folia start - region threading
++        if (true) {
++            throw new UnsupportedOperationException("Unsupported in region threading");
++        }
++        // Folia end - region threading
+         // Paper start - lifecycle events
+         if (io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner.INSTANCE.blocksPluginReloading()) {
+             throw new IllegalStateException(org.bukkit.command.defaults.ReloadCommand.RELOADING_DISABLED_MESSAGE);
+@@ -1084,6 +1122,11 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public void reloadData() {
++        // Folia start - region threading
++        if (true) {
++            throw new UnsupportedOperationException("Unsupported in region threading");
++        }
++        // Folia end - region threading
+         ReloadCommand.reload(this.console);
+     }
+ 
+@@ -1164,6 +1207,7 @@ public final class CraftServer implements Server {
  
      @Override
      public World createWorld(WorldCreator creator) {
@@ -867,7 +907,7 @@ index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..ede5ab54621b44e5bf0d4f6297294e55
          Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
          //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
          Preconditions.checkArgument(creator != null, "WorldCreator cannot be null");
-@@ -1321,6 +1355,7 @@ public final class CraftServer implements Server {
+@@ -1321,6 +1365,7 @@ public final class CraftServer implements Server {
  
      @Override
      public boolean unloadWorld(World world, boolean save) {
@@ -875,7 +915,7 @@ index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..ede5ab54621b44e5bf0d4f6297294e55
          //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot unload a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
          if (world == null) {
              return false;
-@@ -2699,8 +2734,23 @@ public final class CraftServer implements Server {
+@@ -2699,8 +2744,23 @@ public final class CraftServer implements Server {
  
      @Override
      public double getAverageTickTime() {
@@ -901,7 +941,7 @@ index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..ede5ab54621b44e5bf0d4f6297294e55
      }
  
      private final org.bukkit.Server.Spigot spigot = new org.bukkit.Server.Spigot() {
-@@ -2757,7 +2807,27 @@ public final class CraftServer implements Server {
+@@ -2757,7 +2817,27 @@ public final class CraftServer implements Server {
  
      @Override
      public double[] getTPS() {
@@ -930,7 +970,7 @@ index 716c3b17dc07eb2417dfb0084fe75dbd270f031a..ede5ab54621b44e5bf0d4f6297294e55
      }
  
      @Override
-@@ -2927,7 +2997,7 @@ public final class CraftServer implements Server {
+@@ -2927,7 +3007,7 @@ public final class CraftServer implements Server {
  
      @Override
      public int getCurrentTick() {

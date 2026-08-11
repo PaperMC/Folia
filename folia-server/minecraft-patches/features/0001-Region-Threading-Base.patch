@@ -13741,7 +13741,7 @@ index e38acabda1d2e49d88b94d46cc51f6602870d6b6..b1b7bfa011bd4b97896cac51cb36e3f4
              parsedDate = defaultValue;
          }
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index baec5d072b8f2d9379dba850b04e881e5267ca6b..9bbb78ccc6c64930b6c52a3cbc73eb9d81167464 100644
+index baec5d072b8f2d9379dba850b04e881e5267ca6b..1f3a086a294bf137e226b78e7def6ab97e0bc36a 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -111,10 +111,10 @@ public abstract class PlayerList {
@@ -14113,6 +14113,47 @@ index baec5d072b8f2d9379dba850b04e881e5267ca6b..9bbb78ccc6c64930b6c52a3cbc73eb9d
              final net.minecraft.world.scores.Scoreboard scoreboard = this.getServer().getLevel(Level.OVERWORLD).getScoreboard();
              final PlayerTeam team = scoreboard.getPlayersTeam(this.collideRuleTeamName);
              if (team != null) scoreboard.removePlayerTeam(team);
+@@ -1270,8 +1355,17 @@ public abstract class PlayerList {
+         //     playerAdvancements.reload(this.server.getAdvancements());
+         // }
+         for (ServerPlayer player : this.players) {
+-            player.getAdvancements().reload(this.server.getAdvancements());
+-            player.getAdvancements().flushDirty(player, false); // CraftBukkit - trigger immediate flush of advancements
++            // Folia start - region threading
++
++            // while normally fine to just leave as-is, since disabled the Minecraft reload command,
++            // the method CraftServer#updateResources can call this, which would kill any player that is
++            // outside the region in context
++
++            player.getBukkitEntity().taskScheduler.scheduleOrExecute((ServerPlayer entityPlayer) -> {
++                entityPlayer.getAdvancements().reload(this.server.getAdvancements());
++                entityPlayer.getAdvancements().flushDirty(entityPlayer, false); // CraftBukkit - trigger immediate flush of advancements
++            });
++            // Folia end - region threading
+         }
+         // CraftBukkit end
+ 
+@@ -1292,8 +1386,18 @@ public abstract class PlayerList {
+         );
+ 
+         for (ServerPlayer player : this.players) {
+-            player.connection.send(recipes);
+-            player.getRecipeBook().sendInitialRecipeBook(player);
++            // Folia start - region threading
++
++            // while normally fine to just leave as-is, since disabled the Minecraft reload command,
++            // the method CraftServer#updateResources can call this, which would kill any player that is
++            // outside the region in context
++
++            // usage of "schedule" and not "scheduleOrExecute" is intentional
++            player.getBukkitEntity().taskScheduler.schedule((ServerPlayer entityPlayer) -> {
++                entityPlayer.connection.send(recipes);
++                entityPlayer.getRecipeBook().sendInitialRecipeBook(entityPlayer);
++            }, null, 1L);
++            // Folia end - region threading
+         }
+     }
+ 
 diff --git a/net/minecraft/server/players/StoredUserList.java b/net/minecraft/server/players/StoredUserList.java
 index eaf8fb8a9cf94d0d16debf90e5ceda3f91c979ef..cf6c71db3dd39094608755998ceff6ca067238f3 100644
 --- a/net/minecraft/server/players/StoredUserList.java
