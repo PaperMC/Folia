@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mattia <mattiapearl@gmail.com>
+Date: Mon, 17 Aug 2026 17:41:57 +0200
+Subject: [PATCH] Add process-wide fluid tick budget
+
+Folia applies the existing fluid tick limit independently to each
+ticking region, so aggregate work can grow with the number of active
+regions. Add an opt-in process-wide allocation with regional floors,
+equal sharing, bounded age weighting, rotating tie order, configuration
+validation, and profiler counters. Scheduled work is delayed rather
+than discarded.
+
+diff --git a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
+index c52d41fd078b7f7aeb3633a9c196bbaba299af0f..d08f5dd2cf3f4dc9322faaea2eb9194277f84c4e 100644
+--- a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
++++ b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
+@@ -404,6 +404,28 @@ public class GlobalConfiguration extends ConfigurationPart {
+         public int threads = -1;
+         public int gridExponent = 4;
+         public io.papermc.paper.threadedregions.TickRegionScheduler.SchedulerType scheduler = io.papermc.paper.threadedregions.TickRegionScheduler.SchedulerType.EDF;
++        public FluidTickBudget fluidTickBudget;
++
++        public class FluidTickBudget extends ConfigurationPart {
++            @Comment("Limits fluid ticks across all ticking regions. Work is delayed, not discarded.")
++            public boolean enabled = false;
++            @Comment("Maximum fluid ticks granted process-wide during each 50 ms wall-clock interval.")
++            @Constraints.Min(1)
++            public int processMaximum = 2_000;
++            @Comment("Minimum grant attempted for every active region before distributing the remainder.")
++            @Constraints.Min(0)
++            public int regionMinimum = 50;
++            @Comment("Queue age, in ticks, represented by each additional age weight.")
++            @Constraints.Min(1)
++            public int targetAgeTicks = 20;
++            @Comment("Maximum weight assigned to an old runnable queue.")
++            @Constraints.Min(1)
++            public int maxAgeWeight = 8;
++            @Comment("Percentage of the remainder distributed equally before age weighting.")
++            @Constraints.Min(0)
++            @Constraints.Max(100)
++            public int fairSharePercent = 75;
++        }
+ 
+         @PostProcess
+         public void postProcess() {
