@@ -9,20 +9,30 @@ jobs:
   build:
     # Only run on PRs if the source branch is on someone else's repo
     if: ${{ github.event_name != 'pull_request' || github.repository != github.event.pull_request.head.repo.full_name }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-paper
     steps:
       - name: Checkout Git Repository
-        uses: actions/checkout@v6
+        uses: namespacelabs/nscloud-checkout-action@v9
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '25'
-      - name: Setup Gradle
+          cache: "" # namespace handles this
+      - name: Set up cache
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: gradle
+      - name: Setup gradle build cache
+        run: |
+          nsc cache gradle setup --init-gradle /tmp/init.gradle
+      - name: Setup gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-disabled: true # namespace handles this
       - name: Configure Git User Details
         run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions"
       - name: Apply Patches
-        run: ./gradlew applyAllPatches --stacktrace
+        run: ./gradlew --init-script=/tmp/init.gradle applyAllPatches --stacktrace
       - name: Build
-        run: ./gradlew build
+        run: ./gradlew --init-script=/tmp/init.gradle build
