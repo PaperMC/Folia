@@ -235,3 +235,5 @@ found in `./patches` and its subdirectories except when noted otherwise.
 The fork is based off of PaperMC's fork example found [here](https://github.com/PaperMC/paperweight-examples).
 As such, it contains modifications to it in this project, please see the repository for license information
 of modified files.
+
+<img src="https://papermc.io/assets/misc/namespace-oss-badge.svg?project=folia" alt="CI powered by namespace badge" />
