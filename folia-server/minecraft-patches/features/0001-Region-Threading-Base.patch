@@ -1565,7 +1565,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..aa575f3b76ef70ffb9f0410e7e5cfe7af384bfbd
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -0,0 +1,427 @@
+@@ -0,0 +1,429 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.common.util.TimeUtil;
@@ -1606,6 +1606,7 @@ index 0000000000000000000000000000000000000000..aa575f3b76ef70ffb9f0410e7e5cfe7a
 +
 +    public final RegionizedTaskQueue taskQueue = new RegionizedTaskQueue();
 +
++    private long lastMapAutoSave = System.nanoTime();
 +    private final CopyOnWriteArrayList<ServerLevel> worlds = new CopyOnWriteArrayList<>();
 +    private final CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<>();
 +
@@ -1827,6 +1828,8 @@ index 0000000000000000000000000000000000000000..aa575f3b76ef70ffb9f0410e7e5cfe7a
 +            this.globalTick(world, tickCount);
 +        }
 +
++        this.autoSaveMaps();
++
 +        // tick connections
 +        this.tickConnections();
 +
@@ -1940,8 +1943,6 @@ index 0000000000000000000000000000000000000000..aa575f3b76ef70ffb9f0410e7e5cfe7a
 +        world.updateTickData();
 +
 +        world.moonrise$getChunkTaskScheduler().chunkHolderManager.processTicketUpdates(); // required to eventually process ticket updates
-+
-+        this.autoSaveMaps(world);
 +    }
 +
 +    private void updateRaids(final ServerLevel world) {
@@ -1982,12 +1983,13 @@ index 0000000000000000000000000000000000000000..aa575f3b76ef70ffb9f0410e7e5cfe7a
 +        }
 +    }
 +
-+    private void autoSaveMaps(final ServerLevel world) {
-+        final int autoSavePeriod = net.minecraft.server.MinecraftServer.getServer().autosavePeriod;
++    private void autoSaveMaps() {
++        final MinecraftServer server = MinecraftServer.getServer();
++        final int autoSavePeriod = server.autosavePeriod;
 +        final long currTime = System.nanoTime();
-+        if (autoSavePeriod > 0 && (currTime - world.lastMapAutoSave) > (java.util.concurrent.TimeUnit.SECONDS.toNanos((long)autoSavePeriod) / 20L)) {
-+            world.lastMapAutoSave = currTime;
-+            world.getDataStorage().saveMaps();
++        if (autoSavePeriod > 0 && (currTime - this.lastMapAutoSave) > (java.util.concurrent.TimeUnit.SECONDS.toNanos((long)autoSavePeriod) / 20L)) {
++            this.lastMapAutoSave = currTime;
++            server.getDataStorage().saveMaps();
 +        }
 +    }
 +
@@ -11326,7 +11328,7 @@ index 59598bfb95c2f8a38efd92685c46a954dc76739d..848f4286b1b64f257c8383964b95323d
          // Paper start - rewrite chunk system
          this.moonrise$setEntityLookup(new ca.spottedleaf.moonrise.patches.chunk_system.level.entity.server.ServerEntityLookup((ServerLevel)(Object)this, ((ServerLevel)(Object)this).new EntityCallbacks()));
          this.chunkTaskScheduler = new ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler((ServerLevel)(Object)this);
-@@ -742,8 +702,64 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -742,8 +702,62 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          this.chunkDataController = new ca.spottedleaf.moonrise.patches.chunk_system.io.datacontroller.ChunkDataController((ServerLevel)(Object)this, this.chunkTaskScheduler);
          // Paper end - rewrite chunk system
          this.getCraftServer().addWorld(this.getWorld()); // CraftBukkit
@@ -11351,8 +11353,6 @@ index 59598bfb95c2f8a38efd92685c46a954dc76739d..848f4286b1b64f257c8383964b95323d
 +
 +    public static final record PendingTeleport(Entity.EntityTreeNode rootVehicle, Vec3 to) {}
 +    private final it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<PendingTeleport> pendingTeleports = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
-+
-+    public long lastMapAutoSave = System.nanoTime();
 +
 +    public void pushPendingTeleport(final PendingTeleport teleport) {
 +        synchronized (this.pendingTeleports) {
