@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akram Soqrati <169198624+itarqos5@users.noreply.github.com>
+Date: Thu, 27 Aug 2026 01:20:00 +0000
+Subject: [PATCH] Test ender dragon part position sync
+
+
+diff --git a/src/test/java/io/papermc/paper/threadedregions/EnderDragonPartPositionTest.java b/src/test/java/io/papermc/paper/threadedregions/EnderDragonPartPositionTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..67eea51b3e8989f1b2f2950bd483ab287fe34aac
+--- /dev/null
++++ b/src/test/java/io/papermc/paper/threadedregions/EnderDragonPartPositionTest.java
+@@ -0,0 +1,32 @@
++package io.papermc.paper.threadedregions;
++
++import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
++import net.minecraft.world.entity.boss.enderdragon.EnderDragonPart;
++import org.bukkit.support.environment.Normal;
++import org.junit.jupiter.api.Test;
++
++import static org.mockito.Mockito.doCallRealMethod;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.when;
++
++@Normal
++class EnderDragonPartPositionTest {
++
++    @Test
++    void syncsPartsToDragonPositionBeforeRegistration() {
++        final EnderDragon dragon = mock(EnderDragon.class);
++        final EnderDragonPart[] parts = {mock(EnderDragonPart.class), mock(EnderDragonPart.class)};
++        when(dragon.getSubEntities()).thenReturn(parts);
++        when(dragon.getX()).thenReturn(4096.5);
++        when(dragon.getY()).thenReturn(80.0);
++        when(dragon.getZ()).thenReturn(-4096.5);
++        doCallRealMethod().when(dragon).syncPartPositions();
++
++        dragon.syncPartPositions();
++
++        for (final EnderDragonPart part : parts) {
++            verify(part).setPos(4096.5, 80.0, -4096.5);
++        }
++    }
++}

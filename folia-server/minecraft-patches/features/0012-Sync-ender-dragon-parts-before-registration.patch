@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akram Soqrati <169198624+itarqos5@users.noreply.github.com>
+Date: Thu, 27 Aug 2026 01:20:00 +0000
+Subject: [PATCH] Sync ender dragon parts before registration
+
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
+index aa53138b3670a8337b639472a6ab5ce46702ff76..4b77802e817825259fe55e06acb7b1af1c140bf1 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
+@@ -86,6 +86,11 @@ public final class ServerEntityLookup extends EntityLookup {
+ 
+     @Override
+     protected void addEntityCallback(final Entity entity) {
++        // Folia start - keep multipart entities in the owning region before registration
++        if (entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon) {
++            dragon.syncPartPositions();
++        }
++        // Folia end - keep multipart entities in the owning region before registration
+         this.world.getCurrentWorldData().addEntity(entity); // Folia - region threading
+         if (entity instanceof ServerPlayer player) {
+             ((ChunkSystemServerLevel)this.serverWorld).moonrise$getNearbyPlayers().addPlayer(player);
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+index 5e5036ccc94160f45a0215a9191d5b980f87304c..068470874f280917601981871b4b57dc61bb0841 100644
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4463,6 +4463,11 @@ public abstract class Entity
+         Entity copy = this.getType().create(destination, EntitySpawnReason.DIMENSION_TRAVEL);
+         copy.restoreFrom(this);
+         copy.transform(pos, yaw, pitch, velocity);
++        // Folia start - keep multipart entities in the owning region after transform
++        if (copy instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon) {
++            dragon.syncPartPositions();
++        }
++        // Folia end - keep multipart entities in the owning region after transform
+         // vanilla code used to call remove _after_ copying, and some stuff is required to be after copy - so add hook here
+         // for example, clearing of inventory after switching dimensions
+         this.postRemoveAfterChangingDimensions();
+diff --git a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+index ab921ab4b4cc860abd77744f2bd201013e136e51..393fe38ecb9937861f0fa40122f5c46f97301f55 100644
+--- a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
++++ b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+@@ -1011,4 +1011,12 @@ public class EnderDragon extends Mob implements Enemy {
+         return 500;
+     }
+     // Paper end - init expToDrop for already dying spawned dragon
++
++    // Folia start - keep multipart entities in the owning region before registration
++    public void syncPartPositions() {
++        for (EnderDragonPart part : this.getSubEntities()) {
++            this.tickPart(part, 0.0, 0.0, 0.0);
++        }
++    }
++    // Folia end - keep multipart entities in the owning region before registration
+ }
