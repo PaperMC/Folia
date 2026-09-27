@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: vertraxumtesOG <kekfluffy@gmail.com>
+Date: Sun, 27 Sep 2026 16:28:15 +0200
+Subject: [PATCH] Do not discard ender pearls while owner is teleporting
+
+
+diff --git a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
+index 8dc8c6cfc01be3787142a117ef2b98f5294a8cef..697aaaaa8a3580477c6e14ff0ce867cb6b810721 100644
+--- a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
++++ b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
+@@ -175,6 +175,11 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+                     throw new IllegalStateException("Must be on tick thread for ticking entity: " + this);
+                 }
+                 Entity entity = this.getOwnerRaw();
++                if (entity == null && this.owner != null) {
++                    // owning player may be removed from the world while being teleported asynchronously,
++                    // the task scheduler will run the teleport once the player is placed again
++                    entity = level.getServer().getPlayerList().getPlayer(this.owner.getUUID());
++                }
+                 if (entity != null) {
+                     attemptTeleport(entity, (ServerLevel)this.level(), this.position());
+                 }
+@@ -263,6 +268,7 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+             Entity owner = this.owner != null ? findOwnerIncludingDeadPlayer(serverLevel, this.owner.getUUID()) : null;
+             if (owner instanceof ServerPlayer serverPlayer
+                 && !owner.isAlive()
++                && (serverPlayer.isDeadOrDying() || serverPlayer.getRemovalReason() != Entity.RemovalReason.CHANGED_DIMENSION) // Folia - region threading - owner is temporarily removed while teleporting asynchronously
+                 && !serverPlayer.wonGame
+                 && serverPlayer.level().getGameRules().get(GameRules.ENDER_PEARLS_VANISH_ON_DEATH)) {
+                 this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.DESPAWN); // CraftBukkit - add Bukkit remove cause
