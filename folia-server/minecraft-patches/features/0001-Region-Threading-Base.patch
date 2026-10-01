@@ -17213,6 +17213,41 @@ index b37618125e85c1c6f284c7287202aae814c1ecfe..136e018d83c5be90894358a97b23f5fc
          boolean serverPlayerHasDisconnected = player instanceof ServerPlayer serverPlayer && serverPlayer.hasDisconnected();
          if (playerRemovedNotChangingDimension || serverPlayerHasDisconnected) {
              player.drop(carried, false);
+diff --git a/net/minecraft/world/item/BucketItem.java b/net/minecraft/world/item/BucketItem.java
+index 42fbfb0e3eff318742928a94bddc0fbcc4d45596..f641b6233be696410cce9ecb5c487cfec56ca774 100644
+--- a/net/minecraft/world/item/BucketItem.java
++++ b/net/minecraft/world/item/BucketItem.java
+@@ -32,7 +32,7 @@ import net.minecraft.world.phys.HitResult;
+ import org.jspecify.annotations.Nullable;
+ 
+ public class BucketItem extends Item implements DispensibleContainerItem {
+-    private static @Nullable ItemStack itemLeftInHandAfterPlayerBucketEmptyEvent = null; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++    private static final ThreadLocal<@Nullable ItemStack> itemLeftInHandAfterPlayerBucketEmptyEvent = new ThreadLocal<>(); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+     protected final Fluid content;
+ 
+     public BucketItem(final Fluid content, final Item.Properties properties) {
+@@ -109,9 +109,9 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+ 
+     public static ItemStack getEmptySuccessItem(final ItemStack itemStack, final Player player) {
+         // Paper start - Fix PlayerBucketEmptyEvent result itemstack
+-        if (itemLeftInHandAfterPlayerBucketEmptyEvent != null) {
+-            ItemStack itemInHand = itemLeftInHandAfterPlayerBucketEmptyEvent;
+-            itemLeftInHandAfterPlayerBucketEmptyEvent = null;
++        final ItemStack itemInHand = itemLeftInHandAfterPlayerBucketEmptyEvent.get(); // Folia - region threading
++        if (itemInHand != null) {
++            itemLeftInHandAfterPlayerBucketEmptyEvent.remove(); // Folia - region threading
+             return itemInHand;
+         }
+         // Paper end - Fix PlayerBucketEmptyEvent result itemstack
+@@ -147,7 +147,7 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+                     player.containerMenu.sendAllDataToRemote(); // SPIGOT-4541
+                     return false;
+                 }
+-                itemLeftInHandAfterPlayerBucketEmptyEvent = event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.craftbukkit.inventory.CraftItemStack.asNewCraftStack(net.minecraft.world.item.Items.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                itemLeftInHandAfterPlayerBucketEmptyEvent.set(event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.craftbukkit.inventory.CraftItemStack.asNewCraftStack(net.minecraft.world.item.Items.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+             }
+             // CraftBukkit end
+             if (!canPlaceFluidInsideBlock) {
 diff --git a/net/minecraft/world/item/ItemStack.java b/net/minecraft/world/item/ItemStack.java
 index 44a7590558fa73fb570f76ba7a4e7db1415d08f7..dc1e9acce122f3ebd7bf2b03150b4045db9493df 100644
 --- a/net/minecraft/world/item/ItemStack.java
