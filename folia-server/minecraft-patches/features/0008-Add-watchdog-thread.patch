@@ -8,10 +8,10 @@ of the ticking region should help debug the cause.
 
 diff --git a/io/papermc/paper/threadedregions/FoliaWatchdogThread.java b/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e9ca1a15049b0211d10401cb78e953b93afaf6c7
+index 0000000000000000000000000000000000000000..3d9f6d67e75e4e36fd893e1d5aeb3ea1f2a18c20
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,109 @@
 +package io.papermc.paper.threadedregions;
 +
 +import com.mojang.logging.LogUtils;
@@ -21,6 +21,7 @@ index 0000000000000000000000000000000000000000..e9ca1a15049b0211d10401cb78e953b9
 +import org.slf4j.Logger;
 +import org.spigotmc.WatchdogThread;
 +import java.lang.management.ManagementFactory;
++import java.lang.management.ThreadInfo;
 +import java.util.ArrayList;
 +import java.util.LinkedHashSet;
 +import java.util.List;
@@ -82,6 +83,13 @@ index 0000000000000000000000000000000000000000..e9ca1a15049b0211d10401cb78e953b9
 +                if (elapsed <= TimeUnit.SECONDS.toNanos(5L)) {
 +                    continue;
 +                }
++
++                // the thread may have exited, i.e. the region was halted during shutdown
++                final ThreadInfo threadInfo = ManagementFactory.getThreadMXBean().getThreadInfo(tick.thread.threadId(), Integer.MAX_VALUE);
++                if (threadInfo == null) {
++                    continue;
++                }
++
 +                tick.lastPrint = now;
 +
 +                final double totalElapsedS = (double)(now - tick.start) / 1.0E9;
@@ -96,10 +104,7 @@ index 0000000000000000000000000000000000000000..e9ca1a15049b0211d10401cb78e953b9
 +                    LOGGER.error("Global region has not responded in " + totalElapsedS + "s:");
 +                }
 +
-+                WatchdogThread.dumpThread(
-+                    ManagementFactory.getThreadMXBean().getThreadInfo(tick.thread.threadId(), Integer.MAX_VALUE),
-+                    Bukkit.getServer().getLogger()
-+                );
++                WatchdogThread.dumpThread(threadInfo, Bukkit.getServer().getLogger());
 +            }
 +        }
 +    }
