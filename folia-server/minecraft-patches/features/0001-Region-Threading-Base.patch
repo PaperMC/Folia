@@ -14663,7 +14663,7 @@ index bb5f66c62c9541bb76a9faad9e9ee91c1466fc6a..66d7bb9418832638c220a08d06c01ef0
              return blockToFallLocation(blockState);
          } else {
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e15fad9ede 100644
+index 9757a49eca1d52194881841e5f8661b523b375a5..fe1fb9e1cb0bd838094e324559a8c6cb7ccfdcdc 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -174,7 +174,7 @@ public abstract class Entity
@@ -14855,7 +14855,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
          if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof Player)) { return null; } // Paper - Perf: Disable Scoreboards for non players by default
          return this.level().getScoreboard().getPlayersTeam(this.getScoreboardName());
      }
-@@ -4195,7 +4229,791 @@ public abstract class Entity
+@@ -4195,7 +4229,792 @@ public abstract class Entity
          this.portalProcess = oldEntity.portalProcess;
      }
  
@@ -15557,7 +15557,8 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
 +    protected boolean portalToAsync(ServerLevel destination, BlockPos portalPos, boolean takePassengers,
 +                                    PortalType type, java.util.function.Consumer<Entity> teleportComplete) {
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot portal entity async");
-+        if (!this.canPortalAsync(destination, takePassengers)) {
++        if (!((ServerLevel)this.level).isAllowedToEnterPortal(destination)
++            || !this.canPortalAsync(destination, takePassengers)) {
 +            return false;
 +        }
 +
@@ -15647,7 +15648,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
          // Paper start - Fix item duplication and teleport issues
          if ((!this.isAlive() || !this.valid) && (transition.newLevel() != this.level)) {
              LOGGER.warn("Illegal Entity Teleport {} to {}:{}", this, transition.newLevel(), transition.position(), new Throwable());
-@@ -4414,6 +5232,12 @@ public abstract class Entity
+@@ -4414,6 +5233,12 @@ public abstract class Entity
          }
      }
  
@@ -15660,7 +15661,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
          if (this instanceof Leashable leashable && leashable.isLeashed()) { // Paper - only call if it is leashed
-@@ -4758,6 +5582,12 @@ public abstract class Entity
+@@ -4758,6 +5583,12 @@ public abstract class Entity
      }
  
      public void startSeenByPlayer(final ServerPlayer player) {
@@ -15673,7 +15674,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
      }
  
      public void stopSeenByPlayer(final ServerPlayer player) {
-@@ -4767,6 +5597,12 @@ public abstract class Entity
+@@ -4767,6 +5598,12 @@ public abstract class Entity
              new io.papermc.paper.event.player.PlayerUntrackEntityEvent(player.getBukkitEntity(), this.getBukkitEntity()).callEvent();
          }
          // Paper end - entity tracking events
@@ -15686,7 +15687,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
      }
  
      public float rotate(final Rotation rotation) {
-@@ -5176,7 +6012,8 @@ public abstract class Entity
+@@ -5176,7 +6013,8 @@ public abstract class Entity
              return;
          }
          // Paper end - Block invalid positions and bounding box
@@ -15696,7 +15697,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
              synchronized (this.posLock) { // Paper - detailed watchdog information
              this.position = new Vec3(x, y, z);
              } // Paper - detailed watchdog information
-@@ -5209,7 +6046,7 @@ public abstract class Entity
+@@ -5209,7 +6047,7 @@ public abstract class Entity
          }
          // Paper start - Block invalid positions and bounding box; don't allow desync of pos and AABB
          // hanging has its own special logic
@@ -15705,7 +15706,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end - Block invalid positions and bounding box
-@@ -5328,6 +6165,12 @@ public abstract class Entity
+@@ -5328,6 +6166,12 @@ public abstract class Entity
          return this.removalReason != null;
      }
  
@@ -15718,7 +15719,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
      public Entity.@Nullable RemovalReason getRemovalReason() {
          return this.removalReason;
      }
-@@ -5342,6 +6185,9 @@ public abstract class Entity
+@@ -5342,6 +6186,9 @@ public abstract class Entity
          // Paper end - rewrite chunk system
          org.bukkit.craftbukkit.event.CraftEventFactory.callEntityRemoveEvent(this, cause); // CraftBukkit
          final boolean alreadyRemoved = this.removalReason != null; // Paper - Folia schedulers
@@ -15728,7 +15729,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
          if (this.removalReason == null) {
              this.removalReason = reason;
              this.removeEventCause = cause; // Paper
-@@ -5370,6 +6216,10 @@ public abstract class Entity
+@@ -5370,6 +6217,10 @@ public abstract class Entity
          // Paper end
      }
  
@@ -15739,7 +15740,7 @@ index 9757a49eca1d52194881841e5f8661b523b375a5..a2e4636c28232fefc12bef34e585f3e1
      // Paper start - Folia schedulers
      /**
       * Invoked only when the entity is truly removed from the server, never to be added to any world.
-@@ -5381,7 +6231,7 @@ public abstract class Entity
+@@ -5381,7 +6232,7 @@ public abstract class Entity
      // Paper end - Folia schedulers
      // Paper start - optimise Folia entity scheduler
      public final void registerScheduler() {
