@@ -135,7 +135,7 @@ index 8b9dc582627b46843f4b5ea6f8c3df2d8cac46fa..306216138e21c41937e4728e8004220a
      public ChunkData() {
  
 diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
-index 328784ba08236553e49d62320b79f7222292412f..1e91958d26b925b1a3a980798895477578d30765 100644
+index 99b5026d8dfa9668caf15e9ae27619d9d433b441..ff6d0b83db376e7cfe0d2a5e61270b76a4c73c49 100644
 --- a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
 +++ b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
 @@ -468,6 +468,19 @@ public abstract class EntityLookup implements LevelEntityGetter<Entity> {
@@ -321,7 +321,7 @@ index 78659864651362de4fc104cbeb3e2e9a31b101d9..4e13aee3cd89204e1e8eb2b4bd276fec
          final List<SectionToUnload> ret = new ArrayList<>();
  
 diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
-index ef990079fe5214a2817f55249163548f601523de..994a86cdeb2fd621bd42e7960da186523cd3206b 100644
+index e984597384eba6b8ac877f2803bdbed754ac7ba8..af4f5ea1e2a553d098c7d90953bd98b44992ea08 100644
 --- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
 +++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
 @@ -62,6 +62,14 @@ import java.util.concurrent.atomic.AtomicReference;
@@ -340,7 +340,7 @@ index ef990079fe5214a2817f55249163548f601523de..994a86cdeb2fd621bd42e7960da18652
  
      private static final Logger LOGGER = LogUtils.getClassLogger();
 @@ -83,30 +91,83 @@ public final class ChunkHolderManager {
-     private final ConcurrentChainedLong2ReferenceHashTable<NewChunkHolder> chunkHolders = ConcurrentChainedLong2ReferenceHashTable.createWithCapacity(16384, 0.25f);
+     private final ConcurrentChainedLong2ReferenceHashTable<NewChunkHolder> chunkHolders = ConcurrentChainedLong2ReferenceHashTable.createWithCapacity(ConcurrentChainedLong2ReferenceHashTable.defaultCapacity(), 0.25f);
      private final ServerLevel world;
      private final ChunkTaskScheduler taskScheduler;
 -    private long currentTick;
@@ -437,7 +437,7 @@ index ef990079fe5214a2817f55249163548f601523de..994a86cdeb2fd621bd42e7960da18652
 +
  
      // mapping of counter id -> (mapping of pos->count)
-     private final ConcurrentChainedLong2ReferenceHashTable<ConcurrentChainedLong2LongHashTable> ticketCounters = new ConcurrentChainedLong2ReferenceHashTable<>();
+     private final ConcurrentChainedLong2ReferenceHashTable<ConcurrentChainedLong2LongHashTable> ticketCounters = ConcurrentChainedLong2ReferenceHashTable.createWithCapacity(ConcurrentChainedLong2ReferenceHashTable.defaultCapacity(), 0.5f);
 @@ -193,8 +254,13 @@ public final class ChunkHolderManager {
      }
  
@@ -718,7 +718,7 @@ index ef990079fe5214a2817f55249163548f601523de..994a86cdeb2fd621bd42e7960da18652
              }
          }
 diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
-index bbba1766ed9da671022c467a45f7de479fb6abb4..244f7af564d3460ece33c00c7c23b071893159d8 100644
+index 130fc0ea8326ab406910b5429acd99ea91708db2..f1952fbdf9cadef9095b5de8777c466f7bbd77a7 100644
 --- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
 +++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
 @@ -114,7 +114,7 @@ public final class ChunkTaskScheduler {
@@ -7516,7 +7516,7 @@ index e02d76293dfc5891ef4aa0c86a350fe476022fb4..3006fa9373fce5ff13d15055999b5914
          if (!this.haveTestsStarted()) {
              this.startTests(level);
 diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
-index 936200d7620e1fe83eb45ddbcff86b6b6ecaab8f..245ad3e4c30c5d9946fa9ca1c9a6489b15d6dc65 100644
+index 76596e87945f0b95af8032338a64817a8faed4d0..2cd70b595e828db9b03ec038dba76007c938b98e 100644
 --- a/net/minecraft/network/Connection.java
 +++ b/net/minecraft/network/Connection.java
 @@ -64,7 +64,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
@@ -10968,7 +10968,7 @@ index 3509df9dd423b38d1ca3e4a420d1352ae95d3551..c473bc729c813592f0015aad570b8a9c
              }
          }
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index c4cfb53e145d69666ffc27ef4ee0c50b54eb9143..63be2afdd54ca5509acf5326dbf7bba6bfbd1fa7 100644
+index ef53d4d17222a882dd3d33575096c864a0a00a06..d9e1eff4830b3b956f0b914a2ff11c990ee3a5e3 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -70,10 +70,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
@@ -10981,7 +10981,7 @@ index c4cfb53e145d69666ffc27ef4ee0c50b54eb9143..63be2afdd54ca5509acf5326dbf7bba6
 -    private NaturalSpawner.@Nullable SpawnState lastSpawnState;
 +    // Folia - moved to regionised world data
      // Paper start
-     public final ca.spottedleaf.concurrentutil.map.concurrent.longs.ConcurrentChainedLong2ReferenceHashTable<net.minecraft.world.level.chunk.LevelChunk> fullChunks = new ca.spottedleaf.concurrentutil.map.concurrent.longs.ConcurrentChainedLong2ReferenceHashTable<>();
+     public final ca.spottedleaf.concurrentutil.map.concurrent.longs.ConcurrentChainedLong2ReferenceHashTable<net.minecraft.world.level.chunk.LevelChunk> fullChunks = ca.spottedleaf.concurrentutil.map.concurrent.longs.ConcurrentChainedLong2ReferenceHashTable.createWithCapacity(ca.spottedleaf.concurrentutil.map.concurrent.longs.ConcurrentChainedLong2ReferenceHashTable.defaultCapacity(), 0.25f);
      public int getFullChunksCount() {
 @@ -100,10 +97,15 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
  
@@ -13701,7 +13701,7 @@ index 8178922f5ecc7f6709335c7fbeb6dca505b044bb..27332c1d968f8793627786d3c503446d
  
      public final boolean isDisconnected() {
 diff --git a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index a1855a257c3ac801bbd371ca4508af755550d737..2663fbff3e15557251bbde81c5876bed80e8f29c 100644
+index eea7dd596eb9ac75dee29d843d786493d44034f3..f3a246beee9812b0999acb1153d1f73a66fcf34b 100644
 --- a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 @@ -91,7 +91,13 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
@@ -14663,7 +14663,7 @@ index bb5f66c62c9541bb76a9faad9e9ee91c1466fc6a..66d7bb9418832638c220a08d06c01ef0
              return blockToFallLocation(blockState);
          } else {
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 9757a49eca1d52194881841e5f8661b523b375a5..fe1fb9e1cb0bd838094e324559a8c6cb7ccfdcdc 100644
+index 5cc94652112c67ca4e7ae6e8b324e9c9f8908d7d..524119931531533b7d43de9185bce7e3dfe47038 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -174,7 +174,7 @@ public abstract class Entity
@@ -16003,10 +16003,10 @@ index 23297b54c74684765f90e9e599d051a44357e9a5..a66f01754046bd9e3946552cac794b2f
          this.setPose(Pose.STANDING);
          this.setPos(pos.x, pos.y, pos.z);
 diff --git a/net/minecraft/world/entity/Mob.java b/net/minecraft/world/entity/Mob.java
-index 51dec65d0f437deb370eabbfa0369c4232caac14..8ba867d1cdc31cc3b59c5a129ae4047ff55c2d76 100644
+index 92ce15b22517bda5033e6377c76abaa6a9d68d03..dd5078c5d11e602588606eb3715e3a7d6a4f5487 100644
 --- a/net/minecraft/world/entity/Mob.java
 +++ b/net/minecraft/world/entity/Mob.java
-@@ -253,8 +253,20 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
+@@ -256,8 +256,20 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
          return this.sensing;
      }
  
@@ -16027,7 +16027,7 @@ index 51dec65d0f437deb370eabbfa0369c4232caac14..8ba867d1cdc31cc3b59c5a129ae4047f
          return this.asValidTarget(this.target);
      }
  
-@@ -263,6 +275,11 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
+@@ -266,6 +278,11 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
      }
  
      protected @Nullable LivingEntity asValidTarget(final @Nullable LivingEntity target) {
@@ -16039,7 +16039,7 @@ index 51dec65d0f437deb370eabbfa0369c4232caac14..8ba867d1cdc31cc3b59c5a129ae4047f
          if (target instanceof Player player && (player.isCreative() || player.isSpectator())) {
              return null;
          } else {
-@@ -1643,6 +1660,20 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
+@@ -1646,6 +1663,20 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
          }
      }
  
@@ -16060,7 +16060,7 @@ index 51dec65d0f437deb370eabbfa0369c4232caac14..8ba867d1cdc31cc3b59c5a129ae4047f
      @VisibleForTesting
      public void removeFreeWill() {
          this.removeAllGoals(goal -> true);
-@@ -1663,12 +1694,7 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
+@@ -1666,12 +1697,7 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
      protected void removeAfterChangingDimensions() {
          super.removeAfterChangingDimensions();
  
@@ -16778,7 +16778,7 @@ index 625996a7e1c6ec51312d25d7a94a08caccba32de..a5b6a5e742680b57d68d06d630d5207f
              return true;
          }
 diff --git a/net/minecraft/world/entity/player/Player.java b/net/minecraft/world/entity/player/Player.java
-index 4068dc1cea4edca196dc0c58b4804e94dd07881e..071b026572c140b02d219f94477d94f3f843ef0c 100644
+index 4ba3fb85b0473b4e7aa237701034d25f84e955cd..978d6f657f4ff84b773e5c320b3e08fce5ba168e 100644
 --- a/net/minecraft/world/entity/player/Player.java
 +++ b/net/minecraft/world/entity/player/Player.java
 @@ -1385,6 +1385,14 @@ public abstract class Player extends Avatar implements ContainerUser {
@@ -17622,7 +17622,7 @@ index cc938f43c4a5e947ed87ca2001cbaca4084bf64c..f3f26db1c7fe6879dedeee470f25a226
                  return player;
              }
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 21878bd770f6c0bc10dd0a67be5bd94d7e16f741..a596cbc1109d72cc10247fb5f42b8c2d00ee7847 100644
+index c14996f1d8a9ed77a845a464c1789bab0715741b..00bae622a0321ab551f173a209152bb3ad47bc2c 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -117,10 +117,10 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
@@ -18801,7 +18801,7 @@ index 189dc349bbd84059a7c3a56a072c959f40cdc7da..eab53d1b4573529db6ebb5e16c0b6a4b
          if (gameTime % 40L == 0L) {
              boolean active = updateShape(level, pos, effectBlocks);
 diff --git a/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a131abfc482 100644
+index 803e36f33c706d8484739cb21af25b9289dc8808..bdfce5533041d609f6ee94c888a6298a138a4e92 100644
 --- a/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 @@ -36,7 +36,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
@@ -18852,10 +18852,10 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
 -        skipPushModeEventFire = skipHopperEvents;
 +        io.papermc.paper.threadedregions.RegionizedWorldData worldData = level.getCurrentWorldData(); // Folia - region threading
 +        worldData.skipPushModeEventFire = worldData.skipHopperEvents; // Folia - region threading
+         final long disallowedSlots = callPrepareTransferEvent(level, hopper, destination, true); // Paper - Add PrepareHopperTransferEvent
          boolean foundItem = false;
          for (int i = 0; i < hopper.getContainerSize(); ++i) {
-             final ItemStack item = hopper.getItem(i);
-@@ -238,7 +247,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -240,7 +249,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
                  // We only need to fire the event once to give protection plugins a chance to cancel this event
                  // Because nothing uses getItem, every event call should end up the same result.
@@ -18864,7 +18864,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
                      movedItem = callPushMoveEvent(destination, movedItem, hopper);
                      if (movedItem == null) { // cancelled
                          origItemStack.setCount(originalItemCount);
-@@ -268,12 +277,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -270,12 +279,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
  
      private static boolean hopperPull(final Level level, final Hopper hopper, final Container container, ItemStack origItemStack, final int i) {
@@ -18879,7 +18879,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
              movedItem = callPullMoveEvent(hopper, container, movedItem);
              if (movedItem == null) { // cancelled
                  origItemStack.setCount(originalItemCount);
-@@ -293,9 +303,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -295,9 +305,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                  origItemStack.setCount(originalItemCount - movedItemCount + remainingItemCount);
              }
  
@@ -18891,7 +18891,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
              container.setChanged();
              return true;
          }
-@@ -316,6 +326,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -318,6 +328,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      @Nullable
      private static ItemStack callPushMoveEvent(Container destination, ItemStack itemStack, HopperBlockEntity hopper) {
@@ -18899,7 +18899,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
          final org.bukkit.inventory.Inventory destinationInventory = getInventory(destination);
          final io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent event = new io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent(
              hopper.getOwner(false).getInventory(),
-@@ -325,7 +336,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -327,7 +338,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
          );
          final boolean result = event.callEvent();
          if (!event.calledGetItem && !event.calledSetItem) {
@@ -18908,7 +18908,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
          }
          if (!result) {
              applyCooldown(hopper);
-@@ -341,6 +352,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -343,6 +354,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      @Nullable
      private static ItemStack callPullMoveEvent(final Hopper hopper, final Container container, final ItemStack itemstack) {
@@ -18916,7 +18916,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
          final org.bukkit.inventory.Inventory sourceInventory = getInventory(container);
          final org.bukkit.inventory.Inventory destination = getInventory(hopper);
  
-@@ -348,7 +360,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -350,7 +362,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
          final io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent event = new io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent(sourceInventory, org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitMirror(itemstack), destination, false);
          final boolean result = event.callEvent();
          if (!event.calledGetItem && !event.calledSetItem) {
@@ -18925,7 +18925,7 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
          }
          if (!result) {
              applyCooldown(hopper);
-@@ -481,12 +493,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -500,12 +512,13 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      }
  
      public static boolean suckInItems(final Level level, final Hopper hopper) {
@@ -18937,10 +18937,10 @@ index 17c28fbedde81aaf792508af1d0e33ef521e4ef0..f06130a86af84bdaa23b483f94469a13
              Direction direction = Direction.DOWN;
 -            skipPullModeEventFire = skipHopperEvents; // Paper - Perf: Optimize Hoppers
 +            worldData.skipPullModeEventFire = worldData.skipHopperEvents; // Paper - Perf: Optimize Hoppers // Folia - region threading
+             final long disallowedSlots = callPrepareTransferEvent(level, container, hopper, false); // Paper - Add PrepareHopperTransferEvent
  
              for (int slot : getSlots(container, direction)) {
-                 if (tryTakeInItemFromSlot(hopper, container, slot, direction, level)) { // Spigot
-@@ -590,9 +603,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -611,9 +624,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      itemStack = itemStack.split(container.getMaxStackSize());
                  }
                  // Spigot end
@@ -19553,10 +19553,10 @@ index 76dae652c910e36c860791a8285bd9fee466d5b9..8ffb2ed8a02c306a8510c4ce390b371b
          public void tick() {
              this.ticker.tick();
 diff --git a/net/minecraft/world/level/chunk/storage/SerializableChunkData.java b/net/minecraft/world/level/chunk/storage/SerializableChunkData.java
-index 3fef98e8c3c9908c6f05ded33596cbcb18996c3d..9d7423926efd3f73fa24150f8893e0f2d38b5e25 100644
+index 84a92dc868e61969460dddb156af332e6384bcd1..f40a1d56d7c5e47d20bce5fe7ea0e29a1afeadec 100644
 --- a/net/minecraft/world/level/chunk/storage/SerializableChunkData.java
 +++ b/net/minecraft/world/level/chunk/storage/SerializableChunkData.java
-@@ -502,7 +502,7 @@ public record SerializableChunkData(
+@@ -490,7 +490,7 @@ public record SerializableChunkData(
              heightmaps.put(entry.getKey(), (long[])data.clone());
          }
  
@@ -20082,7 +20082,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
      }
  
 diff --git a/net/minecraft/world/level/storage/SavedDataStorage.java b/net/minecraft/world/level/storage/SavedDataStorage.java
-index f359e53024019f35aaa5cd8477da708bda2fc57a..81c1541d8fa272e84316e87c3418ee727111a65c 100644
+index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2eface0dc4a 100644
 --- a/net/minecraft/world/level/storage/SavedDataStorage.java
 +++ b/net/minecraft/world/level/storage/SavedDataStorage.java
 @@ -40,7 +40,7 @@ import org.slf4j.Logger;
