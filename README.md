@@ -1,6 +1,6 @@
 [![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fartifactory.papermc.io%2Fartifactory%2Funiverse%2Fdev%2Ffolia%2Ffolia-api%2Fmaven-metadata.xml&strategy=highestVersion&filter=26.3.*&label=version&color=%23344ceb
 )](https://papermc.io/downloads/folia)
-[![Folia Build Status](https://img.shields.io/github/actions/workflow/status/PaperMC/Folia/build.yml?branch=ver/26.3.x)](https://github.com/PaperMC/Folia/actions)
+[![Folia Build Status](https://img.shields.io/github/actions/workflow/status/PaperMC/Folia/release-26.3.yaml?branch=ver/26.3.x)](https://github.com/PaperMC/Folia/actions)
 [![Discord](https://img.shields.io/discord/289587909051416579.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/papermc)
 ===========
 
