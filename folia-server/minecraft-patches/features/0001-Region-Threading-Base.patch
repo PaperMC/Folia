@@ -16173,6 +16173,26 @@ index ba61762e09ace201173999b3984046f930ccfe57..8375aa00cc075d02f7b4359d170e19eb
              }
          });
          body.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
+diff --git a/net/minecraft/world/entity/ai/behavior/GoToWantedItem.java b/net/minecraft/world/entity/ai/behavior/GoToWantedItem.java
+index aff2db230f992b1cd139de0997497322f0efc419..7903a4020f190c4647bb16d73f88e41c108220db 100644
+--- a/net/minecraft/world/entity/ai/behavior/GoToWantedItem.java
++++ b/net/minecraft/world/entity/ai/behavior/GoToWantedItem.java
+@@ -33,6 +33,7 @@ public class GoToWantedItem {
+                         (lookTarget, walkTarget, wantedItem, cooldown) -> (level, body, timestamp) -> {
+                             ItemEntity item = i.get(wantedItem);
+                             if (i.tryGet(cooldown).isEmpty()
++                                && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(item) // Folia - region threading
+                                 && predicate.test(body)
+                                 && item.closerThan(body, maxDistToWalk)
+                                 && body.level().getWorldBorder().isWithinBounds(item.blockPosition())
+@@ -49,6 +50,7 @@ public class GoToWantedItem {
+                                         return false; // Paper - only erase allay memory on non-item targets
+                                     }
+ 
++                                    if (!org.bukkit.Bukkit.isOwnedByCurrentRegion(targetItem)) return false; // Folia - region threading
+                                     item = targetItem.getHandle();
+                                 }
+                                 // CraftBukkit end
 diff --git a/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java b/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java
 index c507cbb1b0d89f8fe5a00e67eea510f7516fe040..53131c1b8d5562f9a1b45dfab4fdbdd37b655139 100644
 --- a/net/minecraft/world/entity/ai/behavior/PoiCompetitorScan.java
