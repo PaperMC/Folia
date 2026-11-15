@@ -52,6 +52,7 @@ val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "maven-publish")
+    apply(plugin = "io.papermc.paperweight.paper-checkstyle")
 
     extensions.configure<JavaPluginExtension> {
         toolchain {
@@ -65,6 +66,7 @@ subprojects {
     }
 
     dependencies {
+        "checkstyle"(project(":folia-checkstyle"))
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
     }
 
