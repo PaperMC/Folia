@@ -3057,9 +3057,22 @@ index 999ccf4acdb50be8a7ef0fe4a7f687508fadcde1..80dafb9ce02b7ac7307eb8ea6fa22a76
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 5acf2cfcd939708bf7845dfbc9dc36ff80add8c1..24f7cf40ffd6bbb154dc664bc9f7e6661247f2ac 100644
+index 5acf2cfcd939708bf7845dfbc9dc36ff80add8c1..8852a7116c6d1978ebe7c2ad333dbf871ad281ae 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -241,9 +241,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     private long lastPlayed = 0;
+     private boolean hasPlayedBefore = false;
+     private final ConversationTracker conversationTracker = new ConversationTracker();
+-    private final Map<UUID, Set<WeakReference<Plugin>>> invertedVisibilityEntities = new HashMap<>();
+-    private final Set<UUID> unlistedEntities = new HashSet<>(); // Paper - Add Listing API for Player
+-    private static final WeakHashMap<Plugin, WeakReference<Plugin>> pluginWeakReferences = new WeakHashMap<>();
++    private final Map<UUID, Set<WeakReference<Plugin>>> invertedVisibilityEntities = new java.util.concurrent.ConcurrentHashMap<>(); // Folia - region threading
++    private final Set<UUID> unlistedEntities = java.util.concurrent.ConcurrentHashMap.newKeySet(); // Paper - Add Listing API for Player // Folia - region threading
++    private static final Map<Plugin, WeakReference<Plugin>> pluginWeakReferences = java.util.Collections.synchronizedMap(new WeakHashMap<>()); // Folia - region threading
+     private int hash = 0;
+     private double health = 20;
+     private boolean scaledHealth = false;
 @@ -252,6 +252,34 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      private BorderChangeListener clientWorldBorderListener = this.createWorldBorderListener();
      private long lastSaveTime; // Paper - getLastPlayed replacement API
@@ -3132,24 +3145,28 @@ index 5acf2cfcd939708bf7845dfbc9dc36ff80add8c1..24f7cf40ffd6bbb154dc664bc9f7e666
          if (this.getHandle().connection == null) {
              return false;
          }
-@@ -1888,7 +1921,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -1888,8 +1921,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
      private void unregisterEntity(Entity other) {
          // Paper end
          ChunkMap tracker = ((ServerLevel) this.getHandle().level()).getChunkSource().chunkMap;
 -        ChunkMap.TrackedEntity entry = tracker.entityMap.get(other.getId());
+-        if (entry != null) {
 +        ChunkMap.TrackedEntity entry = other.moonrise$getTrackedEntity(); // Folia - region threading
-         if (entry != null) {
++        if (entry != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(other)) { // Folia - region threading
              entry.removePlayer(this.getHandle());
          }
-@@ -1977,7 +2010,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+ 
+@@ -1977,8 +2010,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
              if (original != null) otherPlayer.setUUID(original); // Paper - uuid override
          }
  
 -        ChunkMap.TrackedEntity entry = tracker.entityMap.get(other.getId());
+-        if (entry != null && !entry.seenBy.contains(this.getHandle().connection)) {
 +        ChunkMap.TrackedEntity entry = other.moonrise$getTrackedEntity(); // Folia - region threading
-         if (entry != null && !entry.seenBy.contains(this.getHandle().connection)) {
++        if (entry != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(other) && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(this.getHandle()) && !entry.seenBy.contains(this.getHandle().connection)) { // Folia - region threading
              entry.updatePlayer(this.getHandle());
          }
+ 
 @@ -3057,7 +3090,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
          @Override
          public void respawn() {
