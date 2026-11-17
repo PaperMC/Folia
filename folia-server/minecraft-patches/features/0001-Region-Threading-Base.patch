@@ -16979,7 +16979,7 @@ index 1d5449090d0649cb03cf87a0175aebedded20132..8761bdaf737c02a153fc5fafdd0c82a9
                          if (chicken instanceof Chicken realChicken) {
                              Optional.ofNullable(this.getItem().get(DataComponents.CHICKEN_VARIANT)).ifPresent(realChicken::setVariant);
 diff --git a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
-index 4abbb6a8029f6c77fdbeda9376d3d5cc5970896d..2142b8fafae37d58dfcaa78bb1aef7584837d412 100644
+index 4abbb6a8029f6c77fdbeda9376d3d5cc5970896d..6fe5268b9ee1ddd05cb1cfc6a1001fec7f3473f6 100644
 --- a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
 +++ b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
 @@ -54,15 +54,11 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
@@ -17005,7 +17005,7 @@ index 4abbb6a8029f6c77fdbeda9376d3d5cc5970896d..2142b8fafae37d58dfcaa78bb1aef758
      }
  
 +    // Folia start - region threading
-+    private static void attemptTeleport(Entity source, ServerLevel checkWorld, net.minecraft.world.phys.Vec3 to) {
++    private static void attemptTeleport(Entity source, Entity enderPearl, ServerLevel checkWorld, net.minecraft.world.phys.Vec3 to) {
 +        final boolean onPortalCooldown = source.isOnPortalCooldown();
 +        // ignore retired callback, in those cases we do not want to teleport
 +        source.getBukkitEntity().taskScheduler.schedule(
@@ -17064,7 +17064,7 @@ index 4abbb6a8029f6c77fdbeda9376d3d5cc5970896d..2142b8fafae37d58dfcaa78bb1aef758
 +                            // damage player
 +                            teleported.resetFallDistance();
 +                            player.resetCurrentImpulseContext();
-+                            player.hurtServer(player.level(), player.damageSources().enderPearl().eventEntityDamager(player), 5.0F); // CraftBukkit // Paper - fix DamageSource API
++                            player.hurtServer(player.level(), player.damageSources().enderPearl().eventEntityDamager(enderPearl), 5.0F); // CraftBukkit // Paper - fix DamageSource API
 +                            playSound(teleported.level(), to);
 +                        } else {
 +                            // reset fall damage so that if the entity was falling they do not instantly die
@@ -17094,7 +17094,7 @@ index 4abbb6a8029f6c77fdbeda9376d3d5cc5970896d..2142b8fafae37d58dfcaa78bb1aef758
 +                }
 +                Entity entity = this.getOwnerRaw();
 +                if (entity != null) {
-+                    attemptTeleport(entity, (ServerLevel)this.level(), this.oldPosition());
++                    attemptTeleport(entity, this, (ServerLevel)this.level(), this.oldPosition());
 +                }
 +                this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.HIT);
 +                return;
