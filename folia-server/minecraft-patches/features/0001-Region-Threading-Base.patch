@@ -17241,7 +17241,7 @@ index 9d242f24c37fec196f06b8ef6fa29a66b2781c68..7e969cd81d2ac788515f4d9ad7584ade
                          if (nearbyRaid != null && Raids.canJoinRaid(this)) {
                              nearbyRaid.joinRaid(level, nearbyRaid.getGroupsSpawned(), this, null, true);
 diff --git a/net/minecraft/world/entity/raid/Raids.java b/net/minecraft/world/entity/raid/Raids.java
-index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f3f4086c0 100644
+index bc0f31a16f7b055e85f10eda377026a927032535..8adacae6942da486e6858abfb02f933891ab64b4 100644
 --- a/net/minecraft/world/entity/raid/Raids.java
 +++ b/net/minecraft/world/entity/raid/Raids.java
 @@ -34,18 +34,19 @@ public class Raids extends SavedData {
@@ -17277,7 +17277,7 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
          this.tick = tick;
      }
  
-@@ -64,21 +65,32 @@ public class Raids extends SavedData {
+@@ -64,21 +65,34 @@ public class Raids extends SavedData {
      }
  
      public OptionalInt getId(final Raid raid) {
@@ -17292,14 +17292,17 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
          return OptionalInt.empty();
      }
  
+-    public void tick(final ServerLevel level) {
 +    // Folia start - make raids thread-safe
 +    public void globalTick() {
-+        this.tick++;
+         this.tick++;
++        if (this.tick % 200 == 0) {
++            this.setDirty();
++        }
 +    }
 +
-     public void tick(final ServerLevel level) {
++    public void tick(final ServerLevel level) {
 +        // Folia end - make raids thread-safe
-         this.tick++;
          Iterator<Raid> raidIterator = this.raidMap.values().iterator();
  
          while (raidIterator.hasNext()) {
@@ -17312,7 +17315,7 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
              if (!level.getGameRules().get(GameRules.RAIDS)) {
                  raid.stop();
              }
-@@ -91,9 +103,7 @@ public class Raids extends SavedData {
+@@ -91,9 +105,7 @@ public class Raids extends SavedData {
              }
          }
  
@@ -17323,7 +17326,7 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
      }
  
      public static boolean canJoinRaid(final Raider raider) {
-@@ -106,7 +116,7 @@ public class Raids extends SavedData {
+@@ -106,7 +118,7 @@ public class Raids extends SavedData {
          }
  
          ServerLevel level = player.level();
@@ -17332,7 +17335,7 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
              return null;
          }
  
-@@ -146,8 +156,8 @@ public class Raids extends SavedData {
+@@ -146,8 +158,8 @@ public class Raids extends SavedData {
              }
  
              if (!raid.isStarted() && !this.raidMap.containsValue(raid)) {
@@ -17343,7 +17346,7 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
              }
              // CraftBukkit end
              raid.absorbRaidOmen(player);
-@@ -167,14 +177,19 @@ public class Raids extends SavedData {
+@@ -167,14 +179,19 @@ public class Raids extends SavedData {
      }
  
      private int getUniqueId() {
@@ -17365,7 +17368,7 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
              double distance = raid.getCenter().distSqr(pos);
              if (raid.isActive() && distance < closestDistanceSqr) {
                  closest = raid;
-@@ -196,8 +211,8 @@ public class Raids extends SavedData {
+@@ -196,8 +213,8 @@ public class Raids extends SavedData {
                  .apply(i, Raids.RaidWithId::new)
          );
  
