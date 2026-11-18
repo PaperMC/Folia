@@ -3813,7 +3813,7 @@ index 6ad86ba7abac537b42f8bb43bbb8d984cbbdf052..f6880ff590fdd3e30562a24de00c6a21
      }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 286b11640f739eecf29adac7b9e98fa7b783f424..bfcd4b2161011caf5daa770d91aab72e3dd21afd 100644
+index 286b11640f739eecf29adac7b9e98fa7b783f424..759b35b2538d6f6c3c502cd41bf4d514976928a6 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 @@ -941,7 +941,7 @@ public class CraftEventFactory {
@@ -3834,6 +3834,37 @@ index 286b11640f739eecf29adac7b9e98fa7b783f424..bfcd4b2161011caf5daa770d91aab72e
          if (event.callEvent()) {
              boolean result = snapshot.place(flags);
              return !checkSetResult || result;
+@@ -2412,7 +2412,7 @@ public class CraftEventFactory {
+ 
+     }
+ 
+-    private static BlockLockCheckEvent LAST_BLOCK_LOCK_CHECK_EVENT = null;
++    private static final ThreadLocal<BlockLockCheckEvent> LAST_BLOCK_LOCK_CHECK_EVENT = new ThreadLocal<>(); // Folia - region threading
+ 
+     public static boolean callBlockLockCheckEvent(
+         BlockEntity blockEntity,
+@@ -2432,7 +2432,7 @@ public class CraftEventFactory {
+             if (event.getResult() == org.bukkit.event.Event.Result.ALLOW) {
+                 return true;
+             } else if (event.getResult() == org.bukkit.event.Event.Result.DENY || !code.canUnlock(player, event.isUsingCustomKeyItemStack() ? org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getKeyItem()) : player.getMainHandItem())) {
+-                LAST_BLOCK_LOCK_CHECK_EVENT = event;
++                LAST_BLOCK_LOCK_CHECK_EVENT.set(event); // Folia - region threading
+                 return false;
+             }
+         }
+@@ -2440,9 +2440,9 @@ public class CraftEventFactory {
+     }
+ 
+     public static boolean sendChestLockedNotifications(Vec3 pos) {
+-        if (LAST_BLOCK_LOCK_CHECK_EVENT != null) {
+-            final io.papermc.paper.event.block.BlockLockCheckEvent event = LAST_BLOCK_LOCK_CHECK_EVENT;
+-            LAST_BLOCK_LOCK_CHECK_EVENT = null;
++        final BlockLockCheckEvent event = LAST_BLOCK_LOCK_CHECK_EVENT.get(); // Folia - region threading
++        LAST_BLOCK_LOCK_CHECK_EVENT.remove(); // Folia - region threading
++        if (event != null) { // Folia - region threading
+             if (event.getLockedMessage() != null) {
+                 event.getPlayer().sendActionBar(event.getLockedMessage());
+             }
 diff --git a/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java b/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java
 index e576bca9ceec9a79c5234faeb7a294d9841bcd41..c8e0efb1f01feb32d4eba4338ca34aa4668df336 100644
 --- a/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java

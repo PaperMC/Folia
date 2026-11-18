@@ -7452,6 +7452,32 @@ index 891a4d2ce29a3954c10ad1a091ef8247a6b7a7cc..8db0bf6c5500fab0b278a9afdf8c2c16
      }
  
      private void runSync(ServerPlayer player, java.util.Collection<String> bukkit, RootCommandNode<CommandSourceStack> root) {
+diff --git a/net/minecraft/core/Rotations.java b/net/minecraft/core/Rotations.java
+index 0d5805a9002854ea2666ef3bc792e61f016ffd34..9788a4a8b45e19eaa89990fe814b30896ccafbad 100644
+--- a/net/minecraft/core/Rotations.java
++++ b/net/minecraft/core/Rotations.java
+@@ -27,17 +27,17 @@ public record Rotations(float x, float y, float z) {
+         }
+     };
+     // Paper start - add internal method for skipping validation for plugins using userdev
+-    private static boolean SKIP_VALIDATION = false;
++    private static final ThreadLocal<Boolean> SKIP_VALIDATION = ThreadLocal.withInitial(() -> Boolean.FALSE); // Folia - region threading
+     public static Rotations createWithoutValidityChecks(float x, float y, float z) {
+-        SKIP_VALIDATION = true;
++        SKIP_VALIDATION.set(Boolean.TRUE); // Folia - region threading
+         Rotations rotations = new Rotations(x, y, z);
+-        SKIP_VALIDATION = false;
++        SKIP_VALIDATION.set(Boolean.FALSE); // Folia - region threading
+         return rotations;
+     }
+     // Paper end - add internal method for skipping validation for plugins using userdev
+ 
+     public Rotations {
+-        if (!SKIP_VALIDATION) { // Paper - add internal method for skipping validation for plugins using userdev
++        if (!SKIP_VALIDATION.get()) { // Paper - add internal method for skipping validation for plugins using userdev // Folia - region threading
+         x = !Float.isInfinite(x) && !Float.isNaN(x) ? x % 360.0F : 0.0F;
+         y = !Float.isInfinite(y) && !Float.isNaN(y) ? y % 360.0F : 0.0F;
+         z = !Float.isInfinite(z) && !Float.isNaN(z) ? z % 360.0F : 0.0F;
 diff --git a/net/minecraft/core/dispenser/DispenseItemBehavior.java b/net/minecraft/core/dispenser/DispenseItemBehavior.java
 index 04593896b7c54d63fa4f97f58010aabce58dee1d..b1f04ba52ae1edebf67e6e68b0631553d7a7306e 100644
 --- a/net/minecraft/core/dispenser/DispenseItemBehavior.java
@@ -17434,6 +17460,54 @@ index c223581e30414842ce24079b47c82639d36b7e73..bb584da75d693254a9843fc1c856bacf
              if (!playerRemovedNotChangingDimension && !serverPlayer.hasDisconnected()) {
                  serverPlayer.getInventory().placeItemBackInInventory(carried, Prediction.SERVER_ONLY);
              } else {
+diff --git a/net/minecraft/world/item/BucketItem.java b/net/minecraft/world/item/BucketItem.java
+index 88de6142f66f158a4425a4cc5d093fdda80b6ebb..a26a9cef3781480d092ed4989bc2f226d94bfc9e 100644
+--- a/net/minecraft/world/item/BucketItem.java
++++ b/net/minecraft/world/item/BucketItem.java
+@@ -34,7 +34,7 @@ import net.minecraft.world.phys.HitResult;
+ import org.jspecify.annotations.Nullable;
+ 
+ public class BucketItem extends Item implements DispensibleContainerItem {
+-    static @Nullable ItemStack itemLeftInHandAfterPlayerBucketEmptyEvent = null; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++    static final ThreadLocal<@Nullable ItemStack> itemLeftInHandAfterPlayerBucketEmptyEvent = new ThreadLocal<>(); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+     protected final Fluid content;
+ 
+     public BucketItem(final Fluid content, final Item.Properties properties) {
+@@ -111,11 +111,13 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+ 
+     public static ItemStack getEmptySuccessItem(final ItemStack itemStack, final Player player) {
+         // Paper start - Fix PlayerBucketEmptyEvent result itemstack
+-        if (itemLeftInHandAfterPlayerBucketEmptyEvent != null) {
+-            ItemStack itemInHand = itemLeftInHandAfterPlayerBucketEmptyEvent;
+-            itemLeftInHandAfterPlayerBucketEmptyEvent = null;
++        // Folia start - region threading
++        final ItemStack itemInHand = itemLeftInHandAfterPlayerBucketEmptyEvent.get();
++        if (itemInHand != null) {
++            itemLeftInHandAfterPlayerBucketEmptyEvent.remove();
+             return itemInHand;
+         }
++        // Folia end - region threading
+         // Paper end - Fix PlayerBucketEmptyEvent result itemstack
+         return !player.hasInfiniteMaterials() ? new ItemStack(Items.BUCKET) : itemStack;
+     }
+@@ -150,7 +152,7 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+                         player.containerMenu.sendAllDataToRemote(); // SPIGOT-4541
+                         return false;
+                     }
+-                    itemLeftInHandAfterPlayerBucketEmptyEvent = event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                    itemLeftInHandAfterPlayerBucketEmptyEvent.set(event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+                 }
+                 // CraftBukkit end
+                 if (level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos) && this.content.is(FluidTags.WATER)) {
+@@ -177,7 +179,7 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+ 
+                     if (!level.setBlock(pos, this.content.defaultFluidState().createLegacyBlock(), Block.UPDATE_ALL_IMMEDIATE)
+                         && !blockState.getFluidState().isSource()) {
+-                        itemLeftInHandAfterPlayerBucketEmptyEvent = null; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                        itemLeftInHandAfterPlayerBucketEmptyEvent.remove(); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+                         return false;
+                     }
+ 
 diff --git a/net/minecraft/world/item/ItemStack.java b/net/minecraft/world/item/ItemStack.java
 index 284b3f1dacf975cfb263ed44478993326637f4d2..9581ea1ea59af5e04dc32470ddf4cef9b62e4d97 100644
 --- a/net/minecraft/world/item/ItemStack.java
@@ -17544,6 +17618,19 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..4148505f4c6f00869fa222eeb8431036
          }
      }
  
+diff --git a/net/minecraft/world/item/MobBucketItem.java b/net/minecraft/world/item/MobBucketItem.java
+index 85baba30fc1ec169eda549ce76fe454084f4323c..74e4c1005a3692cf75f5fe828b69e5657af0b823 100644
+--- a/net/minecraft/world/item/MobBucketItem.java
++++ b/net/minecraft/world/item/MobBucketItem.java
+@@ -67,7 +67,7 @@ public class MobBucketItem extends BucketItem {
+                     player.containerMenu.sendAllDataToRemote(); // SPIGOT-4541
+                     return false;
+                 }
+-                BucketItem.itemLeftInHandAfterPlayerBucketEmptyEvent = event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                BucketItem.itemLeftInHandAfterPlayerBucketEmptyEvent.set(event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+             }
+             // Paper end
+             this.playEmptySound(user, level, pos);
 diff --git a/net/minecraft/world/item/component/LodestoneTracker.java b/net/minecraft/world/item/component/LodestoneTracker.java
 index 65fe2c5b19e37c6800a54c6945eec7df9c505749..3dcf20f97e701ea5aea56e0c7ef0fec78158f194 100644
 --- a/net/minecraft/world/item/component/LodestoneTracker.java
