@@ -1562,10 +1562,10 @@ index 0000000000000000000000000000000000000000..8e25ab1c8ae026e51ce4d711c9084fdf
 \ No newline at end of file
 diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..dd38c40cb80b4a1f425c2ecbc7ddd6eb8b28fdd6
+index 0000000000000000000000000000000000000000..2cd24e12a545781acfae24c980d8e56fb7576a0a
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/RegionizedServer.java
-@@ -0,0 +1,430 @@
+@@ -0,0 +1,431 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.common.util.TimeUtil;
@@ -1990,6 +1990,7 @@ index 0000000000000000000000000000000000000000..dd38c40cb80b4a1f425c2ecbc7ddd6eb
 +        final long currTime = System.nanoTime();
 +        if (autoSavePeriod > 0 && (currTime - this.lastMapAutoSave) > (java.util.concurrent.TimeUnit.SECONDS.toNanos((long)autoSavePeriod) / 20L)) {
 +            this.lastMapAutoSave = currTime;
++            server.mapDataCache.unloadUnused();
 +            server.getDataStorage().saveMaps();
 +        }
 +    }
@@ -7957,7 +7958,7 @@ index 144c18c08bf8f03d907b97f968aa171a9fbf997f..be9fdca704391f8d77b87b4d75e67bb6
          }
      }
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da0731cca2ea 100644
+index f313fcd002b6cc47a2397bf65a8ce1dfee2c41ec..1c3049734bf2fda328dce50858c864068dfe27db 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -198,7 +198,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -7969,7 +7970,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      private static final long PREPARE_LEVELS_DEFAULT_DELAY_NANOS = 10L * TimeUtil.NANOSECONDS_PER_MILLISECOND;
      private static final int MAX_STATUS_PLAYER_SAMPLE = 12;
      public static final int SPAWN_POSITION_SEARCH_RADIUS = 5;
-@@ -239,8 +239,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -240,8 +240,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      public volatile boolean hasStarted = false; // Paper
      private volatile boolean isRestarting = false; // Paper - flag to signify we're attempting to restart
      private boolean stopped;
@@ -7979,7 +7980,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      protected final Proxy proxy;
      private boolean onlineMode;
      private boolean preventProxyConnections;
-@@ -314,7 +313,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -315,7 +314,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      public org.bukkit.craftbukkit.CraftServer server;
      public joptsimple.OptionSet options;
      public org.bukkit.command.ConsoleCommandSender console;
@@ -7988,7 +7989,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      public java.util.Queue<Runnable> processQueue = new java.util.concurrent.ConcurrentLinkedQueue<Runnable>();
      public int autosavePeriod;
      // Paper - don't store the vanilla dispatcher
-@@ -433,46 +432,30 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -434,46 +433,30 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      private static final long MAX_CHUNK_EXEC_TIME = 1000L; // 1us
      private static final long TASK_EXECUTION_FAILURE_BACKOFF = 5L * 1000L; // 5us
  
@@ -8042,7 +8043,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
                  }
  
                  // note: negative values reduce the time
-@@ -485,7 +468,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -486,7 +469,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
                  final double overuseCount = (double)overuse/(double)MAX_CHUNK_EXEC_TIME;
                  final long extraSleep = (long)Math.round(overuseCount*CHUNK_TASK_QUEUE_BACKOFF_MIN_TIME);
  
@@ -8051,7 +8052,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
                  return;
              }
          }
-@@ -507,6 +490,49 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -508,6 +491,49 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          LOGGER.warn("Performed emergency save");
      }
      // Paper end - rewrite chunk system
@@ -8101,7 +8102,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
  
      public MinecraftServer(
          // CraftBukkit start
-@@ -558,7 +584,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -559,7 +585,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.tickFrame = TracyClient.createDiscontinuousFrame("Server Tick");
          this.notificationManager = notificationManager;
          this.serverActivityMonitor = new ServerActivityMonitor(notificationManager, 30);
@@ -8110,7 +8111,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          this.clockManager = this.getDataStorage().computeIfAbsent(ServerClockManager.TYPE);
          this.clockManager.init(this);
          this.customBossEvents = this.savedDataStorage.computeIfAbsent(CustomBossEvents.TYPE);
-@@ -827,8 +853,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -828,8 +854,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              levelLoadListener.updateFocus(level.dimension(), spawnChunk);
              int height = chunkSource.getGenerator().getSpawnHeight(level);
              if (height < level.getMinY()) {
@@ -8127,7 +8128,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              }
  
              levelData.setSpawn(LevelData.RespawnData.of(level.dimension(), spawnChunk.getWorldPosition().offset(8, height, 8), 0.0F, 0.0F));
-@@ -856,7 +888,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -857,7 +889,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
                  zChunkOffset += dZChunk;
              }
  
@@ -8136,7 +8137,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
                  level.registryAccess()
                      .lookup(Registries.FEATURE)
                      .flatMap(registry -> registry.get(MiscOverworldFeatures.BONUS_CHEST))
-@@ -883,19 +915,19 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -884,19 +916,19 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          ChunkLoadCounter chunkLoadCounter = new ChunkLoadCounter();
  
          if (true) { // CraftBukkit
@@ -8159,7 +8160,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          } while (chunkLoadCounter.pendingChunks() > 0);
  
          level.levelLoadListener.finish(LevelLoadListener.Stage.LOAD_INITIAL_CHUNKS); // Paper - per world load listener
-@@ -903,6 +935,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -904,6 +936,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.updateEffectiveRespawnData();
          this.forceTicks = false; // CraftBukkit
          //level.entityManager.tick(); // SPIGOT-6526: Load pending entities so they are available to the API // Paper - rewrite chunk system
@@ -8167,7 +8168,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          new org.bukkit.event.world.WorldLoadEvent(level.getWorld()).callEvent(); // Paper - call WorldLoadEvent
      }
  
-@@ -987,7 +1020,37 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -989,7 +1022,37 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
      // CraftBukkit end
  
@@ -8206,7 +8207,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          if (Thread.currentThread() == this.serverThread) this.executeAllRecentInternalTasks(); // Paper - execute tasks on stop
          // CraftBukkit start - prevent double stopping on multiple threads
          synchronized (this.stopLock) {
-@@ -998,7 +1061,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1000,7 +1063,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.shutdownThread = Thread.currentThread(); // Paper - Improved watchdog support
          org.spigotmc.WatchdogThread.doStop(); // Paper - Improved watchdog support
          // CraftBukkit end
@@ -8215,7 +8216,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          if (this.metricsRecorder.isRecording()) {
              this.cancelRecordingMetrics();
          }
-@@ -1015,12 +1078,19 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1017,12 +1080,19 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.getConnection().stop();
          this.isSaving = true;
          if (this.playerList != null) {
@@ -8237,7 +8238,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          LOGGER.info("Saving worlds");
  
          for (ServerLevel level : this.getAllLevels()) {
-@@ -1050,6 +1120,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1052,6 +1122,11 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.saveAllChunks(false, true, false, true); // Paper - rewrite chunk system
  
          this.isSaving = false;
@@ -8249,7 +8250,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          this.savedDataStorage.close();
          this.resources.close();
  
-@@ -1104,6 +1179,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1106,6 +1181,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          if (this.isDebugging()) io.papermc.paper.util.TraceUtil.dumpTraceForThread("Server stopped"); // Paper - Debugging
          // Paper end
          this.running = false;
@@ -8257,7 +8258,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          if (wait) {
              try {
                  this.serverThread.join();
-@@ -1256,6 +1332,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1258,6 +1334,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              this.status = this.buildServerStatus();
  
              this.server.spark.enableBeforePlugins(); // Paper - spark
@@ -8276,7 +8277,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              // Spigot start
              // Paper start
              LOGGER.info("Running delayed init tasks");
-@@ -1317,13 +1405,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1319,13 +1407,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
                  this.lastOverloadWarningNanos = this.nextTickTimeNanos;
  
                  this.currentTickStart = tickStart;
@@ -8292,7 +8293,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
                  }
  
                  // Paper - improve tick loop - done above
-@@ -1460,41 +1548,21 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1462,41 +1550,21 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      @Override
      // Paper start - anything that does try to post to main during watchdog crash, run on watchdog
      public TickTask wrapRunnable(Runnable runnable) {
@@ -8338,7 +8339,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          if (super.pollTask()) {
              this.moonrise$executeMidTickTasks(); // Paper - rewrite chunk system
              return true;
-@@ -1514,6 +1582,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1516,6 +1584,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      protected void doRunTask(final TickTask task) {
@@ -8346,7 +8347,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          Profiler.get().incrementCounter("runTask");
          super.doRunTask(task);
      }
-@@ -1560,12 +1629,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1562,12 +1631,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          return false;
      }
  
@@ -8365,7 +8366,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              if (this.playerList.getPlayerCount() == 0 && !this.tickRateManager.isSprinting() && this.pluginsBlockingSleep.isEmpty()) { // Paper - API to allow/disallow tick sleeping
                  this.emptyTicks++;
              } else {
-@@ -1590,42 +1662,69 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1592,42 +1664,69 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
                      level.getChunkSource().tick(() -> true, false);
                  }
                  // Paper end - avoid issues with certain tasks not processing during sleep
@@ -8446,7 +8447,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
                  }
              }
          } finally {
-@@ -1635,22 +1734,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1637,22 +1736,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // Paper end - Incremental chunk and player saving
  
          ProfilerFiller profiler = Profiler.get();
@@ -8474,7 +8475,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      }
  
      protected void processPacketsAndTick(final boolean sprinting) {
-@@ -1659,7 +1750,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1661,7 +1752,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.tickFrame.start();
          // Paper - improve tick loop - moved into runAllTasksAtTickStart
          this.runAllTasksAtTickStart(); // Paper - improve tick loop
@@ -8483,7 +8484,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          // Paper start - rewrite chunk system
          final Throwable crash = this.chunkSystemCrash;
          if (crash != null) {
-@@ -1673,7 +1764,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1675,7 +1766,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      private void autoSave() {
@@ -8492,7 +8493,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          LOGGER.debug("Autosave started");
          ProfilerFiller profiler = Profiler.get();
          profiler.push("save");
-@@ -1688,30 +1779,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1690,30 +1781,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          }
      }
  
@@ -8531,7 +8532,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      private ServerStatus buildServerStatus() {
          ServerStatus.Players players = this.buildPlayerStatus();
          return new ServerStatus(
-@@ -1724,7 +1807,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1726,7 +1809,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      private ServerStatus.Players buildPlayerStatus() {
@@ -8540,7 +8541,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          int maxPlayers = this.getMaxPlayers();
          if (this.hidesOnlinePlayers()) {
              return new ServerStatus.Players(maxPlayers, players.size(), List.of());
-@@ -1743,29 +1826,38 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1745,29 +1828,38 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          return new ServerStatus.Players(maxPlayers, players.size(), sample);
      }
  
@@ -8596,7 +8597,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              profiler.push("clocks");
              // Paper start - per-world time
              if (io.papermc.paper.configuration.GlobalConfiguration.get().time.affectsAllWorlds) {
-@@ -1779,7 +1871,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1781,7 +1873,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              profiler.pop();
          }
  
@@ -8605,7 +8606,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              profiler.push("timeSync");
              this.forceGameTimeSynchronization();
              profiler.pop();
-@@ -1787,24 +1879,24 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1789,24 +1881,24 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          // CraftBukkit start
          // Run tasks that are waiting on processing
@@ -8638,7 +8639,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              } catch (Throwable t) {
                  CrashReport report = CrashReport.forThrowable(t, "Exception ticking world");
                  level.fillReportDetails(report);
-@@ -1813,14 +1905,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1815,14 +1907,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              profiler.pop();
              profiler.pop();
@@ -8657,7 +8658,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          profiler.popPush("debugSubscribers");
          this.debugSubscribers.tick();
          if (this.tickRateManager.runsNormally()) {
-@@ -1830,13 +1922,21 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1832,13 +1924,21 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          profiler.popPush("server gui refresh");
  
@@ -8681,7 +8682,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              player.connection.chunkSender.sendNextChunks(player);
              player.connection.resumeFlushing();
          }
-@@ -1861,11 +1961,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1863,11 +1963,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      public void forceGameTimeSynchronization() {
          ProfilerFiller profiler = Profiler.get();
          profiler.push("timeSync");
@@ -8701,7 +8702,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          profiler.pop();
      }
  
-@@ -2147,11 +2251,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2149,11 +2253,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          int count = 0;
  
          for (ServerPlayer player : this.getPlayerList().getPlayers()) {
@@ -8717,7 +8718,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
              count++;
              // Paper end - Expand PlayerGameModeChangeEvent
          }
-@@ -2176,7 +2282,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2178,7 +2284,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public int getTickCount() {
@@ -8726,7 +8727,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      }
  
      public boolean isUnderSpawnProtection(final ServerLevel level, final BlockPos pos, final Player player) {
-@@ -2212,6 +2318,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2214,6 +2320,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void invalidateStatus() {
@@ -8742,7 +8743,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          this.lastServerStatus = 0L;
      }
  
-@@ -2226,6 +2341,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2228,6 +2343,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      public void executeIfPossible(final Runnable command) {
@@ -8750,7 +8751,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
          if (this.isStopped()) {
              throw new io.papermc.paper.util.ServerStopRejectedExecutionException("Server already shutting down"); // Paper - do not prematurely disconnect players on stop
          }
-@@ -2588,7 +2704,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2590,7 +2706,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public long getAverageTickTimeNanos() {
@@ -8764,7 +8765,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      }
  
      public long[] getTickTimesNanos() {
-@@ -2830,13 +2951,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2832,13 +2953,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public ProfileResults stopTimeProfiler() {
@@ -8779,7 +8780,7 @@ index a8c330e21a715711ed21dd9084deea5254121b44..33bf9e590f2076f8bbfbda93c528da07
      }
  
      public int getMaxChainedNeighborUpdates() {
-@@ -3135,24 +3250,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -3137,24 +3252,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      // Paper start - API to check if the server is sleeping
      public boolean isTickPaused() {
@@ -11243,116 +11244,6 @@ index ef53d4d17222a882dd3d33575096c864a0a00a06..d9e1eff4830b3b956f0b914a2ff11c99
          }
      }
  }
-diff --git a/net/minecraft/server/level/ServerEntity.java b/net/minecraft/server/level/ServerEntity.java
-index e46f95b19da1c14f240ec6697f22b5e220e0a835..a2d13e6ffd3e17a9059c418049f489292cd9ec4a 100644
---- a/net/minecraft/server/level/ServerEntity.java
-+++ b/net/minecraft/server/level/ServerEntity.java
-@@ -77,6 +77,10 @@ public class ServerEntity {
-     private boolean wasOnGround;
-     private @Nullable List<SynchedEntityData.DataValue<?>> trackedDataValues;
-     private final Set<net.minecraft.server.network.ServerPlayerConnection> trackedPlayers; // Paper
-+    // Folia start - Rework map holder tracking
-+    private final Set<ServerPlayer> mapFrameViewers = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
-+    private @Nullable MapId viewedMapId;
-+    // Folia end - Rework map holder tracking
- 
-     public ServerEntity(
-         final ServerLevel level,
-@@ -128,19 +132,18 @@ public class ServerEntity {
-         }
- 
-         if (!this.trackedPlayers.isEmpty() && this.entity instanceof ItemFrame frame /*&& this.tickCount % 10 == 0*/) { // CraftBukkit - moved tickCount below // Paper - Perf: Only tick item frames if players can see it
-+            this.updateFrameMapViewers(); // Folia - Rework map holder tracking
-             ItemStack itemStack = frame.getItem();
-             if (this.level.paperConfig().maps.itemFrameCursorUpdateInterval > 0 && this.tickCount % this.level.paperConfig().maps.itemFrameCursorUpdateInterval == 0 && itemStack.getItem() instanceof MapItem) { // CraftBukkit - Moved this.tickCounter % 10 logic here so item frames do not enter the other blocks // Paper - Make item frame map cursor update interval configurable
-                 MapId id = frame.cachedMapId; // Paper - Perf: Cache map ids on item frames
-                 MapItemSavedData data = MapItem.getSavedData(id, this.level);
-                 if (data != null) {
--                    for (final net.minecraft.server.network.ServerPlayerConnection connection : this.trackedPlayers) { // Paper
--                        final ServerPlayer player = connection.getPlayer(); // Paper
--                        data.tickCarriedBy(player, itemStack, frame);
--                        Packet<?> packet = data.getUpdatePacket(id, player);
--                        if (packet != null) {
--                            player.connection.send(packet);
--                        }
-+                    // Folia start - Rework map holder tracking - tick the frame once, then update its viewers
-+                    data.tickFrame(frame, itemStack);
-+                    for (final ServerPlayer player : this.mapFrameViewers) {
-+                        this.addFrameMapViewer(player, id, data);
-                     }
-+                    // Folia end - Rework map holder tracking
-                 }
-             }
- 
-@@ -342,6 +345,11 @@ public class ServerEntity {
-     }
- 
-     public void removePairing(final ServerPlayer player) {
-+        // Folia start - Rework map holder tracking
-+        if (this.mapFrameViewers.remove(player)) {
-+            this.removeFrameMapViewer(player, this.viewedMapId);
-+        }
-+        // Folia end - Rework map holder tracking
-         this.entity.stopSeenByPlayer(player);
-         player.connection.send(new ClientboundRemoveEntitiesPacket(this.entity.getId()));
-     }
-@@ -351,7 +359,56 @@ public class ServerEntity {
-         this.sendPairingData(player, packets::add);
-         player.connection.send(new ClientboundBundlePacket(packets));
-         this.entity.startSeenByPlayer(player);
-+        // Folia start - Rework map holder tracking - send the framed map right away instead of at the next frame update
-+        if (this.entity instanceof ItemFrame) {
-+            this.updateFrameMapViewers();
-+            this.mapFrameViewers.add(player);
-+            this.addFrameMapViewer(player);
-+        }
-+        // Folia end - Rework map holder tracking
-+    }
-+
-+    // Folia start - Rework map holder tracking
-+    // Players tracking a framed map are holders of that map until they stop tracking the frame or the frame's map changes
-+    private void updateFrameMapViewers() {
-+        final ItemFrame frame = (ItemFrame) this.entity;
-+        // only maps are ticked by the frame, so only subscribe viewers to those
-+        final MapId mapId = frame.getItem().getItem() instanceof MapItem ? frame.cachedMapId : null;
-+        if (java.util.Objects.equals(mapId, this.viewedMapId)) {
-+            return;
-+        }
-+        final MapId oldMapId = this.viewedMapId;
-+        this.viewedMapId = mapId;
-+        for (final ServerPlayer player : this.mapFrameViewers) {
-+            this.removeFrameMapViewer(player, oldMapId);
-+            this.addFrameMapViewer(player);
-+        }
-+    }
-+
-+    private void addFrameMapViewer(final ServerPlayer player) {
-+        final MapId mapId = this.viewedMapId;
-+        final MapItemSavedData data = mapId == null ? null : MapItem.getSavedData(mapId, this.level);
-+        if (data != null) {
-+            this.addFrameMapViewer(player, mapId, data);
-+        }
-+    }
-+
-+    // Also called at every frame update, which re-adds existing viewers (no-op) and picks up map data that did not exist at pairing
-+    private void addFrameMapViewer(final ServerPlayer player, final MapId mapId, final MapItemSavedData data) {
-+        data.addFrameViewer(player, this.entity.getId());
-+        final Packet<?> packet = data.getUpdatePacket(mapId, player);
-+        if (packet != null) {
-+            player.connection.send(packet);
-+        }
-+    }
-+
-+    private void removeFrameMapViewer(final ServerPlayer player, final @Nullable MapId mapId) {
-+        final MapItemSavedData data = mapId == null ? null : MapItem.getSavedData(mapId, this.level);
-+        if (data != null) {
-+            data.removeFrameViewer(player, this.entity.getId());
-+        }
-     }
-+    // Folia end - Rework map holder tracking
- 
-     public void sendPairingData(final ServerPlayer player, final Consumer<Packet<ClientGamePacketListener>> broadcast) {
-         this.entity.updateDataBeforeSync();
 diff --git a/net/minecraft/server/level/ServerEntityGetter.java b/net/minecraft/server/level/ServerEntityGetter.java
 index cc6f4e2845ef1e95c765d65f17c8aa1b06652927..7316c756f1c228eef710219a659c79684d155183 100644
 --- a/net/minecraft/server/level/ServerEntityGetter.java
@@ -11388,7 +11279,7 @@ index cc6f4e2845ef1e95c765d65f17c8aa1b06652927..7316c756f1c228eef710219a659c7968
                  foundPlayers.add(player);
              }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e55eff0e3 100644
+index 6133f2c97221e70b0cea7ad81bfa6502a3d37472..2921d26ab2aad4d5dec41fcdc088f8e01979339e 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -193,11 +193,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -11605,7 +11496,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
          // Paper start - rewrite chunk system
          this.moonrise$setEntityLookup(new ca.spottedleaf.moonrise.patches.chunk_system.level.entity.server.ServerEntityLookup((ServerLevel)(Object)this, ((ServerLevel)(Object)this).new EntityCallbacks()));
          this.chunkTaskScheduler = new ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler((ServerLevel)(Object)this);
-@@ -744,7 +704,61 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -744,8 +704,62 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          this.chunkDataController = new ca.spottedleaf.moonrise.patches.chunk_system.io.datacontroller.ChunkDataController((ServerLevel)(Object)this, this.chunkTaskScheduler);
          // Paper end - rewrite chunk system
          this.getCraftServer().addWorld(this.getWorld()); // CraftBukkit
@@ -11641,8 +11532,8 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
 +        synchronized (this.pendingTeleports) {
 +            return this.pendingTeleports.remove(teleport);
 +        }
-+    }
-+
+     }
+ 
 +    public List<PendingTeleport> removeAllRegionTeleports() {
 +        final List<PendingTeleport> ret = new ArrayList<>();
 +
@@ -11662,11 +11553,12 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
 +    // Folia start - region threading
 +    public void updateTickData() {
 +        this.tickData = new io.papermc.paper.threadedregions.RegionizedServer.WorldLevelData(this, this.serverLevelData.getGameTime());
-     }
++    }
 +    // Folia end - region threading
- 
++
      // Paper start
      @Override
+     public boolean hasChunk(int chunkX, int chunkZ) {
 @@ -779,6 +793,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          return this.uncachedBiomeResolver;
      }
@@ -12306,44 +12198,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
      }
  
      @Override
-@@ -2576,24 +2690,22 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
-         // Paper start - Call missing map initialize event and set id
-         final SavedDataStorage storage = this.getServer().getDataStorage();
- 
--        final Optional<net.minecraft.world.level.saveddata.SavedData> cacheEntry = storage.cache.get(MapItemSavedData.type(id));
--        if (cacheEntry == null) { // Cache did not contain, try to load and may init
--            final MapItemSavedData mapData = storage.get(MapItemSavedData.type(id)); // get populates the cache
--            if (mapData != null) { // map was read, init it and return
--                mapData.id = id;
--                new org.bukkit.event.server.MapInitializeEvent(mapData.mapView).callEvent();
--                return mapData;
-+        // Folia start - region threading
-+        MapItemSavedData ret = storage.read(MapItemSavedData.type(id), (MapItemSavedData fromDisk) -> {
-+            if (fromDisk == null) {
-+                return;
-             }
- 
--            return null; // Map does not exist, reading failed.
--        }
--        // Cache entry exists, update it with the id ref and return.
--        if (cacheEntry.orElse(null) instanceof final MapItemSavedData mapItemSavedData) {
--            mapItemSavedData.id = id;
--            return mapItemSavedData;
-+            fromDisk.id = id;
-+            new org.bukkit.event.server.MapInitializeEvent(fromDisk.mapView).callEvent();
-+        });
-+
-+        if (ret != null) {
-+            ret.id = id;
-         }
- 
--        return null;
-+        return ret;
-+        // Folia end - region threading
-         // Paper end - Call missing map initialize event and set id
-     }
- 
-@@ -2640,7 +2752,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2619,7 +2733,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
      public boolean setChunkForced(final int chunkX, final int chunkZ, final boolean forced) {
          boolean updated = this.chunkSource.updateChunkForced(new ChunkPos(chunkX, chunkZ), forced);
          if (forced && updated) {
@@ -12352,7 +12207,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
          }
  
          return updated;
-@@ -2657,11 +2769,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2636,11 +2750,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          Optional<Holder<PoiType>> newType = PoiTypes.forState(newState);
          if (!Objects.equals(oldType, newType)) {
              BlockPos immutable = pos.immutable();
@@ -12366,7 +12221,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
                  // Paper start - Remove stale POIs
                  if (oldType.isEmpty() && this.getPoiManager().exists(immutable, _ -> true)) {
                      this.getPoiManager().remove(immutable);
-@@ -2700,7 +2812,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2679,7 +2793,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
      }
  
      public @Nullable Raid getRaidAt(final BlockPos pos) {
@@ -12375,7 +12230,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
      }
  
      public boolean isRaided(final BlockPos pos) {
-@@ -2724,7 +2836,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2703,7 +2817,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
              }
  
              output.write(String.format(Locale.ROOT, "entities: %s\n", this.moonrise$getEntityLookup().getDebugInfo())); // Paper - rewrite chunk system
@@ -12384,7 +12239,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
              output.write(String.format(Locale.ROOT, "block_ticks: %d\n", this.getBlockTicks().count()));
              output.write(String.format(Locale.ROOT, "fluid_ticks: %d\n", this.getFluidTicks().count()));
              output.write("distance_manager: " + chunkMap.getDistanceManager().getDebugStatus() + "\n");
-@@ -2794,7 +2906,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2773,7 +2887,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
      private void dumpBlockEntityTickers(final Writer output) throws IOException {
          CsvOutput csvOutput = CsvOutput.builder().addColumn("x").addColumn("y").addColumn("z").addColumn("type").build(output);
  
@@ -12393,7 +12248,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
              BlockPos blockPos = ticker.getPos();
              csvOutput.writeRow(blockPos.getX(), blockPos.getY(), blockPos.getZ(), ticker.getType());
          }
-@@ -2802,7 +2914,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2781,7 +2895,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
  
      @VisibleForTesting
      public void clearBlockEvents(final BoundingBox bb) {
@@ -12402,7 +12257,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
      }
  
      public Iterable<Entity> getAllEntities() {
-@@ -2844,8 +2956,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2823,8 +2937,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
              this.players.size(),
              this.moonrise$getEntityLookup().getDebugInfo(), // Paper - rewrite chunk system
              getTypeCount(this.moonrise$getEntityLookup().getAll(), e -> e.typeHolder().getRegisteredName()), // Paper - rewrite chunk system
@@ -12413,7 +12268,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
              this.getBlockTicks().count(),
              this.getFluidTicks().count(),
              this.gatherChunkSourceStats()
-@@ -2898,15 +3010,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2877,15 +2991,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
      }
  
      public void startTickingChunk(final LevelChunk levelChunk) {
@@ -12432,7 +12287,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
      }
  
      public void waitForEntities(final ChunkPos centerChunk, final int radius) {
-@@ -3053,7 +3165,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3032,7 +3146,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
      // Paper start - optimize redstone (Alternate Current)
      @Override
      public alternate.current.wire.WireHandler getWireHandler() {
@@ -12441,7 +12296,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
      }
      // Paper end - optimize redstone (Alternate Current)
  
-@@ -3088,18 +3200,18 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3067,18 +3181,18 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
                  ServerLevel.this.getWaypointManager().untrackWaypoint(waypoint);
              }
  
@@ -12463,7 +12318,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
              // Paper start - Reset pearls when they stop being ticked
              if (ServerLevel.this.paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && ServerLevel.this.paperConfig().misc.legacyEnderPearlBehavior && entity instanceof net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl pearl) {
                  pearl.setOwner(null);
-@@ -3110,6 +3222,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3089,6 +3203,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          @Override
          public void onTrackingStart(final Entity entity) {
              org.spigotmc.AsyncCatcher.catchOp("entity register"); // Spigot
@@ -12471,7 +12326,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
              // ServerLevel.this.getChunkSource().addEntity(entity); // Paper - ignore and warn about illegal addEntity calls instead of crashing server; moved down below valid=true
              if (entity instanceof ServerPlayer player) {
                  ServerLevel.this.players.add(player);
-@@ -3132,12 +3245,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3111,12 +3226,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
                      );
                  }
  
@@ -12486,32 +12341,15 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
                  }
              }
  
-@@ -3160,19 +3273,14 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3139,6 +3254,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          @Override
          public void onTrackingEnd(final Entity entity) {
              org.spigotmc.AsyncCatcher.catchOp("entity unregister"); // Spigot
 +            ServerLevel.this.getCurrentWorldData().removeLoadedEntity(entity); // Folia - region threading
-             // Spigot start
+             // Paper start - Rework map holder tracking - remove the player from the maps they are subscribed to
              if (entity instanceof Player player) {
--                SavedDataStorage storage = getServer().getDataStorage();
--                for (final Optional<net.minecraft.world.level.saveddata.SavedData> savedData : storage.cache.values()) {
--                    if (savedData.isEmpty() || !(savedData.get() instanceof MapItemSavedData map)) {
--                        continue;
--                    }
--
--                    net.minecraft.world.level.saveddata.maps.MapItemSavedData.HoldingPlayer holder = map.carriedByPlayers.remove(player);
--                    if (holder != null && map.carriedBy.remove(holder)) {
--                        map.decorations.remove(player.getName().getString());
--                    }
-+                // Folia start - Rework map holder tracking - only visit the maps the player is subscribed to
-+                for (final MapItemSavedData map : new java.util.ArrayList<>(player.subscribedMaps)) {
-+                    map.removeHolder(player);
-                 }
-+                // Folia end - Rework map holder tracking
-             }
-             // Spigot end
-             // Spigot start
-@@ -3202,12 +3310,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+                 for (final MapItemSavedData map : new java.util.ArrayList<>(player.subscribedMaps)) {
+@@ -3173,12 +3289,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
                      );
                  }
  
@@ -12526,7 +12364,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
                  }
              }
  
-@@ -3242,11 +3350,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -3213,11 +3329,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
      private long lagCompensationTick = currentLagCompensationTick();
  
      public long getLagCompensationTick() {
@@ -12541,7 +12379,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e
  
      private static long currentLagCompensationTick() {
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640170bff6c 100644
+index 3858cc2c5a6af580696525b0d4d57afbd7c31daf..90abffb1a137ad1438fb0cb461e5bf5d8e6b7043 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -212,7 +212,7 @@ import org.slf4j.Logger;
@@ -12763,18 +12601,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640
              } else {
                  this.setCamera(this);
              }
-@@ -830,6 +994,10 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
-                 if (!this.isSleeping()) {
-                     this.awardStat(Stats.TIME_SINCE_REST);
-                 }
-+            // Folia start - Rework map holder tracking - spectators touching unloaded chunks are not ticked, still keep their map holders up to date
-+            } else if (this.valid) {
-+                this.tickInventoryMapsWithoutInventoryTick();
-+            // Folia end - Rework map holder tracking
-             }
- 
-             for (int i = 0; i < this.getInventory().getContainerSize(); i++) {
-@@ -902,9 +1070,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -906,9 +1070,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  this.oldLevel = this.experienceLevel;
              }
  
@@ -12785,7 +12612,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640
              // CraftBukkit end
          } catch (Throwable t) {
              CrashReport report = CrashReport.forThrowable(t, "Ticking player");
-@@ -1531,8 +1697,326 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1535,8 +1697,326 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          }
      }
  
@@ -13112,7 +12939,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640
          if (this.isSleeping()) return null; // CraftBukkit - SPIGOT-3154
          if (this.isRemoved()) {
              return null;
-@@ -2595,7 +3079,30 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2599,7 +3079,30 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          return this.camera == null ? this : this.camera;
      }
  
@@ -13143,7 +12970,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640
          Entity oldCamera = this.getCamera();
          this.camera = newCamera == null ? this : newCamera;
          if (oldCamera != this.camera) {
-@@ -2614,16 +3121,19 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2618,16 +3121,19 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  }
              }
              // Paper end - Add PlayerStartSpectatingEntityEvent and PlayerStopSpectatingEntity
@@ -13170,23 +12997,15 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640
          }
      }
  
-@@ -2749,14 +3259,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2753,7 +3259,6 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  this.awardStat(Stats.DROP);
              }
          }
--        // Paper start - remove player from map on drop
--        if (droppedItemStack.getItem() instanceof MapItem) {
--            final MapItemSavedData mapData = MapItem.getSavedData(droppedItemStack, this.level());
--            if (mapData != null) {
--                mapData.tickCarriedBy(this, droppedItemStack, null);
--            }
--        }
--        // Paper end - remove player from map on drop
-+        // Folia - Rework map holder tracking - removing the player from the map on drop is handled by the per-tick inventory check
+-
          return entity;
      }
  
-@@ -2966,11 +3469,11 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2963,11 +3468,11 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public void registerEnderPearl(final ThrownEnderpearl enderPearl) {
@@ -13200,7 +13019,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640
      }
  
      public Set<ThrownEnderpearl> getEnderPearls() {
-@@ -3172,7 +3675,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3169,7 +3674,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          this.experienceLevel = this.newLevel;
          this.totalExperience = this.newTotalExp;
          this.experienceProgress = 0;
@@ -16970,69 +16789,10 @@ index 625996a7e1c6ec51312d25d7a94a08caccba32de..a5b6a5e742680b57d68d06d630d5207f
              return true;
          }
 diff --git a/net/minecraft/world/entity/player/Player.java b/net/minecraft/world/entity/player/Player.java
-index 4ba3fb85b0473b4e7aa237701034d25f84e955cd..5a8b85df751258ab3d598d7879d771d885631f8a 100644
+index 61609199068ac89ee4fcb9890fa75c720b6c0408..325ab14130d838be8bd96f272b689162feb3af28 100644
 --- a/net/minecraft/world/entity/player/Player.java
 +++ b/net/minecraft/world/entity/player/Player.java
-@@ -150,6 +150,11 @@ public abstract class Player extends Avatar implements ContainerUser {
-     public static final float CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER_VALUE = 2.0F;
-     private final Inventory inventory;
-     protected PlayerEnderChestContainer enderChestInventory = new PlayerEnderChestContainer(this); // CraftBukkit - add "this" to constructor
-+    // Folia start - Rework map holder tracking
-+    // maps this player is subscribed to (a holder of), and the subset of those in their inventory or equipment
-+    public final java.util.Set<net.minecraft.world.level.saveddata.maps.MapItemSavedData> subscribedMaps = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
-+    public final java.util.Set<net.minecraft.world.level.saveddata.maps.MapItemSavedData> inventoryMaps = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
-+    // Folia end - Rework map holder tracking
-     public final InventoryMenu inventoryMenu;
-     public AbstractContainerMenu containerMenu;
-     protected FoodData foodData = new FoodData();
-@@ -491,6 +496,7 @@ public abstract class Player extends Avatar implements ContainerUser {
-         }
- 
-         super.aiStep();
-+        this.checkInventoryMaps(); // Folia - Rework map holder tracking - inventory and equipment have been ticked, maps that were not ticked have left the inventory
-         this.yHeadRot = this.getYRot();
-         this.setSpeed((float)this.getAttributeValue(Attributes.MOVEMENT_SPEED));
-         if (this.getHealth() > 0.0F && !this.isSpectator()) {
-@@ -520,6 +526,38 @@ public abstract class Player extends Avatar implements ContainerUser {
-         this.handleShoulderEntities();
-     }
- 
-+    // Folia start - Rework map holder tracking
-+    private void checkInventoryMaps() {
-+        // checkStillInInventory must not modify inventoryMaps, this iterator does not detect concurrent modification
-+        for (final java.util.Iterator<net.minecraft.world.level.saveddata.maps.MapItemSavedData> iterator = this.inventoryMaps.iterator(); iterator.hasNext();) {
-+            if (!iterator.next().checkStillInInventory(this)) {
-+                iterator.remove();
-+            }
-+        }
-+    }
-+
-+    // For players whose tick is skipped (spectators touching unloaded chunks): keeps their markers and holders up to date
-+    // without a full inventory tick, which would also update held maps from the world
-+    public void tickInventoryMapsWithoutInventoryTick() {
-+        if (this.inventoryMaps.isEmpty()) {
-+            return;
-+        }
-+        for (int i = 0; i < this.inventory.getContainerSize(); i++) {
-+            this.tickInventoryMap(this.inventory.getItem(i));
-+        }
-+        this.checkInventoryMaps();
-+    }
-+
-+    private void tickInventoryMap(final ItemStack itemStack) {
-+        if (itemStack.getItem() instanceof net.minecraft.world.item.MapItem) {
-+            final net.minecraft.world.level.saveddata.maps.MapItemSavedData data = net.minecraft.world.item.MapItem.getSavedData(itemStack, this.level());
-+            if (data != null) {
-+                data.tickCarriedBy(this, itemStack);
-+            }
-+        }
-+    }
-+    // Folia end - Rework map holder tracking
-+
-     protected void tickRegeneration() {
-     }
- 
-@@ -1385,6 +1423,14 @@ public abstract class Player extends Avatar implements ContainerUser {
+@@ -1423,6 +1423,14 @@ public abstract class Player extends Avatar implements ContainerUser {
          return this.isLocalPlayer();
      }
  
@@ -17753,7 +17513,7 @@ index 284b3f1dacf975cfb263ed44478993326637f4d2..9581ea1ea59af5e04dc32470ddf4cef9
  
              DataComponentPatch newPatch = this.components.asPatch();
 diff --git a/net/minecraft/world/item/MapItem.java b/net/minecraft/world/item/MapItem.java
-index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88adc4b180 100644
+index 61c0c93d18c2e2c4b0ece202ee41d181504b5335..6b51b3a46ba057320379f6355bb4c774992e6390 100644
 --- a/net/minecraft/world/item/MapItem.java
 +++ b/net/minecraft/world/item/MapItem.java
 @@ -86,6 +86,7 @@ public class MapItem extends Item {
@@ -17764,17 +17524,7 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88
          if (level.dimension() == data.dimension && player instanceof Player player2) {
              int scale = 1 << data.scale;
              int centerX = data.centerX;
-@@ -97,7 +98,8 @@ public class MapItem extends Item {
-                 radius /= 2;
-             }
- 
--            MapItemSavedData.HoldingPlayer holdingPlayer = data.getHoldingPlayer(player2);
-+            MapItemSavedData.HoldingPlayer holdingPlayer = data.carriedByPlayers.get(player2); // Folia - Rework map holder tracking - do not create a holder without a reason
-+            if (holdingPlayer == null) return; // Folia - Rework map holder tracking
-             holdingPlayer.step++;
-             BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
-             BlockPos.MutableBlockPos belowPos = new BlockPos.MutableBlockPos();
-@@ -115,10 +117,10 @@ public class MapItem extends Item {
+@@ -116,10 +117,10 @@ public class MapItem extends Item {
                              int averagingAreaMinX = (centerX / scale + imgX - 64) * scale;
                              int averagingAreaMinZ = (centerZ / scale + imgY - 64) * scale;
                              Multiset<MapColor> colorCount = LinkedHashMultiset.create();
@@ -17787,7 +17537,7 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88
                                  int waterDepth = 0;
                                  double averageAreaHeight = 0.0;
                                  if (level.dimensionType().hasCeiling()) {
-@@ -200,6 +202,7 @@ public class MapItem extends Item {
+@@ -201,6 +202,7 @@ public class MapItem extends Item {
                  }
              }
          }
@@ -17795,7 +17545,7 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88
      }
  
      private BlockState getCorrectStateForFluidBlock(final Level level, final BlockState state, final BlockPos pos) {
-@@ -214,6 +217,7 @@ public class MapItem extends Item {
+@@ -215,6 +217,7 @@ public class MapItem extends Item {
      public static void renderBiomePreviewMap(final ServerLevel level, final ItemStack mapItemStack) {
          MapItemSavedData data = getSavedData(mapItemStack, level);
          if (data != null) {
@@ -17803,7 +17553,7 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88
              if (level.dimension() == data.dimension) {
                  int scale = 1 << data.scale;
                  int centerX = data.centerX;
-@@ -284,6 +288,7 @@ public class MapItem extends Item {
+@@ -285,6 +288,7 @@ public class MapItem extends Item {
                      }
                  }
              }
@@ -17811,16 +17561,15 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88
          }
      }
  
-@@ -291,13 +296,15 @@ public class MapItem extends Item {
+@@ -292,6 +296,7 @@ public class MapItem extends Item {
      public void inventoryTick(final ItemStack itemStack, final ServerLevel level, final Entity owner, final @Nullable EquipmentSlot slot) {
          MapItemSavedData data = getSavedData(itemStack, level);
          if (data != null) {
 +            synchronized (data) { // Folia - region threading
              if (owner instanceof Player player) {
--                data.tickCarriedBy(player, itemStack, null);
-+                data.tickCarriedBy(player, itemStack); // Folia - Rework map holder tracking
+                 data.tickCarriedBy(player, itemStack); // Paper - Rework map holder tracking
              }
- 
+@@ -299,6 +304,7 @@ public class MapItem extends Item {
              if (!data.locked && slot != null && slot.getType() == EquipmentSlot.Type.HAND) {
                  this.update(level, owner, data);
              }
@@ -20187,18 +19936,10 @@ index 6b3ce2ded53a7ea46cf7f0cb49043a022f6d9ee7..3a6e7e7906cdfae1b29d9c6f5c1c976a
          return id;
      }
 diff --git a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e3e1c76f2 100644
+index b3ea13a6ae4496645c52e8c88ef3faa2e966cbc4..46b879e443ab68a13ed036c48a69c515beb0e2c3 100644
 --- a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-@@ -75,6 +75,7 @@ public class MapItemSavedData extends SavedData {
-     public final Map<String, MapDecoration> decorations = Maps.newLinkedHashMap();
-     private final Map<String, MapFrame> frameMarkers = Maps.newHashMap();
-     private int trackedDecorationCount;
-+    private final java.util.Set<String> hiddenPlayerMarkers = new java.util.HashSet<>(); // Folia - Rework map holder tracking
- 
-     // CraftBukkit start
-     public final org.bukkit.craftbukkit.map.CraftMapView mapView;
-@@ -177,18 +178,30 @@ public class MapItemSavedData extends SavedData {
+@@ -178,7 +178,7 @@ public class MapItemSavedData extends SavedData {
          return new MapItemSavedData(0, 0, scale, false, false, isLocked, dimension);
      }
  
@@ -20207,22 +19948,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          MapItemSavedData result = new MapItemSavedData(
              this.centerX, this.centerZ, this.scale, this.trackingPosition, this.unlimitedTracking, true, this.dimension
          );
-         result.bannerMarkers.putAll(this.bannerMarkers);
-         result.decorations.putAll(this.decorations);
-         result.trackedDecorationCount = this.trackedDecorationCount;
-+        // Folia start - Don't copy player markers to locked maps
-+        // Player markers are live state maintained by each holder's tick, not part of the map's content, so they are not copied
-+        for (final java.util.Iterator<MapDecoration> iterator = result.decorations.values().iterator(); iterator.hasNext();) {
-+            final MapDecoration decoration = iterator.next();
-+            if (decoration.type().is(MapDecorationTypes.PLAYER) || decoration.type().is(MapDecorationTypes.PLAYER_OFF_MAP) || decoration.type().is(MapDecorationTypes.PLAYER_OFF_LIMITS)) {
-+                iterator.remove();
-+                if (decoration.type().value().trackCount()) {
-+                    result.trackedDecorationCount--;
-+                }
-+            }
-+        }
-+        // Folia end - Don't copy player markers to locked maps
-         System.arraycopy(this.colors, 0, result.colors, 0, this.colors.length);
+@@ -201,7 +201,7 @@ public class MapItemSavedData extends SavedData {
          return result;
      }
  
@@ -20231,193 +19957,72 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          return createFresh(this.centerX, this.centerZ, (byte)Mth.clamp(this.scale + 1, 0, 4), this.trackingPosition, this.unlimitedTracking, this.dimension);
      }
  
-@@ -197,40 +210,39 @@ public class MapItemSavedData extends SavedData {
-         return stack -> stack == mapStack || stack.is(mapStack.getItem()) && Objects.equals(mapId, stack.get(DataComponents.MAP_ID));
+@@ -211,7 +211,8 @@ public class MapItemSavedData extends SavedData {
      }
  
--    public void tickCarriedBy(final Player tickingPlayer, final ItemStack itemStack, final @Nullable ItemFrame placedInFrame) {
--        if (!this.carriedByPlayers.containsKey(tickingPlayer)) {
--            MapItemSavedData.HoldingPlayer holdingPlayer = new MapItemSavedData.HoldingPlayer(tickingPlayer);
--            this.carriedByPlayers.put(tickingPlayer, holdingPlayer);
--            this.carriedBy.add(holdingPlayer);
-+    // Folia start - Rework map holder tracking - frames use tickFrame; only update the ticking player, the map is in their inventory since it is ticked from there
+     // Paper start - Rework map holder tracking - frames use tickFrame; only update the ticking player, the map is in their inventory since it is ticked from there
+-    public void tickCarriedBy(final Player tickingPlayer, final ItemStack itemStack) {
 +    public synchronized void tickCarriedBy(final Player tickingPlayer, final ItemStack itemStack) { // Folia - make map data thread-safe
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(tickingPlayer, "Ticking map player in incorrect region"); // Folia - region threading
-+        final MapItemSavedData.HoldingPlayer holdingPlayer = this.getOrCreateHolder(tickingPlayer);
-+        if (!holdingPlayer.inInventory) {
-+            holdingPlayer.inInventory = true;
-+            tickingPlayer.inventoryMaps.add(this);
-         }
-+        holdingPlayer.inventoryTicked = true;
- 
--        Predicate<ItemStack> mapMatcher = mapMatcher(itemStack);
--        if (!tickingPlayer.getInventory().contains(mapMatcher)) {
--            this.removeDecoration(tickingPlayer.getPlainTextName());
-+        final String name = tickingPlayer.getPlainTextName();
-+        if (tickingPlayer.level().dimension() == this.dimension && this.trackingPosition) {
-+            this.addDecoration(
-+                MapDecorationTypes.PLAYER, tickingPlayer.level(), name, tickingPlayer.getX(), tickingPlayer.getZ(), tickingPlayer.getYRot(), null
-+            );
-+        } else {
-+            this.removeDecoration(name);
-         }
- 
--        for (int i = 0; i < this.carriedBy.size(); i++) {
--            MapItemSavedData.HoldingPlayer otherHoldingPlayer = this.carriedBy.get(i);
--            Player otherPlayer = otherHoldingPlayer.player;
--            String otherPlayerName = otherPlayer.getPlainTextName();
--            if (!otherPlayer.isRemoved() && (placedInFrame != null || otherPlayer.getInventory().contains(mapMatcher))) {
--                if (placedInFrame == null && otherPlayer.level().dimension() == this.dimension && this.trackingPosition) {
--                    this.addDecoration(
--                        MapDecorationTypes.PLAYER, otherPlayer.level(), otherPlayerName, otherPlayer.getX(), otherPlayer.getZ(), otherPlayer.getYRot(), null
--                    );
--                }
--            } else {
--                this.carriedByPlayers.remove(otherPlayer);
--                this.carriedBy.remove(otherHoldingPlayer);
--                this.removeDecoration(otherPlayerName);
--            }
--
--            if (!otherPlayer.equals(tickingPlayer) && hasMapInvisibilityItemEquipped(otherPlayer)) {
--                this.removeDecoration(otherPlayerName);
--            }
-+        final boolean hiddenChanged = hasMapInvisibilityItemEquipped(tickingPlayer) ? this.hiddenPlayerMarkers.add(name) : this.hiddenPlayerMarkers.remove(name);
-+        if (hiddenChanged) {
-+            this.setDecorationsDirty();
-         }
- 
--        if (placedInFrame != null && this.trackingPosition) {
-+        this.addStaticDecorations(tickingPlayer.level(), itemStack);
-+    }
-+
-+    // Frame logic split from tickCarriedBy, runs once per frame instead of once per viewer
-+    public synchronized void tickFrame(final ItemFrame placedInFrame, final ItemStack itemStack) { // Folia - make map data thread-safe
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(placedInFrame, "Ticking map frame in incorrect region"); // Folia - region threading
-+        final Level level = placedInFrame.level();
-+        if (this.trackingPosition) {
-+        // Folia end - Rework map holder tracking
-             BlockPos pos = placedInFrame.getPos();
-             MapFrame existingFrame = this.frameMarkers.get(MapFrame.frameId(pos));
-             if (existingFrame != null && placedInFrame.getId() != existingFrame.entityId() && this.frameMarkers.containsKey(existingFrame.getId())) {
-@@ -238,10 +250,10 @@ public class MapItemSavedData extends SavedData {
-             }
- 
-             MapFrame mapFrame = new MapFrame(pos, placedInFrame.getDirection().get2DDataValue() * 90, placedInFrame.getId());
--            if (this.decorations.size() < tickingPlayer.level().paperConfig().maps.itemFrameCursorLimit) { // Paper - Limit item frame cursors on maps
-+            if (this.decorations.size() < level.paperConfig().maps.itemFrameCursorLimit) { // Paper - Limit item frame cursors on maps // Folia - Rework map holder tracking
-             this.addDecoration(
-                 MapDecorationTypes.FRAME,
--                tickingPlayer.level(),
-+                level, // Folia - Rework map holder tracking
-                 getFrameKey(placedInFrame.getId()),
-                 pos.getX(),
-                 pos.getZ(),
-@@ -255,16 +267,103 @@ public class MapItemSavedData extends SavedData {
-             } // Paper - Limit item frame cursors on maps
-         }
- 
-+        // Folia start - Rework map holder tracking
-+        this.addStaticDecorations(level, itemStack);
-+    }
-+
-+    private void addStaticDecorations(final Level level, final ItemStack itemStack) {
-+        // Folia end - Rework map holder tracking
-         MapDecorations staticDecorations = itemStack.getOrDefault(DataComponents.MAP_DECORATIONS, MapDecorations.EMPTY);
-         if (!this.decorations.keySet().containsAll(staticDecorations.decorations().keySet())) {
-             staticDecorations.decorations().forEach((id, entry) -> {
-                 if (!this.decorations.containsKey(id)) {
--                    this.addDecoration(entry.type(), tickingPlayer.level(), id, entry.x(), entry.z(), entry.rotation(), null);
-+                    this.addDecoration(entry.type(), level, id, entry.x(), entry.z(), entry.rotation(), null); // Folia - Rework map holder tracking
-                 }
-             });
-         }
+         final MapItemSavedData.HoldingPlayer holdingPlayer = this.getOrCreateHolder(tickingPlayer);
+         if (!holdingPlayer.inInventory) {
+             holdingPlayer.inInventory = true;
+@@ -237,7 +238,8 @@ public class MapItemSavedData extends SavedData {
      }
  
-+    // Folia start - Rework map holder tracking
-+    // A player is a holder of (subscribed to) this map while it is in their inventory or equipment, or while a framed copy of it is tracking them.
-+    // carriedBy/carriedByPlayers therefore also contain frame viewers that do not carry the map.
-+    // A holder is only updated from its own player's inventory tick or from tracking of frames that player views, so no update reads another player's state.
-+    private MapItemSavedData.HoldingPlayer getOrCreateHolder(final Player player) {
-+        MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
-+        if (holdingPlayer == null) {
-+            holdingPlayer = new MapItemSavedData.HoldingPlayer(player);
-+            this.carriedByPlayers.put(player, holdingPlayer);
-+            this.carriedBy.add(holdingPlayer);
-+            player.subscribedMaps.add(this);
-+        }
-+        return holdingPlayer;
-+    }
-+
-+    private void removeHolderIfUnused(final MapItemSavedData.HoldingPlayer holdingPlayer) {
-+        if (!holdingPlayer.inInventory && holdingPlayer.viewedFrames.isEmpty()) {
-+            this.carriedByPlayers.remove(holdingPlayer.player);
-+            this.carriedBy.remove(holdingPlayer);
-+            holdingPlayer.player.subscribedMaps.remove(this);
-+        }
-+    }
-+
-+    // Does not update the player's inventoryMaps, the caller must
-+    private void removeFromInventory(final MapItemSavedData.HoldingPlayer holdingPlayer) {
-+        final String name = holdingPlayer.player.getPlainTextName();
-+        holdingPlayer.inInventory = false;
-+        this.removeDecoration(name);
-+        this.hiddenPlayerMarkers.remove(name);
-+        this.removeHolderIfUnused(holdingPlayer);
-+    }
-+
-+    // Called for each of the player's inventoryMaps after their inventory and equipment were ticked:
-+    // the map has left their inventory if it was not ticked since the last check. Returns whether it is still in their inventory.
+     // Frame logic split from tickCarriedBy, runs once per frame instead of once per viewer
+-    public void tickFrame(final ItemFrame placedInFrame, final ItemStack itemStack) {
++    public synchronized void tickFrame(final ItemFrame placedInFrame, final ItemStack itemStack) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(placedInFrame, "Ticking map frame in incorrect region"); // Folia - region threading
+         final Level level = placedInFrame.level();
+         if (this.trackingPosition) {
+         // Paper end - Rework map holder tracking
+@@ -315,7 +317,8 @@ public class MapItemSavedData extends SavedData {
+ 
+     // Called for each of the player's inventoryMaps after their inventory and equipment were ticked:
+     // the map has left their inventory if it was not ticked since the last check. Returns whether it is still in their inventory.
+-    public boolean checkStillInInventory(final Player player) {
 +    public synchronized boolean checkStillInInventory(final Player player) { // Folia - make map data thread-safe
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Checking map holder in incorrect region"); // Folia - region threading
-+        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
-+        if (holdingPlayer == null || !holdingPlayer.inInventory) {
-+            return false;
-+        }
-+        if (holdingPlayer.inventoryTicked) {
-+            holdingPlayer.inventoryTicked = false;
-+            return true;
-+        }
-+        this.removeFromInventory(holdingPlayer);
-+        return false;
-+    }
-+
+         final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
+         if (holdingPlayer == null || !holdingPlayer.inInventory) {
+             return false;
+@@ -328,11 +331,13 @@ public class MapItemSavedData extends SavedData {
+         return false;
+     }
+ 
+-    public void addFrameViewer(final Player player, final int frameId) {
 +    public synchronized void addFrameViewer(final Player player, final int frameId) { // Folia - make map data thread-safe
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Adding map frame viewer in incorrect region"); // Folia - region threading
-+        this.getOrCreateHolder(player).viewedFrames.add(frameId);
-+    }
-+
+         this.getOrCreateHolder(player).viewedFrames.add(frameId);
+     }
+ 
+-    public void removeFrameViewer(final Player player, final int frameId) {
 +    public synchronized void removeFrameViewer(final Player player, final int frameId) { // Folia - make map data thread-safe
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Removing map frame viewer in incorrect region"); // Folia - region threading
-+        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
-+        if (holdingPlayer != null && holdingPlayer.viewedFrames.remove(frameId)) {
-+            this.removeHolderIfUnused(holdingPlayer);
-+        }
-+    }
-+
-+    // Called when the player is removed from the world
+         final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
+         if (holdingPlayer != null && holdingPlayer.viewedFrames.remove(frameId)) {
+             this.removeHolderIfUnused(holdingPlayer);
+@@ -340,7 +345,8 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     // Called when the player is removed from the world
+-    public void removeHolder(final Player player) {
 +    public synchronized void removeHolder(final Player player) { // Folia - make map data thread-safe
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Removing map holder in incorrect region"); // Folia - region threading
-+        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.remove(player);
-+        player.subscribedMaps.remove(this);
-+        player.inventoryMaps.remove(this);
-+        if (holdingPlayer != null) {
-+            this.carriedBy.remove(holdingPlayer);
-+            final String name = player.getPlainTextName();
-+            this.removeDecoration(name);
-+            this.hiddenPlayerMarkers.remove(name);
-+        }
-+    }
-+
-+    // Players wearing map invisibility equipment are hidden from every viewer but themselves
+         final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.remove(player);
+         player.subscribedMaps.remove(this);
+         player.inventoryMaps.remove(this);
+@@ -353,7 +359,7 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     // Players wearing map invisibility equipment are hidden from every viewer but themselves
+-    public boolean isMarkerHiddenFrom(final String decorationKey, final String viewerName) {
 +    public synchronized boolean isMarkerHiddenFrom(final String decorationKey, final String viewerName) { // Folia - make map data thread-safe
-+        return !decorationKey.equals(viewerName) && this.hiddenPlayerMarkers.contains(decorationKey);
-+    }
-+    // Folia end - Rework map holder tracking
-+
-     private static boolean hasMapInvisibilityItemEquipped(final Player player) {
-         for (EquipmentSlot equipmentSlot : EquipmentSlot.values()) {
-             if (equipmentSlot != EquipmentSlot.MAINHAND
-@@ -397,7 +496,7 @@ public class MapItemSavedData extends SavedData {
+         return !decorationKey.equals(viewerName) && this.hiddenPlayerMarkers.contains(decorationKey);
+     }
+     // Paper end - Rework map holder tracking
+@@ -490,7 +496,7 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20426,7 +20031,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
          return holdingPlayer == null ? null : holdingPlayer.nextUpdatePacket(id);
      }
-@@ -406,31 +505,26 @@ public class MapItemSavedData extends SavedData {
+@@ -499,16 +505,17 @@ public class MapItemSavedData extends SavedData {
      // Paper start - Fix unnecessary map data saves
          this.setColorsDirty(x, y, true);
      }
@@ -20447,17 +20052,8 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
      }
  
-+    @Deprecated @io.papermc.paper.annotation.DoNotUse // Folia - Rework map holder tracking
-     public MapItemSavedData.HoldingPlayer getHoldingPlayer(final Player player) {
--        MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
--        if (holdingPlayer == null) {
--            holdingPlayer = new MapItemSavedData.HoldingPlayer(player);
--            this.carriedByPlayers.put(player, holdingPlayer);
--            this.carriedBy.add(holdingPlayer);
--        }
--
--        return holdingPlayer;
-+        throw new UnsupportedOperationException("Holders are managed by inventory ticking and item frame tracking"); // Folia - Rework map holder tracking
+@@ -517,7 +524,7 @@ public class MapItemSavedData extends SavedData {
+         throw new UnsupportedOperationException("Holders are managed by inventory ticking and item frame tracking"); // Paper - Rework map holder tracking
      }
  
 -    public boolean toggleBanner(final LevelAccessor level, final BlockPos pos) {
@@ -20465,7 +20061,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          double xPos = pos.getX() + 0.5;
          double zPos = pos.getZ() + 0.5;
          int scale = 1 << this.scale;
-@@ -438,7 +532,7 @@ public class MapItemSavedData extends SavedData {
+@@ -525,7 +532,7 @@ public class MapItemSavedData extends SavedData {
          double yd = (zPos - this.centerZ) / scale;
          int halfSize = 63;
          if (xd >= -63.0 && yd >= -63.0 && xd <= 63.0 && yd <= 63.0) {
@@ -20474,7 +20070,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
              if (banner == null) {
                  return false;
              }
-@@ -460,7 +554,7 @@ public class MapItemSavedData extends SavedData {
+@@ -547,7 +554,7 @@ public class MapItemSavedData extends SavedData {
          return false;
      }
  
@@ -20483,7 +20079,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          Iterator<MapBanner> iterator = this.bannerMarkers.values().iterator();
  
          while (iterator.hasNext()) {
-@@ -480,13 +574,13 @@ public class MapItemSavedData extends SavedData {
+@@ -567,13 +574,13 @@ public class MapItemSavedData extends SavedData {
          return this.bannerMarkers.values();
      }
  
@@ -20499,7 +20095,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          byte oldColor = this.colors[x + y * 128];
          if (oldColor != newColor) {
              this.setColor(x, y, newColor);
-@@ -496,12 +590,12 @@ public class MapItemSavedData extends SavedData {
+@@ -583,12 +590,12 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20514,7 +20110,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          this.decorations.clear();
          this.trackedDecorationCount = 0;
  
-@@ -518,7 +612,7 @@ public class MapItemSavedData extends SavedData {
+@@ -605,7 +612,7 @@ public class MapItemSavedData extends SavedData {
          return this.decorations.values();
      }
  
@@ -20523,30 +20119,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
          return this.trackedDecorationCount > limit;
      }
  
-@@ -536,6 +630,11 @@ public class MapItemSavedData extends SavedData {
-         private boolean dirtyDecorations = true;
-         private int tick;
-         public int step;
-+        // Folia start - Rework map holder tracking
-+        private boolean inInventory;
-+        private boolean inventoryTicked;
-+        private final it.unimi.dsi.fastutil.ints.IntSet viewedFrames = new it.unimi.dsi.fastutil.ints.IntOpenHashSet();
-+        // Folia end - Rework map holder tracking
- 
-         private HoldingPlayer(final Player player) {
-             this.player = player;
-@@ -622,8 +721,10 @@ public class MapItemSavedData extends SavedData {
-         // Paper start
-         private void addSeenPlayers(java.util.Collection<MapDecoration> icons) {
-             org.bukkit.entity.Player player = (org.bukkit.entity.Player) this.player.getBukkitEntity();
-+            final String viewerName = this.player.getPlainTextName(); // Folia - Rework map holder tracking
-             MapItemSavedData.this.decorations.forEach((name, mapIcon) -> {
-                 // If this cursor is for a player check visibility with vanish system
-+                if (MapItemSavedData.this.isMarkerHiddenFrom(name, viewerName)) return; // Folia - Rework map holder tracking
-                 org.bukkit.entity.Player other = org.bukkit.Bukkit.getPlayerExact(name); // Spigot
-                 if (other == null || player.canSee(other)) {
-                     icons.add(mapIcon);
-@@ -672,11 +773,13 @@ public class MapItemSavedData extends SavedData {
+@@ -766,11 +773,13 @@ public class MapItemSavedData extends SavedData {
          }
  
          public void applyToMap(final MapItemSavedData map) {
@@ -20561,7 +20134,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e
      }
  
 diff --git a/net/minecraft/world/level/storage/SavedDataStorage.java b/net/minecraft/world/level/storage/SavedDataStorage.java
-index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2eface0dc4a 100644
+index 23b5d29624b8c06775f582ccebdfba6bf21f243b..9358b8562d4d3c768971814c5b712b450d2edc08 100644
 --- a/net/minecraft/world/level/storage/SavedDataStorage.java
 +++ b/net/minecraft/world/level/storage/SavedDataStorage.java
 @@ -40,7 +40,7 @@ import org.slf4j.Logger;
@@ -20573,28 +20146,9 @@ index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2ef
      private final DataFixer fixerUpper;
      private final HolderLookup.Provider registries;
      private final Path dataFolder;
-@@ -62,25 +62,63 @@ public class SavedDataStorage implements AutoCloseable {
-         }
+@@ -63,24 +63,44 @@ public class SavedDataStorage implements AutoCloseable {
      }
  
-+    // Folia start - region threading
-+    public <T extends SavedData> @Nullable T read(SavedDataType<T> type, java.util.function.@Nullable Consumer<@Nullable T> onRead) {
-+        // try lockless read first
-+        Optional<SavedData> immediate = this.cache.get(type);
-+        if (immediate != null) {
-+            return (T)immediate.orElse(null);
-+        } // else: fall back to slow path
-+
-+        return (T)this.cache.computeIfAbsent(type, (SavedDataType<?> key) -> {
-+            SavedData onDisk = SavedDataStorage.this.readSavedData(key);
-+            if (onRead != null) {
-+                onRead.accept((T)onDisk);
-+            }
-+            return Optional.ofNullable(onDisk);
-+        }).orElse(null);
-+    }
-+    // Folia end - region threading
-+
      public <T extends SavedData> T computeIfAbsent(final SavedDataType<T> type) {
 -        T data = this.get(type);
 -        if (data != null) {
@@ -20617,13 +20171,13 @@ index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2ef
 +                    return Optional.of(onDisk);
 +                }
 +            }
++
++            SavedData newData = key.constructor().get();
++            newData.setDirty();
  
 -        T newData = (T)type.constructor().get();
 -        this.set(type, newData);
 -        return newData;
-+            SavedData newData = key.constructor().get();
-+            newData.setDirty();
-+
 +            return Optional.of(newData);
 +        }).orElse(null);
 +        // Folia end - region threading
@@ -20650,7 +20204,7 @@ index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2ef
      }
  
      private <T extends SavedData> @Nullable T readSavedData(final SavedDataType<T> type) {
-@@ -102,8 +140,9 @@ public class SavedDataStorage implements AutoCloseable {
+@@ -102,8 +122,9 @@ public class SavedDataStorage implements AutoCloseable {
      }
  
      public <T extends SavedData> void set(final SavedDataType<T> type, final T data) {
@@ -20661,7 +20215,7 @@ index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2ef
      }
  
      public CompoundTag readTagFromDisk(final Path dataFile, final DataFixTypes type, final int newVersion) throws IOException {
-@@ -143,6 +182,41 @@ public class SavedDataStorage implements AutoCloseable {
+@@ -143,6 +164,41 @@ public class SavedDataStorage implements AutoCloseable {
          return gzip;
      }
  
@@ -20703,7 +20257,7 @@ index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2ef
      public CompletableFuture<?> scheduleSave() {
          if (this.closed) {
              throw new IllegalStateException("Trying to schedule save when SavedDataStorage is already closed");
-@@ -189,8 +263,9 @@ public class SavedDataStorage implements AutoCloseable {
+@@ -189,8 +245,9 @@ public class SavedDataStorage implements AutoCloseable {
          Map<SavedDataType<?>, CompoundTag> tagsToSave = new Object2ObjectArrayMap<>();
          RegistryOps<Tag> ops = this.registries.createSerializationContext(NbtOps.INSTANCE);
          this.cache.forEach((type, optional) -> optional.filter(SavedData::isDirty).ifPresent(data -> {
@@ -20714,7 +20268,7 @@ index d2a379b55467af19d9c7915e6964f97ca7ea264f..74b055c34aba4d52b1d55965015ba2ef
          }));
          return tagsToSave;
      }
-@@ -198,7 +273,9 @@ public class SavedDataStorage implements AutoCloseable {
+@@ -198,7 +255,9 @@ public class SavedDataStorage implements AutoCloseable {
      private <T extends SavedData> CompoundTag encodeUnchecked(final SavedDataType<T> type, final SavedData data, final RegistryOps<Tag> ops) {
          Codec<T> codec = type.codec();
          CompoundTag tag = new CompoundTag();
