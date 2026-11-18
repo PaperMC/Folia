@@ -19887,7 +19887,7 @@ index 6b3ce2ded53a7ea46cf7f0cb49043a022f6d9ee7..3a6e7e7906cdfae1b29d9c6f5c1c976a
          return id;
      }
 diff --git a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9daf2f48f06 100644
+index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..2955389d95bdd7335ab1568712184577457c4776 100644
 --- a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -177,7 +177,7 @@ public class MapItemSavedData extends SavedData {
@@ -19918,7 +19918,50 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          if (!this.carriedByPlayers.containsKey(tickingPlayer)) {
              MapItemSavedData.HoldingPlayer holdingPlayer = new MapItemSavedData.HoldingPlayer(tickingPlayer);
              this.carriedByPlayers.put(tickingPlayer, holdingPlayer);
-@@ -397,7 +398,7 @@ public class MapItemSavedData extends SavedData {
+@@ -213,21 +214,32 @@ public class MapItemSavedData extends SavedData {
+             MapItemSavedData.HoldingPlayer otherHoldingPlayer = this.carriedBy.get(i);
+             Player otherPlayer = otherHoldingPlayer.player;
+             String otherPlayerName = otherPlayer.getPlainTextName();
+-            if (!otherPlayer.isRemoved() && (placedInFrame != null || otherPlayer.getInventory().contains(mapMatcher))) {
+-                if (placedInFrame == null && otherPlayer.level().dimension() == this.dimension && this.trackingPosition) {
+-                    this.addDecoration(
+-                        MapDecorationTypes.PLAYER, otherPlayer.level(), otherPlayerName, otherPlayer.getX(), otherPlayer.getZ(), otherPlayer.getYRot(), null
+-                    );
++            // Folia start - region threading
++            final Boolean scheduled = otherPlayer.getBukkitEntity().taskScheduler.scheduleOrExecute((otherPlayerEntity) -> {
++                synchronized (this) {
++                    if (!otherPlayerEntity.isRemoved() && (placedInFrame != null || otherPlayer.getInventory().contains(mapMatcher))) {
++                        if (placedInFrame == null && otherPlayerEntity.level().dimension() == this.dimension && this.trackingPosition) {
++                            this.addDecoration(
++                                    MapDecorationTypes.PLAYER, otherPlayerEntity.level(), otherPlayerName, otherPlayerEntity.getX(), otherPlayerEntity.getZ(), otherPlayerEntity.getYRot(), null
++                            );
++                        }
++                    } else {
++                        this.carriedByPlayers.remove(otherPlayerEntity);
++                        this.carriedBy.remove(otherHoldingPlayer);
++                        this.removeDecoration(otherPlayerName);
++                    }
++
++                    if (!otherPlayerEntity.equals(tickingPlayer) && hasMapInvisibilityItemEquipped((Player) otherPlayerEntity)) {
++                        this.removeDecoration(otherPlayerName);
++                    }
+                 }
+-            } else {
++            });
++            if (scheduled == Boolean.FALSE) {
+                 this.carriedByPlayers.remove(otherPlayer);
+                 this.carriedBy.remove(otherHoldingPlayer);
+                 this.removeDecoration(otherPlayerName);
+             }
+-
+-            if (!otherPlayer.equals(tickingPlayer) && hasMapInvisibilityItemEquipped(otherPlayer)) {
+-                this.removeDecoration(otherPlayerName);
+-            }
++            // Folia end - region threading
+         }
+ 
+         if (placedInFrame != null && this.trackingPosition) {
+@@ -397,7 +409,7 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -19927,7 +19970,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
          return holdingPlayer == null ? null : holdingPlayer.nextUpdatePacket(id);
      }
-@@ -406,20 +407,21 @@ public class MapItemSavedData extends SavedData {
+@@ -406,20 +418,21 @@ public class MapItemSavedData extends SavedData {
      // Paper start - Fix unnecessary map data saves
          this.setColorsDirty(x, y, true);
      }
@@ -19953,7 +19996,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
          if (holdingPlayer == null) {
              holdingPlayer = new MapItemSavedData.HoldingPlayer(player);
-@@ -430,7 +432,7 @@ public class MapItemSavedData extends SavedData {
+@@ -430,7 +443,7 @@ public class MapItemSavedData extends SavedData {
          return holdingPlayer;
      }
  
@@ -19962,7 +20005,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          double xPos = pos.getX() + 0.5;
          double zPos = pos.getZ() + 0.5;
          int scale = 1 << this.scale;
-@@ -438,7 +440,7 @@ public class MapItemSavedData extends SavedData {
+@@ -438,7 +451,7 @@ public class MapItemSavedData extends SavedData {
          double yd = (zPos - this.centerZ) / scale;
          int halfSize = 63;
          if (xd >= -63.0 && yd >= -63.0 && xd <= 63.0 && yd <= 63.0) {
@@ -19971,7 +20014,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
              if (banner == null) {
                  return false;
              }
-@@ -460,7 +462,7 @@ public class MapItemSavedData extends SavedData {
+@@ -460,7 +473,7 @@ public class MapItemSavedData extends SavedData {
          return false;
      }
  
@@ -19980,7 +20023,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          Iterator<MapBanner> iterator = this.bannerMarkers.values().iterator();
  
          while (iterator.hasNext()) {
-@@ -480,13 +482,13 @@ public class MapItemSavedData extends SavedData {
+@@ -480,13 +493,13 @@ public class MapItemSavedData extends SavedData {
          return this.bannerMarkers.values();
      }
  
@@ -19996,7 +20039,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          byte oldColor = this.colors[x + y * 128];
          if (oldColor != newColor) {
              this.setColor(x, y, newColor);
-@@ -496,12 +498,12 @@ public class MapItemSavedData extends SavedData {
+@@ -496,12 +509,12 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20011,7 +20054,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          this.decorations.clear();
          this.trackedDecorationCount = 0;
  
-@@ -518,7 +520,7 @@ public class MapItemSavedData extends SavedData {
+@@ -518,7 +531,7 @@ public class MapItemSavedData extends SavedData {
          return this.decorations.values();
      }
  
@@ -20020,7 +20063,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..12b00057648fa85ff4e4938eed3ea9da
          return this.trackedDecorationCount > limit;
      }
  
-@@ -672,11 +674,13 @@ public class MapItemSavedData extends SavedData {
+@@ -672,11 +685,13 @@ public class MapItemSavedData extends SavedData {
          }
  
          public void applyToMap(final MapItemSavedData map) {
