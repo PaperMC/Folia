@@ -11244,17 +11244,17 @@ index ef53d4d17222a882dd3d33575096c864a0a00a06..d9e1eff4830b3b956f0b914a2ff11c99
      }
  }
 diff --git a/net/minecraft/server/level/ServerEntity.java b/net/minecraft/server/level/ServerEntity.java
-index e46f95b19da1c14f240ec6697f22b5e220e0a835..415ff23720cd4b6e95e3ba7250cb9b5fe63c01f0 100644
+index e46f95b19da1c14f240ec6697f22b5e220e0a835..a2d13e6ffd3e17a9059c418049f489292cd9ec4a 100644
 --- a/net/minecraft/server/level/ServerEntity.java
 +++ b/net/minecraft/server/level/ServerEntity.java
 @@ -77,6 +77,10 @@ public class ServerEntity {
      private boolean wasOnGround;
      private @Nullable List<SynchedEntityData.DataValue<?>> trackedDataValues;
      private final Set<net.minecraft.server.network.ServerPlayerConnection> trackedPlayers; // Paper
-+    // Folia start - map holder tracking
++    // Folia start - Rework map holder tracking
 +    private final Set<ServerPlayer> mapFrameViewers = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
 +    private @Nullable MapId viewedMapId;
-+    // Folia end - map holder tracking
++    // Folia end - Rework map holder tracking
  
      public ServerEntity(
          final ServerLevel level,
@@ -11262,7 +11262,7 @@ index e46f95b19da1c14f240ec6697f22b5e220e0a835..415ff23720cd4b6e95e3ba7250cb9b5f
          }
  
          if (!this.trackedPlayers.isEmpty() && this.entity instanceof ItemFrame frame /*&& this.tickCount % 10 == 0*/) { // CraftBukkit - moved tickCount below // Paper - Perf: Only tick item frames if players can see it
-+            this.updateFrameMapViewers(); // Folia - map holder tracking
++            this.updateFrameMapViewers(); // Folia - Rework map holder tracking
              ItemStack itemStack = frame.getItem();
              if (this.level.paperConfig().maps.itemFrameCursorUpdateInterval > 0 && this.tickCount % this.level.paperConfig().maps.itemFrameCursorUpdateInterval == 0 && itemStack.getItem() instanceof MapItem) { // CraftBukkit - Moved this.tickCounter % 10 logic here so item frames do not enter the other blocks // Paper - Make item frame map cursor update interval configurable
                  MapId id = frame.cachedMapId; // Paper - Perf: Cache map ids on item frames
@@ -11275,12 +11275,12 @@ index e46f95b19da1c14f240ec6697f22b5e220e0a835..415ff23720cd4b6e95e3ba7250cb9b5f
 -                        if (packet != null) {
 -                            player.connection.send(packet);
 -                        }
-+                    // Folia start - map holder tracking - tick the frame once, then update its viewers
++                    // Folia start - Rework map holder tracking - tick the frame once, then update its viewers
 +                    data.tickFrame(frame, itemStack);
 +                    for (final ServerPlayer player : this.mapFrameViewers) {
 +                        this.addFrameMapViewer(player, id, data);
                      }
-+                    // Folia end - map holder tracking
++                    // Folia end - Rework map holder tracking
                  }
              }
  
@@ -11288,11 +11288,11 @@ index e46f95b19da1c14f240ec6697f22b5e220e0a835..415ff23720cd4b6e95e3ba7250cb9b5f
      }
  
      public void removePairing(final ServerPlayer player) {
-+        // Folia start - map holder tracking
++        // Folia start - Rework map holder tracking
 +        if (this.mapFrameViewers.remove(player)) {
 +            this.removeFrameMapViewer(player, this.viewedMapId);
 +        }
-+        // Folia end - map holder tracking
++        // Folia end - Rework map holder tracking
          this.entity.stopSeenByPlayer(player);
          player.connection.send(new ClientboundRemoveEntitiesPacket(this.entity.getId()));
      }
@@ -11300,19 +11300,19 @@ index e46f95b19da1c14f240ec6697f22b5e220e0a835..415ff23720cd4b6e95e3ba7250cb9b5f
          this.sendPairingData(player, packets::add);
          player.connection.send(new ClientboundBundlePacket(packets));
          this.entity.startSeenByPlayer(player);
-+        // Folia start - map holder tracking - send the framed map right away instead of at the next frame update
++        // Folia start - Rework map holder tracking - send the framed map right away instead of at the next frame update
 +        if (this.entity instanceof ItemFrame) {
 +            this.updateFrameMapViewers();
 +            this.mapFrameViewers.add(player);
 +            this.addFrameMapViewer(player);
 +        }
-+        // Folia end - map holder tracking
++        // Folia end - Rework map holder tracking
 +    }
 +
-+    // Folia start - map holder tracking
++    // Folia start - Rework map holder tracking
 +    // Players tracking a framed map are holders of that map until they stop tracking the frame or the frame's map changes
 +    private void updateFrameMapViewers() {
-+        final ItemFrame frame = (ItemFrame)this.entity;
++        final ItemFrame frame = (ItemFrame) this.entity;
 +        // only maps are ticked by the frame, so only subscribe viewers to those
 +        final MapId mapId = frame.getItem().getItem() instanceof MapItem ? frame.cachedMapId : null;
 +        if (java.util.Objects.equals(mapId, this.viewedMapId)) {
@@ -11349,7 +11349,7 @@ index e46f95b19da1c14f240ec6697f22b5e220e0a835..415ff23720cd4b6e95e3ba7250cb9b5f
 +            data.removeFrameViewer(player, this.entity.getId());
 +        }
      }
-+    // Folia end - map holder tracking
++    // Folia end - Rework map holder tracking
  
      public void sendPairingData(final ServerPlayer player, final Consumer<Packet<ClientGamePacketListener>> broadcast) {
          this.entity.updateDataBeforeSync();
@@ -11388,7 +11388,7 @@ index cc6f4e2845ef1e95c765d65f17c8aa1b06652927..7316c756f1c228eef710219a659c7968
                  foundPlayers.add(player);
              }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index ea4cc487002a0edc54cc49bfbecf72be156b6af7..df10119e5c58925a84cba873c098ddfb144fd847 100644
+index ea4cc487002a0edc54cc49bfbecf72be156b6af7..93ee8fe8d47a378f296b0451857ea68e55eff0e3 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -193,11 +193,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -12503,11 +12503,11 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..df10119e5c58925a84cba873c098ddfb
 -                    if (holder != null && map.carriedBy.remove(holder)) {
 -                        map.decorations.remove(player.getName().getString());
 -                    }
-+                // Folia start - map holder tracking - only visit the maps the player is subscribed to
++                // Folia start - Rework map holder tracking - only visit the maps the player is subscribed to
 +                for (final MapItemSavedData map : new java.util.ArrayList<>(player.subscribedMaps)) {
 +                    map.removeHolder(player);
                  }
-+                // Folia end - map holder tracking
++                // Folia end - Rework map holder tracking
              }
              // Spigot end
              // Spigot start
@@ -12541,7 +12541,7 @@ index ea4cc487002a0edc54cc49bfbecf72be156b6af7..df10119e5c58925a84cba873c098ddfb
  
      private static long currentLagCompensationTick() {
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4fe5997e36 100644
+index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a29e3806ccb6a268f36f377f8dc12640170bff6c 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -212,7 +212,7 @@ import org.slf4j.Logger;
@@ -12763,7 +12763,18 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
              } else {
                  this.setCamera(this);
              }
-@@ -902,9 +1066,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -830,6 +994,10 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+                 if (!this.isSleeping()) {
+                     this.awardStat(Stats.TIME_SINCE_REST);
+                 }
++            // Folia start - Rework map holder tracking - spectators touching unloaded chunks are not ticked, still keep their map holders up to date
++            } else if (this.valid) {
++                this.tickInventoryMapsWithoutInventoryTick();
++            // Folia end - Rework map holder tracking
+             }
+ 
+             for (int i = 0; i < this.getInventory().getContainerSize(); i++) {
+@@ -902,9 +1070,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  this.oldLevel = this.experienceLevel;
              }
  
@@ -12774,7 +12785,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
              // CraftBukkit end
          } catch (Throwable t) {
              CrashReport report = CrashReport.forThrowable(t, "Ticking player");
-@@ -1531,8 +1693,326 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1531,8 +1697,326 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          }
      }
  
@@ -13101,7 +13112,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
          if (this.isSleeping()) return null; // CraftBukkit - SPIGOT-3154
          if (this.isRemoved()) {
              return null;
-@@ -2595,7 +3075,30 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2595,7 +3079,30 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          return this.camera == null ? this : this.camera;
      }
  
@@ -13132,7 +13143,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
          Entity oldCamera = this.getCamera();
          this.camera = newCamera == null ? this : newCamera;
          if (oldCamera != this.camera) {
-@@ -2614,16 +3117,19 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2614,16 +3121,19 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  }
              }
              // Paper end - Add PlayerStartSpectatingEntityEvent and PlayerStopSpectatingEntity
@@ -13159,7 +13170,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
          }
      }
  
-@@ -2749,14 +3255,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2749,14 +3259,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  this.awardStat(Stats.DROP);
              }
          }
@@ -13171,11 +13182,11 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
 -            }
 -        }
 -        // Paper end - remove player from map on drop
-+        // Folia - map holder tracking - removing the player from the map on drop is handled by the per-tick inventory check
++        // Folia - Rework map holder tracking - removing the player from the map on drop is handled by the per-tick inventory check
          return entity;
      }
  
-@@ -2966,11 +3465,11 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2966,11 +3469,11 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public void registerEnderPearl(final ThrownEnderpearl enderPearl) {
@@ -13189,7 +13200,7 @@ index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..5b799b4512cc095b27a5029fb6122f4f
      }
  
      public Set<ThrownEnderpearl> getEnderPearls() {
-@@ -3172,7 +3671,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3172,7 +3675,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          this.experienceLevel = this.newLevel;
          this.totalExperience = this.newTotalExp;
          this.experienceProgress = 0;
@@ -16959,37 +16970,69 @@ index 625996a7e1c6ec51312d25d7a94a08caccba32de..a5b6a5e742680b57d68d06d630d5207f
              return true;
          }
 diff --git a/net/minecraft/world/entity/player/Player.java b/net/minecraft/world/entity/player/Player.java
-index 4ba3fb85b0473b4e7aa237701034d25f84e955cd..165506f299cf4cb4abc4172ef85a1372b5a7c734 100644
+index 4ba3fb85b0473b4e7aa237701034d25f84e955cd..5a8b85df751258ab3d598d7879d771d885631f8a 100644
 --- a/net/minecraft/world/entity/player/Player.java
 +++ b/net/minecraft/world/entity/player/Player.java
-@@ -149,6 +149,11 @@ public abstract class Player extends Avatar implements ContainerUser {
-     private static final int DEFAULT_SCORE = 0;
+@@ -150,6 +150,11 @@ public abstract class Player extends Avatar implements ContainerUser {
      public static final float CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER_VALUE = 2.0F;
      private final Inventory inventory;
-+    // Folia start - map holder tracking
-+    // maps this player is subscribed to (a holder of), and the subset of those in their inventory or equipment; only modified on this player's thread
+     protected PlayerEnderChestContainer enderChestInventory = new PlayerEnderChestContainer(this); // CraftBukkit - add "this" to constructor
++    // Folia start - Rework map holder tracking
++    // maps this player is subscribed to (a holder of), and the subset of those in their inventory or equipment
 +    public final java.util.Set<net.minecraft.world.level.saveddata.maps.MapItemSavedData> subscribedMaps = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
 +    public final java.util.Set<net.minecraft.world.level.saveddata.maps.MapItemSavedData> inventoryMaps = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
-+    // Folia end - map holder tracking
-     protected PlayerEnderChestContainer enderChestInventory = new PlayerEnderChestContainer(this); // CraftBukkit - add "this" to constructor
++    // Folia end - Rework map holder tracking
      public final InventoryMenu inventoryMenu;
      public AbstractContainerMenu containerMenu;
-@@ -491,6 +496,14 @@ public abstract class Player extends Avatar implements ContainerUser {
+     protected FoodData foodData = new FoodData();
+@@ -491,6 +496,7 @@ public abstract class Player extends Avatar implements ContainerUser {
          }
  
          super.aiStep();
-+        // Folia start - map holder tracking - inventory and equipment have been ticked, maps that were not ticked have left the inventory
++        this.checkInventoryMaps(); // Folia - Rework map holder tracking - inventory and equipment have been ticked, maps that were not ticked have left the inventory
+         this.yHeadRot = this.getYRot();
+         this.setSpeed((float)this.getAttributeValue(Attributes.MOVEMENT_SPEED));
+         if (this.getHealth() > 0.0F && !this.isSpectator()) {
+@@ -520,6 +526,38 @@ public abstract class Player extends Avatar implements ContainerUser {
+         this.handleShoulderEntities();
+     }
+ 
++    // Folia start - Rework map holder tracking
++    private void checkInventoryMaps() {
 +        // checkStillInInventory must not modify inventoryMaps, this iterator does not detect concurrent modification
 +        for (final java.util.Iterator<net.minecraft.world.level.saveddata.maps.MapItemSavedData> iterator = this.inventoryMaps.iterator(); iterator.hasNext();) {
 +            if (!iterator.next().checkStillInInventory(this)) {
 +                iterator.remove();
 +            }
 +        }
-+        // Folia end - map holder tracking
-         this.yHeadRot = this.getYRot();
-         this.setSpeed((float)this.getAttributeValue(Attributes.MOVEMENT_SPEED));
-         if (this.getHealth() > 0.0F && !this.isSpectator()) {
-@@ -1385,6 +1398,14 @@ public abstract class Player extends Avatar implements ContainerUser {
++    }
++
++    // For players whose tick is skipped (spectators touching unloaded chunks): keeps their markers and holders up to date
++    // without a full inventory tick, which would also update held maps from the world
++    public void tickInventoryMapsWithoutInventoryTick() {
++        if (this.inventoryMaps.isEmpty()) {
++            return;
++        }
++        for (int i = 0; i < this.inventory.getContainerSize(); i++) {
++            this.tickInventoryMap(this.inventory.getItem(i));
++        }
++        this.checkInventoryMaps();
++    }
++
++    private void tickInventoryMap(final ItemStack itemStack) {
++        if (itemStack.getItem() instanceof net.minecraft.world.item.MapItem) {
++            final net.minecraft.world.level.saveddata.maps.MapItemSavedData data = net.minecraft.world.item.MapItem.getSavedData(itemStack, this.level());
++            if (data != null) {
++                data.tickCarriedBy(this, itemStack);
++            }
++        }
++    }
++    // Folia end - Rework map holder tracking
++
+     protected void tickRegeneration() {
+     }
+ 
+@@ -1385,6 +1423,14 @@ public abstract class Player extends Avatar implements ContainerUser {
          return this.isLocalPlayer();
      }
  
@@ -17710,7 +17753,7 @@ index 284b3f1dacf975cfb263ed44478993326637f4d2..9581ea1ea59af5e04dc32470ddf4cef9
  
              DataComponentPatch newPatch = this.components.asPatch();
 diff --git a/net/minecraft/world/item/MapItem.java b/net/minecraft/world/item/MapItem.java
-index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..85d8ca7d83efe1e4bd167289d9684f34b304d746 100644
+index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..ad7e3eca74ea7582791986a54eb43e88adc4b180 100644
 --- a/net/minecraft/world/item/MapItem.java
 +++ b/net/minecraft/world/item/MapItem.java
 @@ -86,6 +86,7 @@ public class MapItem extends Item {
@@ -17726,8 +17769,8 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..85d8ca7d83efe1e4bd167289d9684f34
              }
  
 -            MapItemSavedData.HoldingPlayer holdingPlayer = data.getHoldingPlayer(player2);
-+            MapItemSavedData.HoldingPlayer holdingPlayer = data.carriedByPlayers.get(player2); // Folia - map holder tracking - do not create a holder without a reason
-+            if (holdingPlayer == null) return; // Folia - map holder tracking
++            MapItemSavedData.HoldingPlayer holdingPlayer = data.carriedByPlayers.get(player2); // Folia - Rework map holder tracking - do not create a holder without a reason
++            if (holdingPlayer == null) return; // Folia - Rework map holder tracking
              holdingPlayer.step++;
              BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
              BlockPos.MutableBlockPos belowPos = new BlockPos.MutableBlockPos();
@@ -17775,7 +17818,7 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..85d8ca7d83efe1e4bd167289d9684f34
 +            synchronized (data) { // Folia - region threading
              if (owner instanceof Player player) {
 -                data.tickCarriedBy(player, itemStack, null);
-+                data.tickCarriedBy(player, itemStack); // Folia - map holder tracking
++                data.tickCarriedBy(player, itemStack); // Folia - Rework map holder tracking
              }
  
              if (!data.locked && slot != null && slot.getType() == EquipmentSlot.Type.HAND) {
@@ -20144,14 +20187,14 @@ index 6b3ce2ded53a7ea46cf7f0cb49043a022f6d9ee7..3a6e7e7906cdfae1b29d9c6f5c1c976a
          return id;
      }
 diff --git a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac854d0d2e 100644
+index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..54e847b264425d554903227ff43ce63e3e1c76f2 100644
 --- a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -75,6 +75,7 @@ public class MapItemSavedData extends SavedData {
      public final Map<String, MapDecoration> decorations = Maps.newLinkedHashMap();
      private final Map<String, MapFrame> frameMarkers = Maps.newHashMap();
      private int trackedDecorationCount;
-+    private final java.util.Set<String> hiddenPlayerMarkers = new java.util.HashSet<>(); // Folia - map holder tracking
++    private final java.util.Set<String> hiddenPlayerMarkers = new java.util.HashSet<>(); // Folia - Rework map holder tracking
  
      // CraftBukkit start
      public final org.bukkit.craftbukkit.map.CraftMapView mapView;
@@ -20167,7 +20210,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          result.bannerMarkers.putAll(this.bannerMarkers);
          result.decorations.putAll(this.decorations);
          result.trackedDecorationCount = this.trackedDecorationCount;
-+        // Folia start - do not bake player markers into locked maps
++        // Folia start - Don't copy player markers to locked maps
 +        // Player markers are live state maintained by each holder's tick, not part of the map's content, so they are not copied
 +        for (final java.util.Iterator<MapDecoration> iterator = result.decorations.values().iterator(); iterator.hasNext();) {
 +            final MapDecoration decoration = iterator.next();
@@ -20178,7 +20221,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 +                }
 +            }
 +        }
-+        // Folia end - do not bake player markers into locked maps
++        // Folia end - Don't copy player markers to locked maps
          System.arraycopy(this.colors, 0, result.colors, 0, this.colors.length);
          return result;
      }
@@ -20188,7 +20231,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          return createFresh(this.centerX, this.centerZ, (byte)Mth.clamp(this.scale + 1, 0, 4), this.trackingPosition, this.unlimitedTracking, this.dimension);
      }
  
-@@ -197,40 +210,121 @@ public class MapItemSavedData extends SavedData {
+@@ -197,40 +210,39 @@ public class MapItemSavedData extends SavedData {
          return stack -> stack == mapStack || stack.is(mapStack.getItem()) && Objects.equals(mapId, stack.get(DataComponents.MAP_ID));
      }
  
@@ -20196,31 +20239,28 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 -        if (!this.carriedByPlayers.containsKey(tickingPlayer)) {
 -            MapItemSavedData.HoldingPlayer holdingPlayer = new MapItemSavedData.HoldingPlayer(tickingPlayer);
 -            this.carriedByPlayers.put(tickingPlayer, holdingPlayer);
-+    // Folia start - map holder tracking
-+    // A player is a holder of (subscribed to) this map while it is in their inventory or equipment, or while a framed copy of it is tracking them.
-+    // carriedBy/carriedByPlayers therefore also contain frame viewers that do not carry the map.
-+    // Each holder is only ever modified from their own thread, so no holder accesses another player.
-+    private MapItemSavedData.HoldingPlayer getOrCreateHolder(final Player player) {
-+        MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
-+        if (holdingPlayer == null) {
-+            holdingPlayer = new MapItemSavedData.HoldingPlayer(player);
-+            this.carriedByPlayers.put(player, holdingPlayer);
-             this.carriedBy.add(holdingPlayer);
-+            player.subscribedMaps.add(this);
+-            this.carriedBy.add(holdingPlayer);
++    // Folia start - Rework map holder tracking - frames use tickFrame; only update the ticking player, the map is in their inventory since it is ticked from there
++    public synchronized void tickCarriedBy(final Player tickingPlayer, final ItemStack itemStack) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(tickingPlayer, "Ticking map player in incorrect region"); // Folia - region threading
++        final MapItemSavedData.HoldingPlayer holdingPlayer = this.getOrCreateHolder(tickingPlayer);
++        if (!holdingPlayer.inInventory) {
++            holdingPlayer.inInventory = true;
++            tickingPlayer.inventoryMaps.add(this);
          }
-+        return holdingPlayer;
-+    }
++        holdingPlayer.inventoryTicked = true;
  
 -        Predicate<ItemStack> mapMatcher = mapMatcher(itemStack);
 -        if (!tickingPlayer.getInventory().contains(mapMatcher)) {
 -            this.removeDecoration(tickingPlayer.getPlainTextName());
-+    private void removeHolderIfUnused(final MapItemSavedData.HoldingPlayer holdingPlayer) {
-+        if (!holdingPlayer.inInventory && holdingPlayer.viewedFrames.isEmpty()) {
-+            this.carriedByPlayers.remove(holdingPlayer.player);
-+            this.carriedBy.remove(holdingPlayer);
-+            holdingPlayer.player.subscribedMaps.remove(this);
++        final String name = tickingPlayer.getPlainTextName();
++        if (tickingPlayer.level().dimension() == this.dimension && this.trackingPosition) {
++            this.addDecoration(
++                MapDecorationTypes.PLAYER, tickingPlayer.level(), name, tickingPlayer.getX(), tickingPlayer.getZ(), tickingPlayer.getYRot(), null
++            );
++        } else {
++            this.removeDecoration(name);
          }
-+    }
  
 -        for (int i = 0; i < this.carriedBy.size(); i++) {
 -            MapItemSavedData.HoldingPlayer otherHoldingPlayer = this.carriedBy.get(i);
@@ -20237,6 +20277,85 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 -                this.carriedBy.remove(otherHoldingPlayer);
 -                this.removeDecoration(otherPlayerName);
 -            }
+-
+-            if (!otherPlayer.equals(tickingPlayer) && hasMapInvisibilityItemEquipped(otherPlayer)) {
+-                this.removeDecoration(otherPlayerName);
+-            }
++        final boolean hiddenChanged = hasMapInvisibilityItemEquipped(tickingPlayer) ? this.hiddenPlayerMarkers.add(name) : this.hiddenPlayerMarkers.remove(name);
++        if (hiddenChanged) {
++            this.setDecorationsDirty();
+         }
+ 
+-        if (placedInFrame != null && this.trackingPosition) {
++        this.addStaticDecorations(tickingPlayer.level(), itemStack);
++    }
++
++    // Frame logic split from tickCarriedBy, runs once per frame instead of once per viewer
++    public synchronized void tickFrame(final ItemFrame placedInFrame, final ItemStack itemStack) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(placedInFrame, "Ticking map frame in incorrect region"); // Folia - region threading
++        final Level level = placedInFrame.level();
++        if (this.trackingPosition) {
++        // Folia end - Rework map holder tracking
+             BlockPos pos = placedInFrame.getPos();
+             MapFrame existingFrame = this.frameMarkers.get(MapFrame.frameId(pos));
+             if (existingFrame != null && placedInFrame.getId() != existingFrame.entityId() && this.frameMarkers.containsKey(existingFrame.getId())) {
+@@ -238,10 +250,10 @@ public class MapItemSavedData extends SavedData {
+             }
+ 
+             MapFrame mapFrame = new MapFrame(pos, placedInFrame.getDirection().get2DDataValue() * 90, placedInFrame.getId());
+-            if (this.decorations.size() < tickingPlayer.level().paperConfig().maps.itemFrameCursorLimit) { // Paper - Limit item frame cursors on maps
++            if (this.decorations.size() < level.paperConfig().maps.itemFrameCursorLimit) { // Paper - Limit item frame cursors on maps // Folia - Rework map holder tracking
+             this.addDecoration(
+                 MapDecorationTypes.FRAME,
+-                tickingPlayer.level(),
++                level, // Folia - Rework map holder tracking
+                 getFrameKey(placedInFrame.getId()),
+                 pos.getX(),
+                 pos.getZ(),
+@@ -255,16 +267,103 @@ public class MapItemSavedData extends SavedData {
+             } // Paper - Limit item frame cursors on maps
+         }
+ 
++        // Folia start - Rework map holder tracking
++        this.addStaticDecorations(level, itemStack);
++    }
++
++    private void addStaticDecorations(final Level level, final ItemStack itemStack) {
++        // Folia end - Rework map holder tracking
+         MapDecorations staticDecorations = itemStack.getOrDefault(DataComponents.MAP_DECORATIONS, MapDecorations.EMPTY);
+         if (!this.decorations.keySet().containsAll(staticDecorations.decorations().keySet())) {
+             staticDecorations.decorations().forEach((id, entry) -> {
+                 if (!this.decorations.containsKey(id)) {
+-                    this.addDecoration(entry.type(), tickingPlayer.level(), id, entry.x(), entry.z(), entry.rotation(), null);
++                    this.addDecoration(entry.type(), level, id, entry.x(), entry.z(), entry.rotation(), null); // Folia - Rework map holder tracking
+                 }
+             });
+         }
+     }
+ 
++    // Folia start - Rework map holder tracking
++    // A player is a holder of (subscribed to) this map while it is in their inventory or equipment, or while a framed copy of it is tracking them.
++    // carriedBy/carriedByPlayers therefore also contain frame viewers that do not carry the map.
++    // A holder is only updated from its own player's inventory tick or from tracking of frames that player views, so no update reads another player's state.
++    private MapItemSavedData.HoldingPlayer getOrCreateHolder(final Player player) {
++        MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
++        if (holdingPlayer == null) {
++            holdingPlayer = new MapItemSavedData.HoldingPlayer(player);
++            this.carriedByPlayers.put(player, holdingPlayer);
++            this.carriedBy.add(holdingPlayer);
++            player.subscribedMaps.add(this);
++        }
++        return holdingPlayer;
++    }
++
++    private void removeHolderIfUnused(final MapItemSavedData.HoldingPlayer holdingPlayer) {
++        if (!holdingPlayer.inInventory && holdingPlayer.viewedFrames.isEmpty()) {
++            this.carriedByPlayers.remove(holdingPlayer.player);
++            this.carriedBy.remove(holdingPlayer);
++            holdingPlayer.player.subscribedMaps.remove(this);
++        }
++    }
++
 +    // Does not update the player's inventoryMaps, the caller must
 +    private void removeFromInventory(final MapItemSavedData.HoldingPlayer holdingPlayer) {
 +        final String name = holdingPlayer.player.getPlainTextName();
@@ -20245,18 +20364,15 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 +        this.hiddenPlayerMarkers.remove(name);
 +        this.removeHolderIfUnused(holdingPlayer);
 +    }
- 
--            if (!otherPlayer.equals(tickingPlayer) && hasMapInvisibilityItemEquipped(otherPlayer)) {
--                this.removeDecoration(otherPlayerName);
--            }
++
 +    // Called for each of the player's inventoryMaps after their inventory and equipment were ticked:
 +    // the map has left their inventory if it was not ticked since the last check. Returns whether it is still in their inventory.
-+    public synchronized boolean checkStillInInventory(final Player player) {
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Checking map holder in incorrect region");
++    public synchronized boolean checkStillInInventory(final Player player) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Checking map holder in incorrect region"); // Folia - region threading
 +        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
 +        if (holdingPlayer == null || !holdingPlayer.inInventory) {
 +            return false;
-         }
++        }
 +        if (holdingPlayer.inventoryTicked) {
 +            holdingPlayer.inventoryTicked = false;
 +            return true;
@@ -20264,15 +20380,14 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 +        this.removeFromInventory(holdingPlayer);
 +        return false;
 +    }
- 
--        if (placedInFrame != null && this.trackingPosition) {
-+    public synchronized void addFrameViewer(final Player player, final int frameId) {
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Adding map frame viewer in incorrect region");
++
++    public synchronized void addFrameViewer(final Player player, final int frameId) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Adding map frame viewer in incorrect region"); // Folia - region threading
 +        this.getOrCreateHolder(player).viewedFrames.add(frameId);
 +    }
 +
-+    public synchronized void removeFrameViewer(final Player player, final int frameId) {
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Removing map frame viewer in incorrect region");
++    public synchronized void removeFrameViewer(final Player player, final int frameId) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Removing map frame viewer in incorrect region"); // Folia - region threading
 +        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
 +        if (holdingPlayer != null && holdingPlayer.viewedFrames.remove(frameId)) {
 +            this.removeHolderIfUnused(holdingPlayer);
@@ -20280,8 +20395,8 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 +    }
 +
 +    // Called when the player is removed from the world
-+    public synchronized void removeHolder(final Player player) {
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Removing map holder in incorrect region");
++    public synchronized void removeHolder(final Player player) { // Folia - make map data thread-safe
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Removing map holder in incorrect region"); // Folia - region threading
 +        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.remove(player);
 +        player.subscribedMaps.remove(this);
 +        player.inventoryMaps.remove(this);
@@ -20294,79 +20409,15 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 +    }
 +
 +    // Players wearing map invisibility equipment are hidden from every viewer but themselves
-+    public synchronized boolean isMarkerHiddenFrom(final String decorationKey, final String viewerName) {
++    public synchronized boolean isMarkerHiddenFrom(final String decorationKey, final String viewerName) { // Folia - make map data thread-safe
 +        return !decorationKey.equals(viewerName) && this.hiddenPlayerMarkers.contains(decorationKey);
 +    }
-+    // Folia end - map holder tracking
++    // Folia end - Rework map holder tracking
 +
-+    public synchronized void tickCarriedBy(final Player tickingPlayer, final ItemStack itemStack) { // Folia - make map data thread-safe // Folia - map holder tracking - frames use tickFrame
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(tickingPlayer, "Ticking map player in incorrect region"); // Folia - region threading
-+        // Folia start - map holder tracking - only update the ticking player, the map is in their inventory since it is ticked from there
-+        final MapItemSavedData.HoldingPlayer holdingPlayer = this.getOrCreateHolder(tickingPlayer);
-+        if (!holdingPlayer.inInventory) {
-+            holdingPlayer.inInventory = true;
-+            tickingPlayer.inventoryMaps.add(this);
-+        }
-+        holdingPlayer.inventoryTicked = true;
-+
-+        final String name = tickingPlayer.getPlainTextName();
-+        if (tickingPlayer.level().dimension() == this.dimension && this.trackingPosition) {
-+            this.addDecoration(
-+                MapDecorationTypes.PLAYER, tickingPlayer.level(), name, tickingPlayer.getX(), tickingPlayer.getZ(), tickingPlayer.getYRot(), null
-+            );
-+        } else {
-+            this.removeDecoration(name);
-+        }
-+
-+        final boolean hiddenChanged = hasMapInvisibilityItemEquipped(tickingPlayer) ? this.hiddenPlayerMarkers.add(name) : this.hiddenPlayerMarkers.remove(name);
-+        if (hiddenChanged) {
-+            this.setDecorationsDirty();
-+        }
-+
-+        this.addStaticDecorations(tickingPlayer.level(), itemStack);
-+        // Folia end - map holder tracking
-+    }
-+
-+    // Folia start - map holder tracking - frame logic split from tickCarriedBy, runs once per frame instead of once per viewer
-+    public synchronized void tickFrame(final ItemFrame placedInFrame, final ItemStack itemStack) {
-+        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(placedInFrame, "Ticking map frame in incorrect region");
-+        final Level level = placedInFrame.level();
-+        // Folia end - map holder tracking
-+        if (this.trackingPosition) { // Folia - map holder tracking
-             BlockPos pos = placedInFrame.getPos();
-             MapFrame existingFrame = this.frameMarkers.get(MapFrame.frameId(pos));
-             if (existingFrame != null && placedInFrame.getId() != existingFrame.entityId() && this.frameMarkers.containsKey(existingFrame.getId())) {
-@@ -238,10 +332,10 @@ public class MapItemSavedData extends SavedData {
-             }
- 
-             MapFrame mapFrame = new MapFrame(pos, placedInFrame.getDirection().get2DDataValue() * 90, placedInFrame.getId());
--            if (this.decorations.size() < tickingPlayer.level().paperConfig().maps.itemFrameCursorLimit) { // Paper - Limit item frame cursors on maps
-+            if (this.decorations.size() < level.paperConfig().maps.itemFrameCursorLimit) { // Paper - Limit item frame cursors on maps // Folia - map holder tracking
-             this.addDecoration(
-                 MapDecorationTypes.FRAME,
--                tickingPlayer.level(),
-+                level, // Folia - map holder tracking
-                 getFrameKey(placedInFrame.getId()),
-                 pos.getX(),
-                 pos.getZ(),
-@@ -255,11 +349,15 @@ public class MapItemSavedData extends SavedData {
-             } // Paper - Limit item frame cursors on maps
-         }
- 
-+        this.addStaticDecorations(level, itemStack); // Folia - map holder tracking
-+    }
-+
-+    private void addStaticDecorations(final Level level, final ItemStack itemStack) { // Folia - map holder tracking
-         MapDecorations staticDecorations = itemStack.getOrDefault(DataComponents.MAP_DECORATIONS, MapDecorations.EMPTY);
-         if (!this.decorations.keySet().containsAll(staticDecorations.decorations().keySet())) {
-             staticDecorations.decorations().forEach((id, entry) -> {
-                 if (!this.decorations.containsKey(id)) {
--                    this.addDecoration(entry.type(), tickingPlayer.level(), id, entry.x(), entry.z(), entry.rotation(), null);
-+                    this.addDecoration(entry.type(), level, id, entry.x(), entry.z(), entry.rotation(), null); // Folia - map holder tracking
-                 }
-             });
-         }
-@@ -397,7 +495,7 @@ public class MapItemSavedData extends SavedData {
+     private static boolean hasMapInvisibilityItemEquipped(final Player player) {
+         for (EquipmentSlot equipmentSlot : EquipmentSlot.values()) {
+             if (equipmentSlot != EquipmentSlot.MAINHAND
+@@ -397,7 +496,7 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20375,7 +20426,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
          return holdingPlayer == null ? null : holdingPlayer.nextUpdatePacket(id);
      }
-@@ -406,31 +504,25 @@ public class MapItemSavedData extends SavedData {
+@@ -406,31 +505,26 @@ public class MapItemSavedData extends SavedData {
      // Paper start - Fix unnecessary map data saves
          this.setColorsDirty(x, y, true);
      }
@@ -20396,7 +20447,8 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
      }
  
--    public MapItemSavedData.HoldingPlayer getHoldingPlayer(final Player player) {
++    @Deprecated @io.papermc.paper.annotation.DoNotUse // Folia - Rework map holder tracking
+     public MapItemSavedData.HoldingPlayer getHoldingPlayer(final Player player) {
 -        MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
 -        if (holdingPlayer == null) {
 -            holdingPlayer = new MapItemSavedData.HoldingPlayer(player);
@@ -20405,8 +20457,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
 -        }
 -
 -        return holdingPlayer;
-+    public synchronized MapItemSavedData.HoldingPlayer getHoldingPlayer(final Player player) { // Folia - make map data thread-safe
-+        return this.getOrCreateHolder(player); // Folia - map holder tracking
++        throw new UnsupportedOperationException("Holders are managed by inventory ticking and item frame tracking"); // Folia - Rework map holder tracking
      }
  
 -    public boolean toggleBanner(final LevelAccessor level, final BlockPos pos) {
@@ -20414,7 +20465,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          double xPos = pos.getX() + 0.5;
          double zPos = pos.getZ() + 0.5;
          int scale = 1 << this.scale;
-@@ -438,7 +530,7 @@ public class MapItemSavedData extends SavedData {
+@@ -438,7 +532,7 @@ public class MapItemSavedData extends SavedData {
          double yd = (zPos - this.centerZ) / scale;
          int halfSize = 63;
          if (xd >= -63.0 && yd >= -63.0 && xd <= 63.0 && yd <= 63.0) {
@@ -20423,7 +20474,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
              if (banner == null) {
                  return false;
              }
-@@ -460,7 +552,7 @@ public class MapItemSavedData extends SavedData {
+@@ -460,7 +554,7 @@ public class MapItemSavedData extends SavedData {
          return false;
      }
  
@@ -20432,7 +20483,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          Iterator<MapBanner> iterator = this.bannerMarkers.values().iterator();
  
          while (iterator.hasNext()) {
-@@ -480,13 +572,13 @@ public class MapItemSavedData extends SavedData {
+@@ -480,13 +574,13 @@ public class MapItemSavedData extends SavedData {
          return this.bannerMarkers.values();
      }
  
@@ -20448,7 +20499,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          byte oldColor = this.colors[x + y * 128];
          if (oldColor != newColor) {
              this.setColor(x, y, newColor);
-@@ -496,12 +588,12 @@ public class MapItemSavedData extends SavedData {
+@@ -496,12 +590,12 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20463,7 +20514,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          this.decorations.clear();
          this.trackedDecorationCount = 0;
  
-@@ -518,7 +610,7 @@ public class MapItemSavedData extends SavedData {
+@@ -518,7 +612,7 @@ public class MapItemSavedData extends SavedData {
          return this.decorations.values();
      }
  
@@ -20472,30 +20523,30 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac
          return this.trackedDecorationCount > limit;
      }
  
-@@ -536,6 +628,11 @@ public class MapItemSavedData extends SavedData {
+@@ -536,6 +630,11 @@ public class MapItemSavedData extends SavedData {
          private boolean dirtyDecorations = true;
          private int tick;
          public int step;
-+        // Folia start - map holder tracking
++        // Folia start - Rework map holder tracking
 +        private boolean inInventory;
 +        private boolean inventoryTicked;
 +        private final it.unimi.dsi.fastutil.ints.IntSet viewedFrames = new it.unimi.dsi.fastutil.ints.IntOpenHashSet();
-+        // Folia end - map holder tracking
++        // Folia end - Rework map holder tracking
  
          private HoldingPlayer(final Player player) {
              this.player = player;
-@@ -622,8 +719,10 @@ public class MapItemSavedData extends SavedData {
+@@ -622,8 +721,10 @@ public class MapItemSavedData extends SavedData {
          // Paper start
          private void addSeenPlayers(java.util.Collection<MapDecoration> icons) {
              org.bukkit.entity.Player player = (org.bukkit.entity.Player) this.player.getBukkitEntity();
-+            final String viewerName = this.player.getPlainTextName(); // Folia - map holder tracking
++            final String viewerName = this.player.getPlainTextName(); // Folia - Rework map holder tracking
              MapItemSavedData.this.decorations.forEach((name, mapIcon) -> {
                  // If this cursor is for a player check visibility with vanish system
-+                if (MapItemSavedData.this.isMarkerHiddenFrom(name, viewerName)) return; // Folia - map holder tracking
++                if (MapItemSavedData.this.isMarkerHiddenFrom(name, viewerName)) return; // Folia - Rework map holder tracking
                  org.bukkit.entity.Player other = org.bukkit.Bukkit.getPlayerExact(name); // Spigot
                  if (other == null || player.canSee(other)) {
                      icons.add(mapIcon);
-@@ -672,11 +771,13 @@ public class MapItemSavedData extends SavedData {
+@@ -672,11 +773,13 @@ public class MapItemSavedData extends SavedData {
          }
  
          public void applyToMap(final MapItemSavedData map) {
