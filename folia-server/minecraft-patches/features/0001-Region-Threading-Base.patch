@@ -20144,7 +20144,7 @@ index 6b3ce2ded53a7ea46cf7f0cb49043a022f6d9ee7..3a6e7e7906cdfae1b29d9c6f5c1c976a
          return id;
      }
 diff --git a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67ab12582d 100644
+index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..c1ae2fa9ab3813b57924fc2ba27239ac854d0d2e 100644
 --- a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -75,6 +75,7 @@ public class MapItemSavedData extends SavedData {
@@ -20155,7 +20155,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
  
      // CraftBukkit start
      public final org.bukkit.craftbukkit.map.CraftMapView mapView;
-@@ -177,18 +178,26 @@ public class MapItemSavedData extends SavedData {
+@@ -177,18 +178,30 @@ public class MapItemSavedData extends SavedData {
          return new MapItemSavedData(0, 0, scale, false, false, isLocked, dimension);
      }
  
@@ -20167,14 +20167,18 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          result.bannerMarkers.putAll(this.bannerMarkers);
          result.decorations.putAll(this.decorations);
          result.trackedDecorationCount = this.trackedDecorationCount;
-+        // Folia start - map holder tracking - hidden markers are only filtered per viewer, do not bake them into the locked copy
-+        for (final String hidden : this.hiddenPlayerMarkers) {
-+            final MapDecoration decoration = result.decorations.remove(hidden);
-+            if (decoration != null && decoration.type().value().trackCount()) {
-+                result.trackedDecorationCount--;
++        // Folia start - do not bake player markers into locked maps
++        // Player markers are live state maintained by each holder's tick, not part of the map's content, so they are not copied
++        for (final java.util.Iterator<MapDecoration> iterator = result.decorations.values().iterator(); iterator.hasNext();) {
++            final MapDecoration decoration = iterator.next();
++            if (decoration.type().is(MapDecorationTypes.PLAYER) || decoration.type().is(MapDecorationTypes.PLAYER_OFF_MAP) || decoration.type().is(MapDecorationTypes.PLAYER_OFF_LIMITS)) {
++                iterator.remove();
++                if (decoration.type().value().trackCount()) {
++                    result.trackedDecorationCount--;
++                }
 +            }
 +        }
-+        // Folia end - map holder tracking
++        // Folia end - do not bake player markers into locked maps
          System.arraycopy(this.colors, 0, result.colors, 0, this.colors.length);
          return result;
      }
@@ -20184,7 +20188,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          return createFresh(this.centerX, this.centerZ, (byte)Mth.clamp(this.scale + 1, 0, 4), this.trackingPosition, this.unlimitedTracking, this.dimension);
      }
  
-@@ -197,40 +206,121 @@ public class MapItemSavedData extends SavedData {
+@@ -197,40 +210,121 @@ public class MapItemSavedData extends SavedData {
          return stack -> stack == mapStack || stack.is(mapStack.getItem()) && Objects.equals(mapId, stack.get(DataComponents.MAP_ID));
      }
  
@@ -20252,7 +20256,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
 +        final MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
 +        if (holdingPlayer == null || !holdingPlayer.inInventory) {
 +            return false;
-+        }
+         }
 +        if (holdingPlayer.inventoryTicked) {
 +            holdingPlayer.inventoryTicked = false;
 +            return true;
@@ -20260,7 +20264,8 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
 +        this.removeFromInventory(holdingPlayer);
 +        return false;
 +    }
-+
+ 
+-        if (placedInFrame != null && this.trackingPosition) {
 +    public synchronized void addFrameViewer(final Player player, final int frameId) {
 +        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(player, "Adding map frame viewer in incorrect region");
 +        this.getOrCreateHolder(player).viewedFrames.add(frameId);
@@ -20316,9 +20321,8 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
 +        final boolean hiddenChanged = hasMapInvisibilityItemEquipped(tickingPlayer) ? this.hiddenPlayerMarkers.add(name) : this.hiddenPlayerMarkers.remove(name);
 +        if (hiddenChanged) {
 +            this.setDecorationsDirty();
-         }
- 
--        if (placedInFrame != null && this.trackingPosition) {
++        }
++
 +        this.addStaticDecorations(tickingPlayer.level(), itemStack);
 +        // Folia end - map holder tracking
 +    }
@@ -20332,7 +20336,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
              BlockPos pos = placedInFrame.getPos();
              MapFrame existingFrame = this.frameMarkers.get(MapFrame.frameId(pos));
              if (existingFrame != null && placedInFrame.getId() != existingFrame.entityId() && this.frameMarkers.containsKey(existingFrame.getId())) {
-@@ -238,10 +328,10 @@ public class MapItemSavedData extends SavedData {
+@@ -238,10 +332,10 @@ public class MapItemSavedData extends SavedData {
              }
  
              MapFrame mapFrame = new MapFrame(pos, placedInFrame.getDirection().get2DDataValue() * 90, placedInFrame.getId());
@@ -20345,7 +20349,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
                  getFrameKey(placedInFrame.getId()),
                  pos.getX(),
                  pos.getZ(),
-@@ -255,11 +345,15 @@ public class MapItemSavedData extends SavedData {
+@@ -255,11 +349,15 @@ public class MapItemSavedData extends SavedData {
              } // Paper - Limit item frame cursors on maps
          }
  
@@ -20362,7 +20366,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
                  }
              });
          }
-@@ -397,7 +491,7 @@ public class MapItemSavedData extends SavedData {
+@@ -397,7 +495,7 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20371,7 +20375,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          MapItemSavedData.HoldingPlayer holdingPlayer = this.carriedByPlayers.get(player);
          return holdingPlayer == null ? null : holdingPlayer.nextUpdatePacket(id);
      }
-@@ -406,31 +500,25 @@ public class MapItemSavedData extends SavedData {
+@@ -406,31 +504,25 @@ public class MapItemSavedData extends SavedData {
      // Paper start - Fix unnecessary map data saves
          this.setColorsDirty(x, y, true);
      }
@@ -20410,7 +20414,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          double xPos = pos.getX() + 0.5;
          double zPos = pos.getZ() + 0.5;
          int scale = 1 << this.scale;
-@@ -438,7 +526,7 @@ public class MapItemSavedData extends SavedData {
+@@ -438,7 +530,7 @@ public class MapItemSavedData extends SavedData {
          double yd = (zPos - this.centerZ) / scale;
          int halfSize = 63;
          if (xd >= -63.0 && yd >= -63.0 && xd <= 63.0 && yd <= 63.0) {
@@ -20419,7 +20423,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
              if (banner == null) {
                  return false;
              }
-@@ -460,7 +548,7 @@ public class MapItemSavedData extends SavedData {
+@@ -460,7 +552,7 @@ public class MapItemSavedData extends SavedData {
          return false;
      }
  
@@ -20428,7 +20432,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          Iterator<MapBanner> iterator = this.bannerMarkers.values().iterator();
  
          while (iterator.hasNext()) {
-@@ -480,13 +568,13 @@ public class MapItemSavedData extends SavedData {
+@@ -480,13 +572,13 @@ public class MapItemSavedData extends SavedData {
          return this.bannerMarkers.values();
      }
  
@@ -20444,7 +20448,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          byte oldColor = this.colors[x + y * 128];
          if (oldColor != newColor) {
              this.setColor(x, y, newColor);
-@@ -496,12 +584,12 @@ public class MapItemSavedData extends SavedData {
+@@ -496,12 +588,12 @@ public class MapItemSavedData extends SavedData {
          }
      }
  
@@ -20459,7 +20463,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          this.decorations.clear();
          this.trackedDecorationCount = 0;
  
-@@ -518,7 +606,7 @@ public class MapItemSavedData extends SavedData {
+@@ -518,7 +610,7 @@ public class MapItemSavedData extends SavedData {
          return this.decorations.values();
      }
  
@@ -20468,7 +20472,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
          return this.trackedDecorationCount > limit;
      }
  
-@@ -536,6 +624,11 @@ public class MapItemSavedData extends SavedData {
+@@ -536,6 +628,11 @@ public class MapItemSavedData extends SavedData {
          private boolean dirtyDecorations = true;
          private int tick;
          public int step;
@@ -20480,7 +20484,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
  
          private HoldingPlayer(final Player player) {
              this.player = player;
-@@ -622,8 +715,10 @@ public class MapItemSavedData extends SavedData {
+@@ -622,8 +719,10 @@ public class MapItemSavedData extends SavedData {
          // Paper start
          private void addSeenPlayers(java.util.Collection<MapDecoration> icons) {
              org.bukkit.entity.Player player = (org.bukkit.entity.Player) this.player.getBukkitEntity();
@@ -20491,7 +20495,7 @@ index 1c8b9c0a1f615dedca9028379a1d8f60e9c39947..ed908199aa5a8a13c0b541fb9fb72d67
                  org.bukkit.entity.Player other = org.bukkit.Bukkit.getPlayerExact(name); // Spigot
                  if (other == null || player.canSee(other)) {
                      icons.add(mapIcon);
-@@ -672,11 +767,13 @@ public class MapItemSavedData extends SavedData {
+@@ -672,11 +771,13 @@ public class MapItemSavedData extends SavedData {
          }
  
          public void applyToMap(final MapItemSavedData map) {
