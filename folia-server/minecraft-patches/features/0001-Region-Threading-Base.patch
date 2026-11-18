@@ -7452,6 +7452,32 @@ index 891a4d2ce29a3954c10ad1a091ef8247a6b7a7cc..8db0bf6c5500fab0b278a9afdf8c2c16
      }
  
      private void runSync(ServerPlayer player, java.util.Collection<String> bukkit, RootCommandNode<CommandSourceStack> root) {
+diff --git a/net/minecraft/core/Rotations.java b/net/minecraft/core/Rotations.java
+index 0d5805a9002854ea2666ef3bc792e61f016ffd34..8d9f9e1be2db9cf74f8c51a93f5f181084ec24d6 100644
+--- a/net/minecraft/core/Rotations.java
++++ b/net/minecraft/core/Rotations.java
+@@ -27,17 +27,17 @@ public record Rotations(float x, float y, float z) {
+         }
+     };
+     // Paper start - add internal method for skipping validation for plugins using userdev
+-    private static boolean SKIP_VALIDATION = false;
++    private static final ThreadLocal<Boolean> SKIP_VALIDATION = ThreadLocal.withInitial(() -> false);  // Folia - region threading
+     public static Rotations createWithoutValidityChecks(float x, float y, float z) {
+-        SKIP_VALIDATION = true;
++        SKIP_VALIDATION.set(true);  // Folia - region threading
+         Rotations rotations = new Rotations(x, y, z);
+-        SKIP_VALIDATION = false;
++        SKIP_VALIDATION.set(false);  // Folia - region threading
+         return rotations;
+     }
+     // Paper end - add internal method for skipping validation for plugins using userdev
+ 
+     public Rotations {
+-        if (!SKIP_VALIDATION) { // Paper - add internal method for skipping validation for plugins using userdev
++        if (!SKIP_VALIDATION.get()) { // Paper - add internal method for skipping validation for plugins using userdev  // Folia - region threading
+         x = !Float.isInfinite(x) && !Float.isNaN(x) ? x % 360.0F : 0.0F;
+         y = !Float.isInfinite(y) && !Float.isNaN(y) ? y % 360.0F : 0.0F;
+         z = !Float.isInfinite(z) && !Float.isNaN(z) ? z % 360.0F : 0.0F;
 diff --git a/net/minecraft/core/dispenser/DispenseItemBehavior.java b/net/minecraft/core/dispenser/DispenseItemBehavior.java
 index 04593896b7c54d63fa4f97f58010aabce58dee1d..b1f04ba52ae1edebf67e6e68b0631553d7a7306e 100644
 --- a/net/minecraft/core/dispenser/DispenseItemBehavior.java
@@ -17241,7 +17267,7 @@ index 9d242f24c37fec196f06b8ef6fa29a66b2781c68..7e969cd81d2ac788515f4d9ad7584ade
                          if (nearbyRaid != null && Raids.canJoinRaid(this)) {
                              nearbyRaid.joinRaid(level, nearbyRaid.getGroupsSpawned(), this, null, true);
 diff --git a/net/minecraft/world/entity/raid/Raids.java b/net/minecraft/world/entity/raid/Raids.java
-index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f3f4086c0 100644
+index bc0f31a16f7b055e85f10eda377026a927032535..ed8d3358ee9e9bb04467b402fd17ef79b9be594d 100644
 --- a/net/minecraft/world/entity/raid/Raids.java
 +++ b/net/minecraft/world/entity/raid/Raids.java
 @@ -34,18 +34,19 @@ public class Raids extends SavedData {
@@ -17292,14 +17318,15 @@ index bc0f31a16f7b055e85f10eda377026a927032535..9c874214d04ea72f75d1f738796fae6f
          return OptionalInt.empty();
      }
  
+-    public void tick(final ServerLevel level) {
 +    // Folia start - make raids thread-safe
 +    public void globalTick() {
-+        this.tick++;
+         this.tick++;
 +    }
 +
-     public void tick(final ServerLevel level) {
++    public void tick(final ServerLevel level) {
++        // this.tick++;
 +        // Folia end - make raids thread-safe
-         this.tick++;
          Iterator<Raid> raidIterator = this.raidMap.values().iterator();
  
          while (raidIterator.hasNext()) {
@@ -17431,6 +17458,56 @@ index c223581e30414842ce24079b47c82639d36b7e73..bb584da75d693254a9843fc1c856bacf
              if (!playerRemovedNotChangingDimension && !serverPlayer.hasDisconnected()) {
                  serverPlayer.getInventory().placeItemBackInInventory(carried, Prediction.SERVER_ONLY);
              } else {
+diff --git a/net/minecraft/world/item/BucketItem.java b/net/minecraft/world/item/BucketItem.java
+index 88de6142f66f158a4425a4cc5d093fdda80b6ebb..12c9a75ba904d1e8292ee061a7f35efde39e9e0c 100644
+--- a/net/minecraft/world/item/BucketItem.java
++++ b/net/minecraft/world/item/BucketItem.java
+@@ -34,7 +34,7 @@ import net.minecraft.world.phys.HitResult;
+ import org.jspecify.annotations.Nullable;
+ 
+ public class BucketItem extends Item implements DispensibleContainerItem {
+-    static @Nullable ItemStack itemLeftInHandAfterPlayerBucketEmptyEvent = null; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++    static final ThreadLocal<ItemStack> itemLeftInHandAfterPlayerBucketEmptyEventThreadLocal = ThreadLocal.withInitial(() -> null); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+     protected final Fluid content;
+ 
+     public BucketItem(final Fluid content, final Item.Properties properties) {
+@@ -110,13 +110,15 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+     }
+ 
+     public static ItemStack getEmptySuccessItem(final ItemStack itemStack, final Player player) {
++        // Folia start - region threading
+         // Paper start - Fix PlayerBucketEmptyEvent result itemstack
+-        if (itemLeftInHandAfterPlayerBucketEmptyEvent != null) {
+-            ItemStack itemInHand = itemLeftInHandAfterPlayerBucketEmptyEvent;
+-            itemLeftInHandAfterPlayerBucketEmptyEvent = null;
++        ItemStack itemInHand = itemLeftInHandAfterPlayerBucketEmptyEventThreadLocal.get();
++        if (itemInHand != null) {
++            itemLeftInHandAfterPlayerBucketEmptyEventThreadLocal.remove();
+             return itemInHand;
+         }
+         // Paper end - Fix PlayerBucketEmptyEvent result itemstack
++        // Folia end - region threading
+         return !player.hasInfiniteMaterials() ? new ItemStack(Items.BUCKET) : itemStack;
+     }
+ 
+@@ -150,7 +152,7 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+                         player.containerMenu.sendAllDataToRemote(); // SPIGOT-4541
+                         return false;
+                     }
+-                    itemLeftInHandAfterPlayerBucketEmptyEvent = event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                    itemLeftInHandAfterPlayerBucketEmptyEventThreadLocal.set(event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+                 }
+                 // CraftBukkit end
+                 if (level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos) && this.content.is(FluidTags.WATER)) {
+@@ -177,7 +179,7 @@ public class BucketItem extends Item implements DispensibleContainerItem {
+ 
+                     if (!level.setBlock(pos, this.content.defaultFluidState().createLegacyBlock(), Block.UPDATE_ALL_IMMEDIATE)
+                         && !blockState.getFluidState().isSource()) {
+-                        itemLeftInHandAfterPlayerBucketEmptyEvent = null; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                        itemLeftInHandAfterPlayerBucketEmptyEventThreadLocal.set(null); // Paper - Fix PlayerBucketEmptyEvent result itemstack  // Folia - region threading
+                         return false;
+                     }
+ 
 diff --git a/net/minecraft/world/item/ItemStack.java b/net/minecraft/world/item/ItemStack.java
 index 284b3f1dacf975cfb263ed44478993326637f4d2..9581ea1ea59af5e04dc32470ddf4cef9b62e4d97 100644
 --- a/net/minecraft/world/item/ItemStack.java
@@ -17541,6 +17618,19 @@ index 161e2cf6d7f2ce750599e08ac1eea5ebd80f859e..4148505f4c6f00869fa222eeb8431036
          }
      }
  
+diff --git a/net/minecraft/world/item/MobBucketItem.java b/net/minecraft/world/item/MobBucketItem.java
+index 85baba30fc1ec169eda549ce76fe454084f4323c..dae4cec9e0a513affc2e3436c66bfdbf76a15270 100644
+--- a/net/minecraft/world/item/MobBucketItem.java
++++ b/net/minecraft/world/item/MobBucketItem.java
+@@ -67,7 +67,7 @@ public class MobBucketItem extends BucketItem {
+                     player.containerMenu.sendAllDataToRemote(); // SPIGOT-4541
+                     return false;
+                 }
+-                BucketItem.itemLeftInHandAfterPlayerBucketEmptyEvent = event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY; // Paper - Fix PlayerBucketEmptyEvent result itemstack
++                BucketItem.itemLeftInHandAfterPlayerBucketEmptyEventThreadLocal.set(event.getItemStack() != null ? event.getItemStack().equals(org.bukkit.inventory.ItemStack.of(org.bukkit.Material.BUCKET)) ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItemStack()) : ItemStack.EMPTY); // Paper - Fix PlayerBucketEmptyEvent result itemstack // Folia - region threading
+             }
+             // Paper end
+             this.playEmptySound(user, level, pos);
 diff --git a/net/minecraft/world/item/component/LodestoneTracker.java b/net/minecraft/world/item/component/LodestoneTracker.java
 index 65fe2c5b19e37c6800a54c6945eec7df9c505749..3dcf20f97e701ea5aea56e0c7ef0fec78158f194 100644
 --- a/net/minecraft/world/item/component/LodestoneTracker.java
