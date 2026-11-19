@@ -16537,6 +16537,33 @@ index f846a219726b137272e8d9ed1fca221f52cf3129..c4370f14498010a4b93d409d06a44841
          if (this.level() instanceof ServerLevel serverLevel) {
              BlockPos pos = this.blockPosition();
              if (serverLevel.getDragonFight() != null && serverLevel.getBlockState(pos).isAir()) {
+diff --git a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+index f852126b179dc0c5dab3dbd22d3bfb8b73a5dba8..c5a2c7654c4b59733971ec0210b7125d739c25d9 100644
+--- a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
++++ b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+@@ -92,6 +92,7 @@ public class EnderDragon extends Mob implements Enemy {
+     private final net.minecraft.world.level.Explosion explosionSource; // Paper - reusable source for CraftTNTPrimed.getSource()
+     private @Nullable BlockPos podium;
+     // Paper end
++    private boolean partsPositioned; // Folia - region threading
+ 
+     public EnderDragon(final EntityType<? extends EnderDragon> type, final Level level) {
+         super(EntityTypes.ENDER_DRAGON, level);
+@@ -171,6 +172,14 @@ public class EnderDragon extends Mob implements Enemy {
+ 
+     @Override
+     public void aiStep() {
++        // Folia start - region threading - parts start at 0,0,0, position them before they are first used
++        if (!this.partsPositioned) {
++            this.partsPositioned = true;
++            for (final EnderDragonPart part : this.subEntities) {
++                this.tickPart(part, 0.0, 0.0, 0.0);
++            }
++        }
++        // Folia end - region threading - parts start at 0,0,0, position them before they are first used
+         this.processFlappingMovement();
+         if (this.level().isClientSide()) {
+             this.setHealth(this.getHealth());
 diff --git a/net/minecraft/world/entity/decoration/ItemFrame.java b/net/minecraft/world/entity/decoration/ItemFrame.java
 index 1b88b2427d24deae210be9f69da8c5a30e2d08df..c2da6b155c174a3afc2ab9be844dd69df2dcff89 100644
 --- a/net/minecraft/world/entity/decoration/ItemFrame.java
