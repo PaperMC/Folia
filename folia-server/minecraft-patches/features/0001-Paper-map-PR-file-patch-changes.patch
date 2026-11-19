@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jason Penilla <11360596+jpenilla@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 16:17:57 -0700
+Subject: [PATCH] Paper map PR file patch changes
+
+File patch changes from PaperMC/Paper#14499 and PaperMC/Paper#14500, which the following feature patches apply on top of. Drop this and the following two patches once those are merged.
+
+diff --git a/io/papermc/paper/FeatureHooks.java b/io/papermc/paper/FeatureHooks.java
+index fa322df502d1e6c6d603730372c572f62e70306a..9f6f20f49acef0f9ad6927ff32d640478b01281a 100644
+--- a/io/papermc/paper/FeatureHooks.java
++++ b/io/papermc/paper/FeatureHooks.java
+@@ -140,6 +140,17 @@ public final class FeatureHooks {
+         return ret.entrySet().stream().collect(com.google.common.collect.ImmutableMap.toImmutableMap(Map.Entry::getKey, (entry) -> entry.getValue().build()));
+     }
+ 
++    public static boolean isMapMarkerHiddenFrom(final net.minecraft.world.level.saveddata.maps.MapItemSavedData data, final String decorationKey, final String viewerName) {
++        return false;
++    }
++
++    public static void markMapDirty(final net.minecraft.world.level.saveddata.maps.MapItemSavedData data) {
++        data.setDirty();
++    }
++
++    public static void markMapUsed(final net.minecraft.world.level.saveddata.maps.MapItemSavedData data) {
++    }
++
+     public static int getViewDistance(net.minecraft.server.level.ServerLevel level) {
+         return level.moonrise$getPlayerChunkLoader().getAPIViewDistance(); // Paper - rewrite chunk system
+     }
+diff --git a/net/minecraft/server/level/ServerEntity.java b/net/minecraft/server/level/ServerEntity.java
+index e46f95b19da1c14f240ec6697f22b5e220e0a835..d710f6b5d8f87da2cd98a4ca7ee07a92d73aa232 100644
+--- a/net/minecraft/server/level/ServerEntity.java
++++ b/net/minecraft/server/level/ServerEntity.java
+@@ -133,8 +133,7 @@ public class ServerEntity {
+                 MapId id = frame.cachedMapId; // Paper - Perf: Cache map ids on item frames
+                 MapItemSavedData data = MapItem.getSavedData(id, this.level);
+                 if (data != null) {
+-                    for (final net.minecraft.server.network.ServerPlayerConnection connection : this.trackedPlayers) { // Paper
+-                        final ServerPlayer player = connection.getPlayer(); // Paper
++                    for (ServerPlayer player : this.level.players()) {
+                         data.tickCarriedBy(player, itemStack, frame);
+                         Packet<?> packet = data.getUpdatePacket(id, player);
+                         if (packet != null) {
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index ea4cc487002a0edc54cc49bfbecf72be156b6af7..44086ac743e2e6a2a0205fcdc2ae099d790aee44 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -3161,21 +3161,6 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         public void onTrackingEnd(final Entity entity) {
+             org.spigotmc.AsyncCatcher.catchOp("entity unregister"); // Spigot
+             // Spigot start
+-            if (entity instanceof Player player) {
+-                SavedDataStorage storage = getServer().getDataStorage();
+-                for (final Optional<net.minecraft.world.level.saveddata.SavedData> savedData : storage.cache.values()) {
+-                    if (savedData.isEmpty() || !(savedData.get() instanceof MapItemSavedData map)) {
+-                        continue;
+-                    }
+-
+-                    net.minecraft.world.level.saveddata.maps.MapItemSavedData.HoldingPlayer holder = map.carriedByPlayers.remove(player);
+-                    if (holder != null && map.carriedBy.remove(holder)) {
+-                        map.decorations.remove(player.getName().getString());
+-                    }
+-                }
+-            }
+-            // Spigot end
+-            // Spigot start
+             if (entity.getBukkitEntity() instanceof org.bukkit.inventory.InventoryHolder && (!(entity instanceof ServerPlayer) || entity.getRemovalReason() != Entity.RemovalReason.KILLED)) { // SPIGOT-6876: closeInventory clears death message
+                 // Paper start - Fix merchant inventory not closing on entity removal
+                 if (entity.getBukkitEntity() instanceof org.bukkit.inventory.Merchant merchant && merchant.getTrader() != null) {
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+index 1137be30f125cb79f05f3e5c104cdf8cca979ff1..a92d8bc6b8f402696239e991346f8a8ad338558f 100644
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -2742,21 +2742,14 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+     @Override
+     public @Nullable ItemEntity drop(final ItemStack itemStack, final boolean thrownFromHand, final Prediction prediction, final boolean callEvent, final java.util.function.@Nullable Consumer<org.bukkit.entity.Item> entityOperation) { // Paper - Extend dropItem API
+         ItemEntity entity = super.drop(itemStack, thrownFromHand, prediction, callEvent, entityOperation); // Paper - Extend dropItem API
+-        ItemStack droppedItemStack = entity != null ? entity.getItem() : ItemStack.EMPTY; // Paper - move up
+         if (thrownFromHand) {
++            ItemStack droppedItemStack = entity != null ? entity.getItem() : ItemStack.EMPTY;
+             if (!droppedItemStack.isEmpty()) {
+                 this.awardStat(Stats.ITEM_DROPPED.get(droppedItemStack.getItem()), droppedItemStack.getCount()); // Paper - use size from dropped item
+                 this.awardStat(Stats.DROP);
+             }
+         }
+-        // Paper start - remove player from map on drop
+-        if (droppedItemStack.getItem() instanceof MapItem) {
+-            final MapItemSavedData mapData = MapItem.getSavedData(droppedItemStack, this.level());
+-            if (mapData != null) {
+-                mapData.tickCarriedBy(this, droppedItemStack, null);
+-            }
+-        }
+-        // Paper end - remove player from map on drop
++
+         return entity;
+     }
+ 

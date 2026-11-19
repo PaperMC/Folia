@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jason Penilla <11360596+jpenilla@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 16:19:45 -0700
+Subject: [PATCH] Paper map PR source changes
+
+Source changes from PaperMC/Paper#14499 and PaperMC/Paper#14500, matching the minecraft feature patches of the same PRs. Drop this patch once those are merged.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/map/CraftMapRenderer.java b/src/main/java/org/bukkit/craftbukkit/map/CraftMapRenderer.java
+index a573499fb96cb08d96e0b20602fc423bfd0e2f52..e272a32fa809d13afd522ae981bab3cee2392c5b 100644
+--- a/src/main/java/org/bukkit/craftbukkit/map/CraftMapRenderer.java
++++ b/src/main/java/org/bukkit/craftbukkit/map/CraftMapRenderer.java
+@@ -35,6 +35,7 @@ public class CraftMapRenderer extends MapRenderer {
+         }
+ 
+         for (String key : this.worldMap.decorations.keySet()) {
++            if (io.papermc.paper.FeatureHooks.isMapMarkerHiddenFrom(this.worldMap, key, player.getName())) continue;
+             // If this cursor is for a player check visibility with vanish system
+             Player other = Bukkit.getPlayerExact(key);
+             if (other != null && !player.canSee(other)) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java b/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java
+index e576bca9ceec9a79c5234faeb7a294d9841bcd41..29806ecda157ac695c0fb9b3081d4b5e6de40e5a 100644
+--- a/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java
++++ b/src/main/java/org/bukkit/craftbukkit/map/CraftMapView.java
+@@ -1,5 +1,6 @@
+ package org.bukkit.craftbukkit.map;
+ 
++import io.papermc.paper.FeatureHooks;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.HashMap;
+@@ -48,6 +49,7 @@ public final class CraftMapView implements MapView {
+     @Override
+     public void setScale(Scale scale) {
+         this.worldMap.scale = scale.getValue();
++        this.markDirty();
+     }
+ 
+     @Override
+@@ -69,6 +71,7 @@ public final class CraftMapView implements MapView {
+     public void setWorld(World world) {
+         this.worldMap.dimension = ((CraftWorld) world).getHandle().dimension();
+         this.worldMap.uniqueId = world.getUID();
++        this.markDirty();
+     }
+ 
+     @Override
+@@ -84,11 +87,21 @@ public final class CraftMapView implements MapView {
+     @Override
+     public void setCenterX(int x) {
+         this.worldMap.centerX = x;
++        this.markDirty();
+     }
+ 
+     @Override
+     public void setCenterZ(int z) {
+         this.worldMap.centerZ = z;
++        this.markDirty();
++    }
++
++    private void markDirty() {
++        FeatureHooks.markMapDirty(this.worldMap);
++    }
++
++    public boolean hasOnlyDefaultRenderer() {
++        return this.renderers.size() == 1 && this.renderers.getFirst().getClass() == CraftMapRenderer.class;
+     }
+ 
+     @Override
+@@ -102,6 +115,10 @@ public final class CraftMapView implements MapView {
+             this.renderers.add(renderer);
+             this.canvases.put(renderer, new WeakHashMap<>());
+             renderer.initialize(this);
++            if (this.worldMap.id != null) {
++                // Plugin renderers keep the map loaded, load it again in case it was just unloaded
++                FeatureHooks.markMapUsed(this.worldMap);
++            }
+         }
+     }
+ 
+@@ -117,6 +134,10 @@ public final class CraftMapView implements MapView {
+                 }
+             }
+             this.canvases.remove(renderer);
++            if (this.worldMap.id != null) {
++                // Changed renderers keep the map loaded, load it again in case it was just unloaded
++                FeatureHooks.markMapUsed(this.worldMap);
++            }
+             return true;
+         } else {
+             return false;
+@@ -183,6 +204,7 @@ public final class CraftMapView implements MapView {
+     @Override
+     public void setTrackingPosition(boolean trackingPosition) {
+         this.worldMap.trackingPosition = trackingPosition;
++        this.markDirty();
+     }
+ 
+     @Override
+@@ -193,6 +215,7 @@ public final class CraftMapView implements MapView {
+     @Override
+     public void setUnlimitedTracking(boolean unlimited) {
+         this.worldMap.unlimitedTracking = unlimited;
++        this.markDirty();
+     }
+ 
+     @Override
+@@ -203,5 +226,6 @@ public final class CraftMapView implements MapView {
+     @Override
+     public void setLocked(boolean locked) {
+         this.worldMap.locked = locked;
++        this.markDirty();
+     }
+ }
