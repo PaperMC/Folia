@@ -22,6 +22,10 @@ thread that saves map data.
 Behaviour changes:
 - MapInitializeEvent is called again when a map is read from disk after
   it was unloaded and collected.
+- MapInitializeEvent for a new map is called after the map is registered,
+  so getting the map in a listener returns it. Previously it was looked up
+  on disk, returning null, or a separate stale copy if an old file existed
+  for that id.
 - MapView setters now mark the map dirty. Changes made through them were
   previously only saved if something else marked the map dirty.
 - Maps are not unloaded while autosave is disabled.
@@ -45,10 +49,10 @@ index c77fd7401f713d422212cd01d54196b45a43267d..f943a67365d04b72002e88386d7a8d22
      public static int getViewDistance(net.minecraft.server.level.ServerLevel level) {
 diff --git a/io/papermc/paper/world/MapDataCache.java b/io/papermc/paper/world/MapDataCache.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0bed92bb2a113f738c7341271a28d18891979bc1
+index 0000000000000000000000000000000000000000..e721bae44bc871eea9a154c8d7427fd9d6f9bccc
 --- /dev/null
 +++ b/io/papermc/paper/world/MapDataCache.java
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,256 @@
 +package io.papermc.paper.world;
 +
 +import ca.spottedleaf.concurrentutil.lock.Notifier;
@@ -85,11 +89,13 @@ index 0000000000000000000000000000000000000000..0bed92bb2a113f738c7341271a28d188
 + *     <li>A map is only unloaded when its file is up to date: it is not dirty and no write is pending. This is only
 + *     reliable on the thread that saves map data (the dirty flag is cleared when a save is scheduled, not when it
 + *     completes), so {@link #unloadUnused} must run on that thread.</li>
-+ *     <li>An unloaded map is loaded again before it changes: the game only finds maps through {@link #get},
-+ *     and MapView changes go through {@link #markDirty}.</li>
++ *     <li>An unloaded map is loaded again before it changes: the game only changes maps it just got through
++ *     {@link #get}, or that a player holds, and MapView changes go through {@link #markDirty}.
++ *     Data returned by {@link #get} must not be kept and changed across a call to {@link #unloadUnused} (in
++ *     practice, across ticks) unless a player holds the map.</li>
 + * </ul>
 + *
-+ * <p>All other methods can be called from any thread. A map read from disk is only returned to other threads once
++ * <p>All other methods can be called from any thread. A map is only returned to other threads once
 + * MapInitializeEvent was called for it, so that they see the renderers plugins add in it.</p>
 + */
 +public final class MapDataCache {
@@ -116,10 +122,23 @@ index 0000000000000000000000000000000000000000..0bed92bb2a113f738c7341271a28d188
 +        }
 +    }
 +
++    /** Sets the data of a new map and calls MapInitializeEvent for it. */
 +    public void set(final MapId id, final MapItemSavedData data) {
-+        this.unloaded.remove(id.id());
-+        this.storage().set(MapItemSavedData.type(id), data);
-+        this.loaded.put(id.id(), new LoadedMap(data));
++        data.id = id;
++        final LoadedMap map = new LoadedMap(data);
++        map.initialization = new Initialization(Thread.currentThread(), new Notifier(true));
++        this.loaded.compute(id.id(), (key, previous) -> {
++            this.unloaded.remove(key);
++            this.storage().set(MapItemSavedData.type(id), data);
++            return map;
++        });
++
++        // Called outside of the table lock, getting the map from a listener finds the new map
++        try {
++            new MapInitializeEvent(data.mapView).callEvent();
++        } finally {
++            map.finishInitializing();
++        }
 +    }
 +
 +    /** Marks the map dirty, and loads it again if it is unloaded so that the change is saved. */
@@ -232,7 +251,7 @@ index 0000000000000000000000000000000000000000..0bed92bb2a113f738c7341271a28d188
 +        private final @Nullable MapItemSavedData data;
 +        private volatile boolean used = true;
 +        private volatile boolean unloading;
-+        /** Set while MapInitializeEvent is called for a map read from disk. */
++        /** Set while MapInitializeEvent is called for the map. */
 +        private volatile @Nullable Initialization initialization;
 +
 +        private LoadedMap(final @Nullable MapItemSavedData data) {
@@ -311,10 +330,10 @@ index a8c330e21a715711ed21dd9084deea5254121b44..f313fcd002b6cc47a2397bf65a8ce1df
              this.savedDataStorage.saveAndJoin();
          } else {
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 7a2c3139a053296b341084392fad3508b0ec3e26..6133f2c97221e70b0cea7ad81bfa6502a3d37472 100644
+index 7a2c3139a053296b341084392fad3508b0ec3e26..09c79fb3953acbf26c3080b57bf4aba7fdf36f90 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
-@@ -2573,28 +2573,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2573,37 +2573,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
  
      @Override
      public @Nullable MapItemSavedData getMapData(final MapId id) {
@@ -344,19 +363,29 @@ index 7a2c3139a053296b341084392fad3508b0ec3e26..6133f2c97221e70b0cea7ad81bfa6502
      }
  
      public void setMapData(final MapId id, final MapItemSavedData data) {
-@@ -2603,7 +2582,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
-         org.bukkit.event.server.MapInitializeEvent event = new org.bukkit.event.server.MapInitializeEvent(data.mapView);
-         event.callEvent();
-         // CraftBukkit end
+-        // CraftBukkit start
+-        data.id = id;
+-        org.bukkit.event.server.MapInitializeEvent event = new org.bukkit.event.server.MapInitializeEvent(data.mapView);
+-        event.callEvent();
+-        // CraftBukkit end
 -        this.getServer().getDataStorage().set(MapItemSavedData.type(id), data);
 +        this.getServer().mapDataCache.set(id, data); // Paper - Unload unused map data
      }
  
      public MapId getFreeMapId() {
 diff --git a/net/minecraft/world/level/storage/SavedDataStorage.java b/net/minecraft/world/level/storage/SavedDataStorage.java
-index d2a379b55467af19d9c7915e6964f97ca7ea264f..23b5d29624b8c06775f582ccebdfba6bf21f243b 100644
+index d2a379b55467af19d9c7915e6964f97ca7ea264f..1398fbba5101ee0a601a603ccd4c3e0dd4fef099 100644
 --- a/net/minecraft/world/level/storage/SavedDataStorage.java
 +++ b/net/minecraft/world/level/storage/SavedDataStorage.java
+@@ -40,7 +40,7 @@ import org.slf4j.Logger;
+ 
+ public class SavedDataStorage implements AutoCloseable {
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    public final Map<SavedDataType<?>, Optional<SavedData>> cache = new HashMap<>();
++    public final Map<SavedDataType<?>, Optional<SavedData>> cache = new java.util.concurrent.ConcurrentHashMap<>(); // Paper - Unload unused map data; changing a MapView can load its map, so a plugin unsafely doing that off the main thread must not corrupt the cache
+     private final DataFixer fixerUpper;
+     private final HolderLookup.Provider registries;
+     private final Path dataFolder;
 @@ -214,6 +214,12 @@ public class SavedDataStorage implements AutoCloseable {
          }
      }
