@@ -1,0 +1,1802 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:29:28 -0600
+Subject: [PATCH] Paper Layer 1 worldgen acceleration and SIMD density SPI
+ seams
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/net/minecraft/world/level/biome/Climate.java b/net/minecraft/world/level/biome/Climate.java
+index 54b608c5d2e36c5dec0fc2cbb1c074da946f6d7a..16bc0388811a49a44e6f51ce7b8c457c15db1cb7 100644
+--- a/net/minecraft/world/level/biome/Climate.java
++++ b/net/minecraft/world/level/biome/Climate.java
+@@ -184,6 +184,27 @@ public class Climate {
+             // Paper end - optimise chunk generation
+         }
+ 
++        // GoldLeaf start - Wave 3 zero-alloc quantized biome lookup
++        public T findValueQuantized(
++            final long temperature,
++            final long humidity,
++            final long continentalness,
++            final long erosion,
++            final long depth,
++            final long weirdness
++        ) {
++            final T fast = this.index.findNearestQuantized(temperature, humidity, continentalness, erosion, depth, weirdness);
++            if (!DEBUG_PARAM_LOOKUP) {
++                return fast;
++            }
++            final T vanilla = this.findValueIndex(new Climate.TargetPoint(temperature, humidity, continentalness, erosion, depth, weirdness));
++            if (vanilla != fast) {
++                throw new IllegalStateException();
++            }
++            return vanilla;
++        }
++        // GoldLeaf end - Wave 3 zero-alloc quantized biome lookup
++
+         @VisibleForTesting
+         public T findValueBruteForce(final Climate.TargetPoint target) {
+             Iterator<Pair<Climate.ParameterPoint, T>> iterator = this.values().iterator();
+@@ -294,8 +315,45 @@ public class Climate {
+             params[6] = 0L;
+         }
+ 
+-        @Override
+-        public final T moonrise$findNearest(final Climate.TargetPoint target) {
++        // GoldLeaf start - Wave 3 zero-alloc register-passed RTree search with O(1) prevDist==0 fast-path
++        private void findNearest0Quantized(
++            final long t0,
++            final long t1,
++            final long t2,
++            final long t3,
++            final long t4,
++            final long t5,
++            final ca.spottedleaf.moonrise.patches.chunk_gen.climate_rtree.RTreeLeafDistance<T> suggested,
++            final Climate.RTree.SubTree<T> node
++        ) {
++            for (final Climate.RTree.Node<T> child : node.children) {
++                final long childDist = child.distanceUnrolled(t0, t1, t2, t3, t4, t5, suggested.distance);
++                if (childDist >= suggested.distance) {
++                    continue;
++                }
++                if (child instanceof Climate.RTree.Leaf<T> leaf) {
++                    suggested.leaf = leaf;
++                    suggested.distance = childDist;
++                    if (childDist == 0L) {
++                        return;
++                    }
++                } else {
++                    this.findNearest0Quantized(t0, t1, t2, t3, t4, t5, suggested, (Climate.RTree.SubTree<T>)child);
++                    if (suggested.distance == 0L) {
++                        return;
++                    }
++                }
++            }
++        }
++
++        public final T findNearestQuantized(
++            final long t0,
++            final long t1,
++            final long t2,
++            final long t3,
++            final long t4,
++            final long t5
++        ) {
+             if (this.root == null) {
+                 return null;
+             }
+@@ -305,16 +363,33 @@ public class Climate {
+             }
+ 
+             final ca.spottedleaf.moonrise.patches.chunk_gen.climate_rtree.RTreeLeafDistance<T> ret = this.lastReturned.get();
+-            final long[] params = ret.parameterArray;
+-            toParameterArray(target, params);
+             if (ret.leaf != null) {
+-                ret.distance = ret.leaf.distance(params);
++                final long prevDist = ret.leaf.distanceUnrolled(t0, t1, t2, t3, t4, t5, Long.MAX_VALUE);
++                if (prevDist == 0L) {
++                    return ret.leaf.value;
++                }
++                ret.distance = prevDist;
++            } else {
++                ret.distance = Long.MAX_VALUE;
+             }
+ 
+-            this.findNearest0(params, ret, ((Climate.RTree.SubTree<T>)this.root));
++            this.findNearest0Quantized(t0, t1, t2, t3, t4, t5, ret, (Climate.RTree.SubTree<T>)this.root);
+ 
+             return ret.leaf.value;
+         }
++
++        @Override
++        public final T moonrise$findNearest(final Climate.TargetPoint target) {
++            return this.findNearestQuantized(
++                target.temperature(),
++                target.humidity(),
++                target.continentalness(),
++                target.erosion(),
++                target.depth(),
++                target.weirdness()
++            );
++        }
++        // GoldLeaf end - Wave 3 zero-alloc register-passed RTree search with O(1) prevDist==0 fast-path
+         // Paper end - optimise chunk generation
+ 
+         private RTree(final Climate.RTree.Node<T> root) {
+@@ -485,10 +560,117 @@ public class Climate {
+         @VisibleForTesting
+         abstract static class Node<T> {
+             protected final Climate.Parameter[] parameterSpace;
++            // GoldLeaf start - Wave 3 inline 7D primitive bounds for zero-indirection RTree distance
++            private final long min0;
++            private final long max0;
++            private final long min1;
++            private final long max1;
++            private final long min2;
++            private final long max2;
++            private final long min3;
++            private final long max3;
++            private final long min4;
++            private final long max4;
++            private final long min5;
++            private final long max5;
++            private final long min6;
++            private final long max6;
++            // GoldLeaf end - Wave 3 inline 7D primitive bounds for zero-indirection RTree distance
+ 
+             protected Node(final List<Climate.Parameter> parameterSpace) {
+                 this.parameterSpace = parameterSpace.toArray(new Climate.Parameter[0]);
++                // GoldLeaf start - Wave 3 inline 7D primitive bounds
++                if (this.parameterSpace.length >= 7) {
++                    this.min0 = this.parameterSpace[0].min();
++                    this.max0 = this.parameterSpace[0].max();
++                    this.min1 = this.parameterSpace[1].min();
++                    this.max1 = this.parameterSpace[1].max();
++                    this.min2 = this.parameterSpace[2].min();
++                    this.max2 = this.parameterSpace[2].max();
++                    this.min3 = this.parameterSpace[3].min();
++                    this.max3 = this.parameterSpace[3].max();
++                    this.min4 = this.parameterSpace[4].min();
++                    this.max4 = this.parameterSpace[4].max();
++                    this.min5 = this.parameterSpace[5].min();
++                    this.max5 = this.parameterSpace[5].max();
++                    this.min6 = this.parameterSpace[6].min();
++                    this.max6 = this.parameterSpace[6].max();
++                } else {
++                    this.min0 = this.max0 = 0L;
++                    this.min1 = this.max1 = 0L;
++                    this.min2 = this.max2 = 0L;
++                    this.min3 = this.max3 = 0L;
++                    this.min4 = this.max4 = 0L;
++                    this.min5 = this.max5 = 0L;
++                    this.min6 = this.max6 = 0L;
++                }
++                // GoldLeaf end - Wave 3 inline 7D primitive bounds
++            }
++
++            // GoldLeaf start - Wave 3 unrolled early-exit 7D squared distance (t6 == 0L)
++            protected final long distanceUnrolled(
++                final long t0,
++                final long t1,
++                final long t2,
++                final long t3,
++                final long t4,
++                final long t5,
++                final long maxDist
++            ) {
++                long a = t0 - this.max0;
++                long b = this.min0 - t0;
++                long d = a > 0L ? a : (b > 0L ? b : 0L);
++                long sum = d * d;
++                if (sum >= maxDist) {
++                    return sum;
++                }
++
++                a = t1 - this.max1;
++                b = this.min1 - t1;
++                d = a > 0L ? a : (b > 0L ? b : 0L);
++                sum += d * d;
++                if (sum >= maxDist) {
++                    return sum;
++                }
++
++                a = t2 - this.max2;
++                b = this.min2 - t2;
++                d = a > 0L ? a : (b > 0L ? b : 0L);
++                sum += d * d;
++                if (sum >= maxDist) {
++                    return sum;
++                }
++
++                a = t3 - this.max3;
++                b = this.min3 - t3;
++                d = a > 0L ? a : (b > 0L ? b : 0L);
++                sum += d * d;
++                if (sum >= maxDist) {
++                    return sum;
++                }
++
++                a = t4 - this.max4;
++                b = this.min4 - t4;
++                d = a > 0L ? a : (b > 0L ? b : 0L);
++                sum += d * d;
++                if (sum >= maxDist) {
++                    return sum;
++                }
++
++                a = t5 - this.max5;
++                b = this.min5 - t5;
++                d = a > 0L ? a : (b > 0L ? b : 0L);
++                sum += d * d;
++                if (sum >= maxDist) {
++                    return sum;
++                }
++
++                a = -this.max6;
++                b = this.min6;
++                d = a > 0L ? a : (b > 0L ? b : 0L);
++                return sum + d * d;
+             }
++            // GoldLeaf end - Wave 3 unrolled early-exit 7D squared distance (t6 == 0L)
+ 
+             protected abstract Climate.RTree.Leaf<T> search(
+                 final long[] target, final Climate.RTree.@Nullable Leaf<T> candidate, final Climate.DistanceMetric<T> distanceMetric
+diff --git a/net/minecraft/world/level/biome/MultiNoiseBiomeSource.java b/net/minecraft/world/level/biome/MultiNoiseBiomeSource.java
+index 7cbc170c4184ec7289bc1a52ceb9152c9fac267a..ddb34204431520b50bc22a4c5c9f8682fec6b45a 100644
+--- a/net/minecraft/world/level/biome/MultiNoiseBiomeSource.java
++++ b/net/minecraft/world/level/biome/MultiNoiseBiomeSource.java
+@@ -59,7 +59,22 @@ public class MultiNoiseBiomeSource extends BiomeSource {
+ 
+     @Override
+     public BiomeResolver createResolver(final Climate.Sampler sampler) {
+-        return (quartX, quartY, quartZ) -> this.getNoiseBiome(sampler.sample(quartX, quartY, quartZ));
++        // GoldLeaf start - Wave 3 zero-alloc biome lookup & hoisted parameters()
++        final Climate.ParameterList<Holder<Biome>> parameterList = this.parameters();
++        return (quartX, quartY, quartZ) -> {
++            final int blockX = QuartPos.toBlock(quartX);
++            final int blockY = QuartPos.toBlock(quartY);
++            final int blockZ = QuartPos.toBlock(quartZ);
++            return parameterList.findValueQuantized(
++                Climate.quantizeCoord(sampler.temperature().sampleValue(blockX, blockY, blockZ)),
++                Climate.quantizeCoord(sampler.humidity().sampleValue(blockX, blockY, blockZ)),
++                Climate.quantizeCoord(sampler.continentalness().sampleValue(blockX, blockY, blockZ)),
++                Climate.quantizeCoord(sampler.erosion().sampleValue(blockX, blockY, blockZ)),
++                Climate.quantizeCoord(sampler.depth().sampleValue(blockX, blockY, blockZ)),
++                Climate.quantizeCoord(sampler.weirdness().sampleValue(blockX, blockY, blockZ))
++            );
++        };
++        // GoldLeaf end - Wave 3 zero-alloc biome lookup & hoisted parameters()
+     }
+ 
+     @Override
+@@ -87,12 +102,26 @@ public class MultiNoiseBiomeSource extends BiomeSource {
+         sampler.erosion().sampleVolume(erosion, volume);
+         sampler.depth().sampleVolume(depth, volume);
+         sampler.weirdness().sampleVolume(ridges, volume);
++        // GoldLeaf start - Wave 3 zero-alloc chunk biome resolver & hoisted parameter list/arrays
++        final Climate.ParameterList<Holder<Biome>> parameterList = this.parameters();
++        final float[] tempArr = temperature.values;
++        final float[] vegArr = vegetation.values;
++        final float[] contArr = continents.values;
++        final float[] erosArr = erosion.values;
++        final float[] depthArr = depth.values;
++        final float[] ridgeArr = ridges.values;
+         return (quartX, quartY, quartZ) -> {
+             int index = volume.indexUnchecked(quartX - minQuartX, quartY - minQuartY, quartZ - minQuartZ);
+-            return this.getNoiseBiome(
+-                Climate.target(temperature.get(index), vegetation.get(index), continents.get(index), erosion.get(index), depth.get(index), ridges.get(index))
++            return parameterList.findValueQuantized(
++                Climate.quantizeCoord(tempArr[index]),
++                Climate.quantizeCoord(vegArr[index]),
++                Climate.quantizeCoord(contArr[index]),
++                Climate.quantizeCoord(erosArr[index]),
++                Climate.quantizeCoord(depthArr[index]),
++                Climate.quantizeCoord(ridgeArr[index])
+             );
+         };
++        // GoldLeaf end - Wave 3 zero-alloc chunk biome resolver & hoisted parameter list/arrays
+     }
+ 
+     @VisibleForDebug
+diff --git a/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java b/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java
+index 55e242900224d0a117fb2045b863c122404b8301..9dfb74ce4d4e8ead0702830ed2ad923ace0696b8 100644
+--- a/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java
++++ b/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java
+@@ -82,8 +82,20 @@ public class ChunkStatusTasks {
+     ) {
+         ServerLevel level = context.level();
+         WorldGenRegion region = new WorldGenRegion(level, chunks, step, chunk);
++        final net.minecraft.world.level.levelgen.RandomState randomState = level.getChunkSource().randomState();
++        final Blender blender = Blender.of(region);
++        final net.minecraft.world.level.StructureManager structureManager = level.structureManager().forWorldGenRegion(region);
++        // Paper start - thin BIOMES acceleration SPI (zero dual execution)
++        if (!(context.generator() instanceof org.bukkit.craftbukkit.generator.CustomChunkGenerator)
++            && !SharedConstants.debugVoidTerrain(chunk.getPos())
++            && io.papermc.paper.spi.PaperWorldgenSpi.tryAccelerateBiomes(
++                context, level, context.generator(), randomState, blender, structureManager, chunk
++            )) {
++            return CompletableFuture.completedFuture(chunk);
++        }
++        // Paper end - thin BIOMES acceleration SPI
+         return context.generator()
+-            .createBiomes(level.getChunkSource().randomState(), Blender.of(region), level.structureManager().forWorldGenRegion(region), chunk);
++            .createBiomes(randomState, blender, structureManager, chunk);
+     }
+ 
+     private static Set<Holder<Biome>> collectPossibleBiomes(final WorldGenRegion region, final int chunkRadius) {
+diff --git a/net/minecraft/world/level/levelgen/Aquifer.java b/net/minecraft/world/level/levelgen/Aquifer.java
+index 7b53acc0c5f02bc1ae27852b36b6864baa1a72de..d83f535f222239bdfc7d7946816d944714355ca7 100644
+--- a/net/minecraft/world/level/levelgen/Aquifer.java
++++ b/net/minecraft/world/level/levelgen/Aquifer.java
+@@ -115,6 +115,15 @@ public interface Aquifer {
+         private final Aquifer.FluidPicker globalFluidPicker;
+         private final DensitySampler.Bound exclusion;
+         private boolean shouldScheduleFluidUpdate;
++        // GoldLeaf start - Wave 1 zero-alloc barrier noise & 12-cell Voronoi band cache
++        private double barrierNoiseCache;
++        private int lastVoronoiBlockX = Integer.MIN_VALUE;
++        private int lastVoronoiAnchorY = Integer.MIN_VALUE;
++        private int lastVoronoiBlockZ = Integer.MIN_VALUE;
++        private final int[] cachedCellIndex = new int[12];
++        private final int[] cachedCellY = new int[12];
++        private final int[] cachedCellDistXZ = new int[12];
++        // GoldLeaf end - Wave 1 zero-alloc barrier noise & 12-cell Voronoi band cache
+         private final int skipSamplingAboveY;
+         private final int minGridX;
+         private final int minGridY;
+@@ -232,59 +241,111 @@ public interface Aquifer {
+             int closestIndex3 = 0;
+             int closestIndex4 = 0;
+ 
+-            for (int x1 = 0; x1 <= 1; x1++) {
+-                for (int y1 = -1; y1 <= 1; y1++) {
+-                    for (int z1 = 0; z1 <= 1; z1++) {
+-                        int spacedGridX = xAnchor + x1;
+-                        int spacedGridY = yAnchor + y1;
+-                        int spacedGridZ = zAnchor + z1;
+-                        int index = this.getIndex(spacedGridX, spacedGridY, spacedGridZ);
+-                        long existingLocation = this.aquiferLocationCache[index];
+-                        long location;
+-                        if (existingLocation != Long.MAX_VALUE) {
+-                            location = existingLocation;
+-                        } else {
+-                            RandomSource random = this.positionalRandomFactory.at(spacedGridX, spacedGridY, spacedGridZ);
+-                            location = BlockPos.asLong(
+-                                fromGridX(spacedGridX, random.nextInt(10)),
+-                                fromGridY(spacedGridY, random.nextInt(9)),
+-                                fromGridZ(spacedGridZ, random.nextInt(10))
+-                            );
+-                            this.aquiferLocationCache[index] = location;
+-                        }
+-
+-                        int dx = BlockPos.getX(location) - blockX;
+-                        int dy = BlockPos.getY(location) - blockY;
+-                        int dz = BlockPos.getZ(location) - blockZ;
+-                        int newDistance = dx * dx + dy * dy + dz * dz;
+-                        if (distanceSqr1 >= newDistance) {
+-                            closestIndex4 = closestIndex3;
+-                            closestIndex3 = closestIndex2;
+-                            closestIndex2 = closestIndex1;
+-                            closestIndex1 = index;
+-                            distanceSqr4 = distanceSqr3;
+-                            distanceSqr3 = distanceSqr2;
+-                            distanceSqr2 = distanceSqr1;
+-                            distanceSqr1 = newDistance;
+-                        } else if (distanceSqr2 >= newDistance) {
+-                            closestIndex4 = closestIndex3;
+-                            closestIndex3 = closestIndex2;
+-                            closestIndex2 = index;
+-                            distanceSqr4 = distanceSqr3;
+-                            distanceSqr3 = distanceSqr2;
+-                            distanceSqr2 = newDistance;
+-                        } else if (distanceSqr3 >= newDistance) {
+-                            closestIndex4 = closestIndex3;
+-                            closestIndex3 = index;
+-                            distanceSqr4 = distanceSqr3;
+-                            distanceSqr3 = newDistance;
+-                        } else if (distanceSqr4 >= newDistance) {
+-                            closestIndex4 = index;
+-                            distanceSqr4 = newDistance;
++            // GoldLeaf start - Wave 1 12-cell Voronoi band cache keyed by (blockX, yAnchor, blockZ)
++            if (blockX == this.lastVoronoiBlockX && yAnchor == this.lastVoronoiAnchorY && blockZ == this.lastVoronoiBlockZ) {
++                final int[] cellIndices = this.cachedCellIndex;
++                final int[] cellYs = this.cachedCellY;
++                final int[] cellDistXZs = this.cachedCellDistXZ;
++                for (int i = 0; i < 12; i++) {
++                    int dy = cellYs[i] - blockY;
++                    int newDistance = cellDistXZs[i] + dy * dy;
++                    int index = cellIndices[i];
++                    if (distanceSqr1 >= newDistance) {
++                        closestIndex4 = closestIndex3;
++                        closestIndex3 = closestIndex2;
++                        closestIndex2 = closestIndex1;
++                        closestIndex1 = index;
++                        distanceSqr4 = distanceSqr3;
++                        distanceSqr3 = distanceSqr2;
++                        distanceSqr2 = distanceSqr1;
++                        distanceSqr1 = newDistance;
++                    } else if (distanceSqr2 >= newDistance) {
++                        closestIndex4 = closestIndex3;
++                        closestIndex3 = closestIndex2;
++                        closestIndex2 = index;
++                        distanceSqr4 = distanceSqr3;
++                        distanceSqr3 = distanceSqr2;
++                        distanceSqr2 = newDistance;
++                    } else if (distanceSqr3 >= newDistance) {
++                        closestIndex4 = closestIndex3;
++                        closestIndex3 = index;
++                        distanceSqr4 = distanceSqr3;
++                        distanceSqr3 = newDistance;
++                    } else if (distanceSqr4 >= newDistance) {
++                        closestIndex4 = index;
++                        distanceSqr4 = newDistance;
++                    }
++                }
++            } else {
++                this.lastVoronoiBlockX = blockX;
++                this.lastVoronoiAnchorY = yAnchor;
++                this.lastVoronoiBlockZ = blockZ;
++                final int[] cellIndices = this.cachedCellIndex;
++                final int[] cellYs = this.cachedCellY;
++                final int[] cellDistXZs = this.cachedCellDistXZ;
++                int slot = 0;
++                for (int x1 = 0; x1 <= 1; x1++) {
++                    for (int y1 = -1; y1 <= 1; y1++) {
++                        for (int z1 = 0; z1 <= 1; z1++) {
++                            int spacedGridX = xAnchor + x1;
++                            int spacedGridY = yAnchor + y1;
++                            int spacedGridZ = zAnchor + z1;
++                            int index = this.getIndex(spacedGridX, spacedGridY, spacedGridZ);
++                            long existingLocation = this.aquiferLocationCache[index];
++                            long location;
++                            if (existingLocation != Long.MAX_VALUE) {
++                                location = existingLocation;
++                            } else {
++                                RandomSource random = this.positionalRandomFactory.at(spacedGridX, spacedGridY, spacedGridZ);
++                                location = BlockPos.asLong(
++                                    fromGridX(spacedGridX, random.nextInt(10)),
++                                    fromGridY(spacedGridY, random.nextInt(9)),
++                                    fromGridZ(spacedGridZ, random.nextInt(10))
++                                );
++                                this.aquiferLocationCache[index] = location;
++                            }
++
++                            int dx = BlockPos.getX(location) - blockX;
++                            int cellY = BlockPos.getY(location);
++                            int dz = BlockPos.getZ(location) - blockZ;
++                            int distXZ = dx * dx + dz * dz;
++                            cellIndices[slot] = index;
++                            cellYs[slot] = cellY;
++                            cellDistXZs[slot] = distXZ;
++                            slot++;
++
++                            int dy = cellY - blockY;
++                            int newDistance = distXZ + dy * dy;
++                            if (distanceSqr1 >= newDistance) {
++                                closestIndex4 = closestIndex3;
++                                closestIndex3 = closestIndex2;
++                                closestIndex2 = closestIndex1;
++                                closestIndex1 = index;
++                                distanceSqr4 = distanceSqr3;
++                                distanceSqr3 = distanceSqr2;
++                                distanceSqr2 = distanceSqr1;
++                                distanceSqr1 = newDistance;
++                            } else if (distanceSqr2 >= newDistance) {
++                                closestIndex4 = closestIndex3;
++                                closestIndex3 = closestIndex2;
++                                closestIndex2 = index;
++                                distanceSqr4 = distanceSqr3;
++                                distanceSqr3 = distanceSqr2;
++                                distanceSqr2 = newDistance;
++                            } else if (distanceSqr3 >= newDistance) {
++                                closestIndex4 = closestIndex3;
++                                closestIndex3 = index;
++                                distanceSqr4 = distanceSqr3;
++                                distanceSqr3 = newDistance;
++                            } else if (distanceSqr4 >= newDistance) {
++                                closestIndex4 = index;
++                                distanceSqr4 = newDistance;
++                            }
+                         }
+                     }
+                 }
+             }
++            // GoldLeaf end - Wave 1 12-cell Voronoi band cache keyed by (blockX, yAnchor, blockZ)
+ 
+             Aquifer.FluidStatus closestStatus1 = this.getAquiferStatus(closestIndex1);
+             double similarity12 = similarity(distanceSqr1, distanceSqr2);
+@@ -305,9 +366,10 @@ public interface Aquifer {
+                     return actualFluidState;
+                 }
+ 
+-                MutableDouble barrierNoiseValue = new MutableDouble(Double.NaN);
++                // GoldLeaf start - Wave 1 zero-alloc barrier noise cache
++                this.barrierNoiseCache = Double.NaN;
+                 Aquifer.FluidStatus closestStatus2 = this.getAquiferStatus(closestIndex2);
+-                double barrier12 = similarity12 * this.calculatePressure(blockX, blockY, blockZ, barrierNoiseValue, closestStatus1, closestStatus2);
++                double barrier12 = similarity12 * this.calculatePressure(blockX, blockY, blockZ, closestStatus1, closestStatus2);
+                 if (density + barrier12 > 0.0) {
+                     this.shouldScheduleFluidUpdate = false;
+                     return null;
+@@ -318,7 +380,7 @@ public interface Aquifer {
+                 if (similarity13 > 0.0) {
+                     double barrier13 = similarity12
+                         * similarity13
+-                        * this.calculatePressure(blockX, blockY, blockZ, barrierNoiseValue, closestStatus1, closestStatus3);
++                        * this.calculatePressure(blockX, blockY, blockZ, closestStatus1, closestStatus3);
+                     if (density + barrier13 > 0.0) {
+                         this.shouldScheduleFluidUpdate = false;
+                         return null;
+@@ -329,12 +391,13 @@ public interface Aquifer {
+                 if (similarity23 > 0.0) {
+                     double barrier23 = similarity12
+                         * similarity23
+-                        * this.calculatePressure(blockX, blockY, blockZ, barrierNoiseValue, closestStatus2, closestStatus3);
++                        * this.calculatePressure(blockX, blockY, blockZ, closestStatus2, closestStatus3);
+                     if (density + barrier23 > 0.0) {
+                         this.shouldScheduleFluidUpdate = false;
+                         return null;
+                     }
+                 }
++                // GoldLeaf end - Wave 1 zero-alloc barrier noise cache
+ 
+                 boolean mayFlow12 = !closestStatus1.equals(closestStatus2);
+                 boolean mayFlow23 = similarity23 >= FLOWING_UPDATE_SIMULARITY && !closestStatus2.equals(closestStatus3);
+@@ -365,7 +428,6 @@ public interface Aquifer {
+             final int blockX,
+             final int blockY,
+             final int blockZ,
+-            final MutableDouble barrierNoiseValue,
+             final Aquifer.FluidStatus statusClosest1,
+             final Aquifer.FluidStatus statusClosest2
+         ) {
+@@ -407,10 +469,10 @@ public interface Aquifer {
+                 double amplitude = 2.0;
+                 double noiseValue;
+                 if (!(gradient < -2.0) && !(gradient > 2.0)) {
+-                    double currentNoiseValue = barrierNoiseValue.doubleValue();
++                    double currentNoiseValue = this.barrierNoiseCache;
+                     if (Double.isNaN(currentNoiseValue)) {
+                         double barrierNoise = this.barrierNoise.sampleValue(blockX, blockY, blockZ);
+-                        barrierNoiseValue.setValue(barrierNoise);
++                        this.barrierNoiseCache = barrierNoise;
+                         noiseValue = barrierNoise;
+                     } else {
+                         noiseValue = currentNoiseValue;
+diff --git a/net/minecraft/world/level/levelgen/Heightmap.java b/net/minecraft/world/level/levelgen/Heightmap.java
+index 22990ffcb40304279530462a72c489e8e1207e08..6e9967afbd0d83f3ef46cd7b3a3b5dd779a0d680 100644
+--- a/net/minecraft/world/level/levelgen/Heightmap.java
++++ b/net/minecraft/world/level/levelgen/Heightmap.java
+@@ -140,6 +140,12 @@ public class Heightmap {
+         // Paper end - optimise heightmap access
+     }
+ 
++    // GoldLeaf start - ADR-017 bulk heightmap update
++    public void paper$setHeightBulk(final int x, final int z, final int height) {
++        this.setHeight(x, z, height);
++    }
++    // GoldLeaf end - ADR-017 bulk heightmap update
++
+     public void setRawData(final ChunkAccess chunk, final Heightmap.Types type, final long[] data) {
+         long[] rawData = this.data.getRaw();
+         if (rawData.length == data.length) {
+diff --git a/net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java b/net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java
+index f0529d233b791e226cec469b2efebcffd02c6d58..08217bcc564ab1b9d03685d51aafdf8b7b7614aa 100644
+--- a/net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java
++++ b/net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java
+@@ -408,7 +408,22 @@ public final class NoiseBasedChunkGenerator extends ChunkGenerator {
+                 }
+ 
+                 try (Zone var39 = profiler.zone("doFill")) {
+-                    if (customGenerator == null || customGenerator.shouldGenerateNoise(chunk)) // Paper - Bukkit chunk generator callbacks
++                    // Paper start - thin TERRAIN acceleration SPI (zero dual execution)
++                    boolean acceleratedTerrain = false;
++                    if (customGenerator == null) {
++                        acceleratedTerrain = io.papermc.paper.spi.PaperWorldgenSpi.tryAccelerateTerrain(
++                            structureManager.level.getMinecraftWorld(),
++                            this,
++                            volume,
++                            this.settings.value(),
++                            randomState,
++                            structureManager,
++                            blender,
++                            chunk
++                        );
++                    }
++                    if (!acceleratedTerrain && (customGenerator == null || customGenerator.shouldGenerateNoise(chunk))) // Paper - Bukkit chunk generator callbacks
++                    // Paper end - thin TERRAIN acceleration SPI
+                     this.doFill(noiseChunk, chunk);
+                 } finally {
+                     for (LevelChunkSection section : sections) {
+@@ -445,6 +460,18 @@ public final class NoiseBasedChunkGenerator extends ChunkGenerator {
+         DensitySampler.Bound finalDensity = noiseChunk.cachingSamplers().get(this.settings.value().noiseRouter().finalDensity());
+ 
+         try (ScopedDensityBuffer densityBuffer = finalDensity.sampleVolume(volume)) {
++            // Paper start - section-batched doFill SPI (100% vanilla-exact)
++            if (io.papermc.paper.spi.PaperWorldgenSpi.tryFillChunkBatched(
++                noiseChunk,
++                chunk,
++                densityBuffer,
++                this.settings.value().defaultBlock(),
++                AIR,
++                this::debugPreliminarySurfaceLevel
++            )) {
++                return;
++            }
++            // Paper end - section-batched doFill SPI
+             for (int z = 0; z < volume.sizeZ(); z++) {
+                 int blockZ = volume.blockZ(z);
+ 
+diff --git a/net/minecraft/world/level/levelgen/RandomState.java b/net/minecraft/world/level/levelgen/RandomState.java
+index 85ea3ec73fb5474b000d6bc50eddbb8c06d09f49..fb7bfddf3e2bb2c7e1e0c2464331cbbaed14171c 100644
+--- a/net/minecraft/world/level/levelgen/RandomState.java
++++ b/net/minecraft/world/level/levelgen/RandomState.java
+@@ -133,6 +133,12 @@ public final class RandomState {
+         return this.densityFunctionCompiler.getSampler(function);
+     }
+ 
++    // GoldLeaf start - zero-reflection AST lowerer accessor (ADR-017)
++    public DensityFunction.CompileContext paper$compileContext() {
++        return this.densityFunctionCompiler.paper$context();
++    }
++    // GoldLeaf end - zero-reflection AST lowerer accessor (ADR-017)
++
+     @VisibleForDebug
+     public float sampleBlockValueUncached(final DensityFunction function, final int x, final int y, final int z) {
+         return this.getSampler(function).sampleValue(SamplerContext.EMPTY_UNCACHED, x, y, z);
+diff --git a/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java b/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java
+index fe3f1777546504cab9c9d1fcf7d5c2efe59d100a..f5845b812d22bf5251ed463b693e7498b78e94af 100644
+--- a/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java
++++ b/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java
+@@ -11,7 +11,9 @@ public class XoroshiroRandomSource implements RandomSource {
+     public static final Codec<XoroshiroRandomSource> CODEC = Xoroshiro128PlusPlus.CODEC
+         .xmap(generator -> new XoroshiroRandomSource(generator), source -> source.randomNumberGenerator);
+     private Xoroshiro128PlusPlus randomNumberGenerator;
+-    private final MarsagliaPolarGaussian gaussianSource = new MarsagliaPolarGaussian(this);
++    // GoldLeaf start - Wave 1 lazy MarsagliaPolarGaussian allocation
++    private @org.jspecify.annotations.Nullable MarsagliaPolarGaussian gaussianSource;
++    // GoldLeaf end - Wave 1 lazy MarsagliaPolarGaussian allocation
+ 
+     public XoroshiroRandomSource(final long seed) {
+         this.randomNumberGenerator = new Xoroshiro128PlusPlus(RandomSupport.upgradeSeedTo128bit(seed));
+@@ -42,7 +44,9 @@ public class XoroshiroRandomSource implements RandomSource {
+     @Override
+     public void setSeed(final long seed) {
+         this.randomNumberGenerator = new Xoroshiro128PlusPlus(RandomSupport.upgradeSeedTo128bit(seed));
+-        this.gaussianSource.reset();
++        if (this.gaussianSource != null) { // GoldLeaf - Wave 1 lazy MarsagliaPolarGaussian allocation
++            this.gaussianSource.reset();
++        }
+     }
+ 
+     @Override
+@@ -95,7 +99,14 @@ public class XoroshiroRandomSource implements RandomSource {
+ 
+     @Override
+     public double nextGaussian() {
+-        return this.gaussianSource.nextGaussian();
++        // GoldLeaf start - Wave 1 lazy MarsagliaPolarGaussian allocation
++        MarsagliaPolarGaussian gaussian = this.gaussianSource;
++        if (gaussian == null) {
++            gaussian = new MarsagliaPolarGaussian(this);
++            this.gaussianSource = gaussian;
++        }
++        return gaussian.nextGaussian();
++        // GoldLeaf end - Wave 1 lazy MarsagliaPolarGaussian allocation
+     }
+ 
+     @Override
+diff --git a/net/minecraft/world/level/levelgen/densityfunction/DensityFunctionCompiler.java b/net/minecraft/world/level/levelgen/densityfunction/DensityFunctionCompiler.java
+index 299c1e460b47fe872313fd1392525e4a3ac3df0c..e734c29160da25fc2cf85b5a978b38193e7fc81a 100644
+--- a/net/minecraft/world/level/levelgen/densityfunction/DensityFunctionCompiler.java
++++ b/net/minecraft/world/level/levelgen/densityfunction/DensityFunctionCompiler.java
+@@ -28,6 +28,12 @@ public class DensityFunctionCompiler {
+         this.context = context;
+     }
+ 
++    // GoldLeaf start - zero-reflection AST lowerer accessor (ADR-017)
++    public DensityFunction.CompileContext paper$context() {
++        return this.context;
++    }
++    // GoldLeaf end - zero-reflection AST lowerer accessor (ADR-017)
++
+     public DensitySampler getSampler(final DensityFunction function) {
+         return this.samplers.computeIfAbsent(function, this.optimizeAndCompile);
+     }
+diff --git a/net/minecraft/world/level/levelgen/densityfunction/op/BinaryFunction.java b/net/minecraft/world/level/levelgen/densityfunction/op/BinaryFunction.java
+index f54ddd8943e503f251e0db5c6dd0edb8f5ca700e..77c721eb0a583099938e2fb202d143fb98893600 100644
+--- a/net/minecraft/world/level/levelgen/densityfunction/op/BinaryFunction.java
++++ b/net/minecraft/world/level/levelgen/densityfunction/op/BinaryFunction.java
+@@ -159,9 +159,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+             try (ScopedDensityBuffer rightBuffer = context.acquireBuffer(volume)) {
+                 this.right.sampleVolume(context, rightBuffer, volume);
+ 
+-                for (int i = 0; i < outputBuffer.size(); i++) {
+-                    outputBuffer.addTo(i, rightBuffer.get(i));
+-                }
++                io.papermc.paper.spi.DensityVectorKernels.add(outputBuffer.values, rightBuffer.values, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+             }
+         }
+ 
+@@ -176,9 +174,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+         public void sampleVolume(final SamplerContext context, final DensityBuffer outputBuffer, final DensityVolume volume) {
+             this.left.sampleVolume(context, outputBuffer, volume);
+ 
+-            for (int i = 0; i < outputBuffer.size(); i++) {
+-                outputBuffer.addTo(i, this.right);
+-            }
++            io.papermc.paper.spi.DensityVectorKernels.constAdd(outputBuffer.values, this.right, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+         }
+ 
+         @Override
+@@ -208,11 +204,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+         public void sampleVolume(final SamplerContext context, final DensityBuffer outputBuffer, final DensityVolume volume) {
+             this.left.sampleVolume(context, outputBuffer, volume);
+ 
+-            for (int i = 0; i < outputBuffer.size(); i++) {
+-                if (this.right > outputBuffer.get(i)) {
+-                    outputBuffer.set(i, this.right);
+-                }
+-            }
++            io.papermc.paper.spi.DensityVectorKernels.constMax(outputBuffer.values, this.right, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+         }
+ 
+         @Override
+@@ -226,11 +218,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+         public void sampleVolume(final SamplerContext context, final DensityBuffer outputBuffer, final DensityVolume volume) {
+             this.left.sampleVolume(context, outputBuffer, volume);
+ 
+-            for (int i = 0; i < outputBuffer.size(); i++) {
+-                if (this.right < outputBuffer.get(i)) {
+-                    outputBuffer.set(i, this.right);
+-                }
+-            }
++            io.papermc.paper.spi.DensityVectorKernels.constMin(outputBuffer.values, this.right, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+         }
+ 
+         @Override
+@@ -244,9 +232,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+         public void sampleVolume(final SamplerContext context, final DensityBuffer outputBuffer, final DensityVolume volume) {
+             this.left.sampleVolume(context, outputBuffer, volume);
+ 
+-            for (int i = 0; i < outputBuffer.size(); i++) {
+-                outputBuffer.set(i, outputBuffer.get(i) * this.right);
+-            }
++            io.papermc.paper.spi.DensityVectorKernels.constMul(outputBuffer.values, this.right, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+         }
+ 
+         @Override
+@@ -260,9 +246,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+         public void sampleVolume(final SamplerContext context, final DensityBuffer outputBuffer, final DensityVolume volume) {
+             this.right.sampleVolume(context, outputBuffer, volume);
+ 
+-            for (int i = 0; i < outputBuffer.size(); i++) {
+-                outputBuffer.set(i, this.left - outputBuffer.get(i));
+-            }
++            io.papermc.paper.spi.DensityVectorKernels.constSub(outputBuffer.values, this.left, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+         }
+ 
+         @Override
+@@ -300,12 +284,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+             try (ScopedDensityBuffer rightBuffer = context.acquireBuffer(volume)) {
+                 this.right.sampleVolume(context, rightBuffer, volume);
+ 
+-                for (int i = 0; i < outputBuffer.size(); i++) {
+-                    float rightValue = rightBuffer.get(i);
+-                    if (rightValue > outputBuffer.get(i)) {
+-                        outputBuffer.set(i, rightValue);
+-                    }
+-                }
++                io.papermc.paper.spi.DensityVectorKernels.max(outputBuffer.values, rightBuffer.values, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+             }
+         }
+ 
+@@ -324,12 +303,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+             try (ScopedDensityBuffer rightBuffer = context.acquireBuffer(volume)) {
+                 this.right.sampleVolume(context, rightBuffer, volume);
+ 
+-                for (int i = 0; i < outputBuffer.size(); i++) {
+-                    float rightValue = rightBuffer.get(i);
+-                    if (rightValue < outputBuffer.get(i)) {
+-                        outputBuffer.set(i, rightValue);
+-                    }
+-                }
++                io.papermc.paper.spi.DensityVectorKernels.min(outputBuffer.values, rightBuffer.values, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+             }
+         }
+ 
+@@ -348,9 +322,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+             try (ScopedDensityBuffer rightBuffer = context.acquireBuffer(volume)) {
+                 this.right.sampleVolume(context, rightBuffer, volume);
+ 
+-                for (int i = 0; i < outputBuffer.size(); i++) {
+-                    outputBuffer.set(i, outputBuffer.get(i) * rightBuffer.get(i));
+-                }
++                io.papermc.paper.spi.DensityVectorKernels.mul(outputBuffer.values, rightBuffer.values, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+             }
+         }
+ 
+@@ -369,9 +341,7 @@ public record BinaryFunction(BinaryFunction.Type type, DensityFunction left, Den
+             try (ScopedDensityBuffer rightBuffer = context.acquireBuffer(volume)) {
+                 this.right.sampleVolume(context, rightBuffer, volume);
+ 
+-                for (int i = 0; i < outputBuffer.size(); i++) {
+-                    outputBuffer.addTo(i, -rightBuffer.get(i));
+-                }
++                io.papermc.paper.spi.DensityVectorKernels.sub(outputBuffer.values, rightBuffer.values, outputBuffer.size()); // GoldLeaf - Wave 2 flat-array SIMD kernel
+             }
+         }
+ 
+diff --git a/net/minecraft/world/level/levelgen/densityfunction/op/InterpolatedFunction.java b/net/minecraft/world/level/levelgen/densityfunction/op/InterpolatedFunction.java
+index 69e7106a9006f8b3f48f201d2d0c996e83d8e6be..b5bbd57230cb84723eeccdd24b9c8a154f6510c9 100644
+--- a/net/minecraft/world/level/levelgen/densityfunction/op/InterpolatedFunction.java
++++ b/net/minecraft/world/level/levelgen/densityfunction/op/InterpolatedFunction.java
+@@ -119,31 +119,21 @@ public record InterpolatedFunction(DensityFunction input, int cellSizeXz, int ce
+ 
+             try (ScopedDensityBuffer cellBuffer = context.acquireBuffer(cellVolume)) {
+                 this.input.sampleVolume(context, cellBuffer, cellVolume);
+-
+-                for (int cellZ = 0; cellZ < cellCountZ; cellZ++) {
+-                    int nextCellZ = Math.min(cellZ + 1, cellVolume.sizeZ() - 1);
+-
+-                    for (int cellX = 0; cellX < cellCountX; cellX++) {
+-                        int nextCellX = Math.min(cellX + 1, cellVolume.sizeX() - 1);
+-                        float v000 = cellBuffer.get(cellVolume.indexUnchecked(cellX, 0, cellZ));
+-                        float v100 = cellBuffer.get(cellVolume.indexUnchecked(nextCellX, 0, cellZ));
+-                        float v001 = cellBuffer.get(cellVolume.indexUnchecked(cellX, 0, nextCellZ));
+-                        float v101 = cellBuffer.get(cellVolume.indexUnchecked(nextCellX, 0, nextCellZ));
+-
+-                        for (int cellY = 0; cellY < cellCountY; cellY++) {
+-                            int nextCellY = Math.min(cellY + 1, cellVolume.sizeY() - 1);
+-                            float v010 = cellBuffer.get(cellVolume.indexUnchecked(cellX, nextCellY, cellZ));
+-                            float v110 = cellBuffer.get(cellVolume.indexUnchecked(nextCellX, nextCellY, cellZ));
+-                            float v011 = cellBuffer.get(cellVolume.indexUnchecked(cellX, nextCellY, nextCellZ));
+-                            float v111 = cellBuffer.get(cellVolume.indexUnchecked(nextCellX, nextCellY, nextCellZ));
+-                            this.fillCell(outputBuffer, volume, cellVolume, cellX, cellY, cellZ, v000, v100, v010, v110, v001, v101, v011, v111);
+-                            v000 = v010;
+-                            v100 = v110;
+-                            v001 = v011;
+-                            v101 = v111;
+-                        }
+-                    }
+-                }
++                // GoldLeaf start - Wave 2 cache-friendly L1-streaming trilinear interpolation kernel
++                io.papermc.paper.spi.DensityVectorKernels.interpolateBlockStep(
++                    cellBuffer.values,
++                    cellVolume,
++                    outputBuffer.values,
++                    volume,
++                    cellCountX,
++                    cellCountY,
++                    cellCountZ,
++                    this.cellSizeXz,
++                    this.cellSizeY,
++                    this.cellSizeXzInv,
++                    this.cellSizeYInv
++                );
++                // GoldLeaf end - Wave 2 cache-friendly L1-streaming trilinear interpolation kernel
+             }
+         }
+ 
+diff --git a/net/minecraft/world/level/levelgen/feature/AbstractOreFeature.java b/net/minecraft/world/level/levelgen/feature/AbstractOreFeature.java
+index bff272eb3478bb0edac30051dbf9da6173c46658..88551f522ebcfc5e37b7b9936ffbbbb4a77e55e9 100644
+--- a/net/minecraft/world/level/levelgen/feature/AbstractOreFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/AbstractOreFeature.java
+@@ -12,14 +12,19 @@ import net.minecraft.core.Direction;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.chunk.BulkSectionAccess;
++import net.minecraft.world.level.chunk.LevelChunkSection;
+ 
+ public abstract class AbstractOreFeature implements Feature {
++    private static final Direction[] DIRECTIONS = Direction.values(); // GoldLeaf - Wave 3 avoid Direction.values() array copy
++    protected final BlockReplacement[] targetArray; // GoldLeaf - Wave 3 indexed array for zero-iterator loop
+     protected final List<BlockReplacement> targetStates;
+     protected final int size;
+     protected final float discardChanceOnAirExposure;
+ 
+     public AbstractOreFeature(final List<BlockReplacement> targetStates, final int size, final float discardChanceOnAirExposure) {
+-        this.targetStates = java.util.Arrays.asList(targetStates.toArray(new BlockReplacement[0])); // Paper - optimise chunk generation - avoid type indirection for iteration on targetStates
++        this.targetArray = targetStates.toArray(new BlockReplacement[0]); // GoldLeaf - Wave 3
++        this.targetStates = java.util.Arrays.asList(this.targetArray); // Paper - optimise chunk generation - avoid type indirection for iteration on targetStates
+         this.size = size;
+         this.discardChanceOnAirExposure = discardChanceOnAirExposure;
+     }
+@@ -61,6 +66,55 @@ public abstract class AbstractOreFeature implements Feature {
+             && (shouldSkipAirCheck(random, this.discardChanceOnAirExposure) || !isAdjacentToAir(blockGetter, orePos));
+     }
+ 
++    // GoldLeaf start - Wave 3 zero-alloc ore placement & interior section neighbor fast-path
++    protected boolean canPlaceOreFast(
++        final BlockState state,
++        final LevelChunkSection section,
++        final int rx,
++        final int ry,
++        final int rz,
++        final BulkSectionAccess sectionGetter,
++        final RandomSource random,
++        final BlockReplacement targetState,
++        final BlockPos.MutableBlockPos orePos,
++        final BlockPos.MutableBlockPos neighborPos
++    ) {
++        if (!targetState.target().test(state, orePos, random)) {
++            return false;
++        }
++        if (shouldSkipAirCheck(random, this.discardChanceOnAirExposure)) {
++            return true;
++        }
++        return !isAdjacentToAirFast(section, rx, ry, rz, sectionGetter, orePos, neighborPos);
++    }
++
++    public static boolean isAdjacentToAirFast(
++        final LevelChunkSection section,
++        final int rx,
++        final int ry,
++        final int rz,
++        final BulkSectionAccess sectionGetter,
++        final BlockPos orePos,
++        final BlockPos.MutableBlockPos neighborPos
++    ) {
++        if (rx >= 1 && rx <= 14 && ry >= 1 && ry <= 14 && rz >= 1 && rz <= 14) {
++            return section.getBlockState(rx, ry - 1, rz).isAir()
++                || section.getBlockState(rx, ry + 1, rz).isAir()
++                || section.getBlockState(rx, ry, rz - 1).isAir()
++                || section.getBlockState(rx, ry, rz + 1).isAir()
++                || section.getBlockState(rx - 1, ry, rz).isAir()
++                || section.getBlockState(rx + 1, ry, rz).isAir();
++        }
++        for (final Direction direction : DIRECTIONS) {
++            neighborPos.setWithOffset(orePos, direction);
++            if (sectionGetter.getBlockState(neighborPos).isAir()) {
++                return true;
++            }
++        }
++        return false;
++    }
++    // GoldLeaf end - Wave 3 zero-alloc ore placement & interior section neighbor fast-path
++
+     public static boolean isAdjacentToAir(final Function<BlockPos, BlockState> blockGetter, final BlockPos pos) {
+         return checkNeighbors(blockGetter, pos, BlockBehaviour.BlockStateBase::isAir);
+     }
+diff --git a/net/minecraft/world/level/levelgen/feature/OreFeature.java b/net/minecraft/world/level/levelgen/feature/OreFeature.java
+index e6aee6a38f45b47413aa3bbddf3632bc0c6a93f5..9eaf14dec5faf12c3ee03b4f88b2ab8db8e33571 100644
+--- a/net/minecraft/world/level/levelgen/feature/OreFeature.java
++++ b/net/minecraft/world/level/levelgen/feature/OreFeature.java
+@@ -118,12 +118,18 @@ public class OreFeature extends AbstractOreFeature {
+         }
+ 
+         try (BulkSectionAccess sectionGetter = new BulkSectionAccess(level)) {
++            // GoldLeaf start - Wave 3 zero-alloc ore placement, hoisted bounds & indexed targets
++            final BlockPos.MutableBlockPos neighborPos = new BlockPos.MutableBlockPos();
++            final BlockReplacement[] targets = this.targetArray;
++            final int targetCount = targets.length;
++            final int zStride = sizeXZ * sizeY;
+             for (int i = 0; i < this.size; i++) {
+                 double r = data[i * 4 + 3];
+                 if (!(r < 0.0)) {
+                     double xx = data[i * 4 + 0];
+                     double yy = data[i * 4 + 1];
+                     double zz = data[i * 4 + 2];
++                    double invR = 1.0 / r;
+                     int xMin = Math.max(Mth.floor(xx - r), xStart);
+                     int yMin = Math.max(Mth.floor(yy - r), yStart);
+                     int zMin = Math.max(Mth.floor(zz - r), zStart);
+@@ -132,15 +138,21 @@ public class OreFeature extends AbstractOreFeature {
+                     int zMax = Math.max(Mth.floor(zz + r), zMin);
+ 
+                     for (int x = xMin; x <= xMax; x++) {
+-                        double xd = (x + 0.5 - xx) / r;
+-                        if (xd * xd < 1.0) {
++                        double xd = (x + 0.5 - xx) * invR;
++                        double xdSq = xd * xd;
++                        if (xdSq < 1.0) {
++                            int xBitBase = x - xStart;
+                             for (int y = yMin; y <= yMax; y++) {
+-                                double yd = (y + 0.5 - yy) / r;
+-                                if (xd * xd + yd * yd < 1.0) {
+-                                    for (int z = zMin; z <= zMax; z++) {
+-                                        double zd = (z + 0.5 - zz) / r;
+-                                        if (xd * xd + yd * yd + zd * zd < 1.0 && !level.isOutsideBuildHeight(y)) {
+-                                            int bitSetIndex = x - xStart + (y - yStart) * sizeXZ + (z - zStart) * sizeXZ * sizeY;
++                                if (level.isOutsideBuildHeight(y)) {
++                                    continue;
++                                }
++                                double yd = (y + 0.5 - yy) * invR;
++                                double xydSq = xdSq + yd * yd;
++                                if (xydSq < 1.0) {
++                                    int bitSetIndex = xBitBase + (y - yStart) * sizeXZ + (zMin - zStart) * zStride;
++                                    for (int z = zMin; z <= zMax; z++, bitSetIndex += zStride) {
++                                        double zd = (z + 0.5 - zz) * invR;
++                                        if (xydSq + zd * zd < 1.0) {
+                                             if (!tested.get(bitSetIndex)) {
+                                                 tested.set(bitSetIndex);
+                                                 orePos.set(x, y, z);
+@@ -152,8 +164,20 @@ public class OreFeature extends AbstractOreFeature {
+                                                         int sectionRelativeZ = SectionPos.sectionRelative(z);
+                                                         BlockState blockState = section.getBlockState(sectionRelativeX, sectionRelativeY, sectionRelativeZ);
+ 
+-                                                        for (BlockReplacement targetState : this.targetStates) {
+-                                                            if (this.canPlaceOre(blockState, sectionGetter::getBlockState, random, targetState, orePos)) {
++                                                        for (int t = 0; t < targetCount; t++) {
++                                                            BlockReplacement targetState = targets[t];
++                                                            if (this.canPlaceOreFast(
++                                                                blockState,
++                                                                section,
++                                                                sectionRelativeX,
++                                                                sectionRelativeY,
++                                                                sectionRelativeZ,
++                                                                sectionGetter,
++                                                                random,
++                                                                targetState,
++                                                                orePos,
++                                                                neighborPos
++                                                            )) {
+                                                                 section.setBlockState(
+                                                                     sectionRelativeX, sectionRelativeY, sectionRelativeZ, targetState.state(), false
+                                                                 );
+@@ -172,6 +196,7 @@ public class OreFeature extends AbstractOreFeature {
+                     }
+                 }
+             }
++            // GoldLeaf end - Wave 3 zero-alloc ore placement, hoisted bounds & indexed targets
+         }
+ 
+         return placed > 0;
+diff --git a/net/minecraft/world/level/levelgen/material/MaterialRuleContext.java b/net/minecraft/world/level/levelgen/material/MaterialRuleContext.java
+index 45a42f68a2aff0f2dae5c7a1abca8c8c1ff81639..628fd50de45bd0b5f7b7913cde087ff6954976e7 100644
+--- a/net/minecraft/world/level/levelgen/material/MaterialRuleContext.java
++++ b/net/minecraft/world/level/levelgen/material/MaterialRuleContext.java
+@@ -219,6 +219,25 @@ public final class MaterialRuleContext implements ca.spottedleaf.moonrise.patche
+             DensityBuffer buffer = this.allocator == null ? DensityBuffer.createUnpooled(this.expectedVolume.size()) : this.allocator.allocate(this.expectedVolume.size());
+             // Paper end - optimise chunk generation
+             sampler.sampleVolume(buffer, this.expectedVolume);
++            // GoldLeaf start - Wave 1 fast-path unit-step DensityVolume indexing
++            if (this.expectedVolume.stepBlockX() == 1 && this.expectedVolume.stepBlockY() == 1 && this.expectedVolume.stepBlockZ() == 1) {
++                final int minX = this.expectedVolume.minBlockX();
++                final int minY = this.expectedVolume.minBlockY();
++                final int minZ = this.expectedVolume.minBlockZ();
++                final int sizeX = this.expectedVolume.sizeX();
++                final int sizeY = this.expectedVolume.sizeY();
++                final int sizeZ = this.expectedVolume.sizeZ();
++                return () -> {
++                    final int lx = this.blockX - minX;
++                    final int ly = this.blockY - minY;
++                    final int lz = this.blockZ - minZ;
++                    if ((lx | ly | lz) >= 0 && lx < sizeX && ly < sizeY && lz < sizeZ) {
++                        return buffer.get((lx + lz * sizeX) * sizeY + ly);
++                    }
++                    return sampler.sampleValue(this.blockX, this.blockY, this.blockZ);
++                };
++            }
++            // GoldLeaf end - Wave 1 fast-path unit-step DensityVolume indexing
+             return () -> {
+                 int index = this.expectedVolume.indexOfBlock(this.blockX, this.blockY, this.blockZ);
+                 return index == -1 ? sampler.sampleValue(this.blockX, this.blockY, this.blockZ) : buffer.get(index);
+@@ -283,7 +302,7 @@ public final class MaterialRuleContext implements ca.spottedleaf.moonrise.patche
+     public abstract static class LazyXZCondition implements ConditionEvaluator {
+         protected final MaterialRuleContext context;
+         private long lastUpdate;
+-        private @Nullable Boolean result;
++        private boolean result; // GoldLeaf - Wave 1 unboxed boolean cache
+ 
+         protected LazyXZCondition(final MaterialRuleContext context) {
+             this.context = context;
+@@ -294,11 +313,7 @@ public final class MaterialRuleContext implements ca.spottedleaf.moonrise.patche
+         public boolean test() {
+             long lastContextUpdate = this.context.lastUpdateXZ;
+             if (lastContextUpdate == this.lastUpdate) {
+-                if (this.result == null) {
+-                    throw new IllegalStateException("Update triggered but the result is null");
+-                } else {
+-                    return this.result;
+-                }
++                return this.result;
+             } else {
+                 this.lastUpdate = lastContextUpdate;
+                 this.result = this.compute();
+@@ -312,7 +327,7 @@ public final class MaterialRuleContext implements ca.spottedleaf.moonrise.patche
+     public abstract static class LazyYCondition implements ConditionEvaluator {
+         protected final MaterialRuleContext context;
+         private long lastUpdate;
+-        private @Nullable Boolean result;
++        private boolean result; // GoldLeaf - Wave 1 unboxed boolean cache
+ 
+         protected LazyYCondition(final MaterialRuleContext context) {
+             this.context = context;
+@@ -323,11 +338,7 @@ public final class MaterialRuleContext implements ca.spottedleaf.moonrise.patche
+         public boolean test() {
+             long lastContextUpdate = this.context.lastUpdateY;
+             if (lastContextUpdate == this.lastUpdate) {
+-                if (this.result == null) {
+-                    throw new IllegalStateException("Update triggered but the result is null");
+-                } else {
+-                    return this.result;
+-                }
++                return this.result;
+             } else {
+                 this.lastUpdate = lastContextUpdate;
+                 this.result = this.compute();
+diff --git a/net/minecraft/world/level/levelgen/material/MaterialSystem.java b/net/minecraft/world/level/levelgen/material/MaterialSystem.java
+index b339467cb268a023dd160d011bcc9ee94875fe01..d9152bf7bea8109641f50193e7fd5bb723dd37fc 100644
+--- a/net/minecraft/world/level/levelgen/material/MaterialSystem.java
++++ b/net/minecraft/world/level/levelgen/material/MaterialSystem.java
+@@ -108,10 +108,25 @@ public class MaterialSystem {
+         LevelHeightAccessor heightAccessor = protoChunk.getHeightAccessorForGeneration();
+         final int minY = heightAccessor.getMinY();
+         final int maxY = heightAccessor.getMaxY();
++        // GoldLeaf start - Wave 1 section-hoisted BlockColumn#getBlock
++        final net.minecraft.world.level.chunk.LevelChunkSection[] sections = protoChunk.getSections();
++        final int minSection = protoChunk.getMinSectionY();
++        final BlockState airState = Blocks.AIR.defaultBlockState();
++        // GoldLeaf end - Wave 1 section-hoisted BlockColumn#getBlock
+         BlockColumn column = new BlockColumn() {
+             @Override
+             public BlockState getBlock(final int blockY) {
++                // GoldLeaf start - Wave 1 section-hoisted BlockColumn#getBlock
++                final int sectionIdx = (blockY >> 4) - minSection;
++                if (sectionIdx >= 0 && sectionIdx < sections.length) {
++                    final net.minecraft.world.level.chunk.LevelChunkSection section = sections[sectionIdx];
++                    if (section.hasOnlyAir()) {
++                        return airState;
++                    }
++                    return section.getBlockState(columnPos.getX() & 15, blockY & 15, columnPos.getZ() & 15);
++                }
+                 return protoChunk.getBlockState(columnPos.setY(blockY));
++                // GoldLeaf end - Wave 1 section-hoisted BlockColumn#getBlock
+             }
+ 
+             @Override
+diff --git a/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java b/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java
+index 8da4604be7c0715fee6eaeb5e39a12393c70890c..ee629f9271a786a8ca7c98a70fae50cd665c45c8 100644
+--- a/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java
++++ b/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java
+@@ -25,11 +25,11 @@ public record BiomeCondition(HolderSet<Biome> biomes) implements MaterialConditi
+         Set<Holder<Biome>> possibleBiomes = ruleContext.possibleBiomes();
+         if (possibleBiomes != null) {
+             if (this.canNeverMatch(possibleBiomes)) {
+-                return () -> false;
++                return ConditionEvaluator.ALWAYS_FALSE; // GoldLeaf - Wave 1 surface rule constant folding
+             }
+ 
+             if (this.willAlwaysMatch(possibleBiomes)) {
+-                return () -> true;
++                return ConditionEvaluator.ALWAYS_TRUE; // GoldLeaf - Wave 1 surface rule constant folding
+             }
+         }
+ 
+diff --git a/net/minecraft/world/level/levelgen/material/condition/ConditionEvaluator.java b/net/minecraft/world/level/levelgen/material/condition/ConditionEvaluator.java
+index 6be8973dfd6b4f24ccb2cab45063a6f108d8e938..035134bb897fb25794922e60bc89e621e2fe1d6f 100644
+--- a/net/minecraft/world/level/levelgen/material/condition/ConditionEvaluator.java
++++ b/net/minecraft/world/level/levelgen/material/condition/ConditionEvaluator.java
+@@ -2,5 +2,10 @@ package net.minecraft.world.level.levelgen.material.condition;
+ 
+ @FunctionalInterface
+ public interface ConditionEvaluator {
++    // GoldLeaf start - Wave 1 surface rule constant folding
++    ConditionEvaluator ALWAYS_TRUE = () -> true;
++    ConditionEvaluator ALWAYS_FALSE = () -> false;
++    // GoldLeaf end - Wave 1 surface rule constant folding
++
+     boolean test();
+ }
+diff --git a/net/minecraft/world/level/levelgen/material/condition/NotCondition.java b/net/minecraft/world/level/levelgen/material/condition/NotCondition.java
+index fe2510dd7c184767249b3a7ef7ae2da07ae59e57..5aac26a72f0831cc9bedd79868b52e2716186136 100644
+--- a/net/minecraft/world/level/levelgen/material/condition/NotCondition.java
++++ b/net/minecraft/world/level/levelgen/material/condition/NotCondition.java
+@@ -17,6 +17,14 @@ public record NotCondition(MaterialCondition target) implements MaterialConditio
+     @Override
+     public ConditionEvaluator compile(final MaterialRuleContext context) {
+         ConditionEvaluator target = this.target.compile(context);
++        // GoldLeaf start - Wave 1 surface rule constant folding
++        if (target == ConditionEvaluator.ALWAYS_TRUE) {
++            return ConditionEvaluator.ALWAYS_FALSE;
++        }
++        if (target == ConditionEvaluator.ALWAYS_FALSE) {
++            return ConditionEvaluator.ALWAYS_TRUE;
++        }
++        // GoldLeaf end - Wave 1 surface rule constant folding
+         return () -> !target.test();
+     }
+ }
+diff --git a/net/minecraft/world/level/levelgen/material/condition/YCondition.java b/net/minecraft/world/level/levelgen/material/condition/YCondition.java
+index 7cfb2efcec0355cb47b9e8a9160463f3d1096e3e..017fefba6c89c0df99a9da128a584f06d9962a36 100644
+--- a/net/minecraft/world/level/levelgen/material/condition/YCondition.java
++++ b/net/minecraft/world/level/levelgen/material/condition/YCondition.java
+@@ -23,12 +23,17 @@ public record YCondition(VerticalAnchor anchor, int surfaceDepthMultiplier, bool
+ 
+     @Override
+     public ConditionEvaluator compile(final MaterialRuleContext ruleContext) {
++        // GoldLeaf start - Wave 1 hoist anchor resolution
++        final int anchorY = ruleContext.resolveAnchorY(this.anchor);
++        final int surfaceDepthMultiplier = this.surfaceDepthMultiplier;
++        final boolean addStoneDepth = this.addStoneDepth;
+         return new MaterialRuleContext.LazyYCondition(ruleContext) {
+             @Override
+             protected boolean compute() {
+-                return this.context.blockY() + (YCondition.this.addStoneDepth ? this.context.stoneDepthAbove() : 0)
+-                    >= this.context.resolveAnchorY(YCondition.this.anchor) + this.context.surfaceDepth() * YCondition.this.surfaceDepthMultiplier;
++                return this.context.blockY() + (addStoneDepth ? this.context.stoneDepthAbove() : 0)
++                    >= anchorY + this.context.surfaceDepth() * surfaceDepthMultiplier;
+             }
+         };
++        // GoldLeaf end - Wave 1 hoist anchor resolution
+     }
+ }
+diff --git a/net/minecraft/world/level/levelgen/material/rule/ConditionRule.java b/net/minecraft/world/level/levelgen/material/rule/ConditionRule.java
+index c25262cb2db9c73cec35b1f74dd7cfb1b132599d..e81a8d0bdf1acda8adfec35c419a0e01b59a11e3 100644
+--- a/net/minecraft/world/level/levelgen/material/rule/ConditionRule.java
++++ b/net/minecraft/world/level/levelgen/material/rule/ConditionRule.java
+@@ -23,7 +23,18 @@ public record ConditionRule(MaterialCondition ifTrue, MaterialRule thenRun) impl
+     @Override
+     public RuleEvaluator compile(final MaterialRuleContext context) {
+         ConditionEvaluator ifTrue = this.ifTrue.compile(context);
++        // GoldLeaf start - Wave 1 surface rule constant folding
++        if (ifTrue == ConditionEvaluator.ALWAYS_FALSE) {
++            return RuleEvaluator.NEVER;
++        }
+         RuleEvaluator thenRun = this.thenRun.compile(context);
++        if (thenRun == RuleEvaluator.NEVER) {
++            return RuleEvaluator.NEVER;
++        }
++        if (ifTrue == ConditionEvaluator.ALWAYS_TRUE) {
++            return thenRun;
++        }
++        // GoldLeaf end - Wave 1 surface rule constant folding
+         return (blockX, blockY, blockZ) -> !ifTrue.test() ? null : thenRun.tryApply(blockX, blockY, blockZ);
+     }
+ }
+diff --git a/net/minecraft/world/level/levelgen/material/rule/RuleEvaluator.java b/net/minecraft/world/level/levelgen/material/rule/RuleEvaluator.java
+index 26ef504c95d06457891badee90d0387d74c1d0cc..9b534a305977ef737755e4ba562182c95b83d9ee 100644
+--- a/net/minecraft/world/level/levelgen/material/rule/RuleEvaluator.java
++++ b/net/minecraft/world/level/levelgen/material/rule/RuleEvaluator.java
+@@ -5,5 +5,9 @@ import org.jspecify.annotations.Nullable;
+ 
+ @FunctionalInterface
+ public interface RuleEvaluator {
++    // GoldLeaf start - Wave 1 surface rule constant folding
++    RuleEvaluator NEVER = (blockX, blockY, blockZ) -> null;
++    // GoldLeaf end - Wave 1 surface rule constant folding
++
+     @Nullable BlockState tryApply(int blockX, int blockY, int blockZ);
+ }
+diff --git a/net/minecraft/world/level/levelgen/material/rule/SequenceRule.java b/net/minecraft/world/level/levelgen/material/rule/SequenceRule.java
+index a9cee750a9df27ba1a773445cd105a76c731d03b..24d626084457d7a98fe5d6bdad0860c4438499ec 100644
+--- a/net/minecraft/world/level/levelgen/material/rule/SequenceRule.java
++++ b/net/minecraft/world/level/levelgen/material/rule/SequenceRule.java
+@@ -16,27 +16,61 @@ public record SequenceRule(List<MaterialRule> sequence) implements MaterialRule
+         return CODEC;
+     }
+ 
+-    @Override
+-    public RuleEvaluator compile(final MaterialRuleContext context) {
+-        if (this.sequence.size() == 1) {
+-            return this.sequence.getFirst().compile(context);
+-        }
+-
+-        RuleEvaluator[] sequence = new RuleEvaluator[this.sequence.size()];
++    // GoldLeaf start - Wave 1 flatten nested SequenceRules and prune NEVER branches
++    private static final class FlatSequenceEvaluator implements RuleEvaluator {
++        final RuleEvaluator[] sequence;
+ 
+-        for (int i = 0; i < sequence.length; i++) {
+-            sequence[i] = this.sequence.get(i).compile(context);
++        FlatSequenceEvaluator(final RuleEvaluator[] sequence) {
++            this.sequence = sequence;
+         }
+ 
+-        return (blockX, blockY, blockZ) -> {
+-            for (RuleEvaluator rule : sequence) {
++        @Override
++        public @org.jspecify.annotations.Nullable BlockState tryApply(final int blockX, final int blockY, final int blockZ) {
++            for (RuleEvaluator rule : this.sequence) {
+                 BlockState state = rule.tryApply(blockX, blockY, blockZ);
+                 if (state != null) {
+                     return state;
+                 }
+             }
+-
+             return null;
+-        };
++        }
++    }
++    // GoldLeaf end - Wave 1 flatten nested SequenceRules and prune NEVER branches
++
++    @Override
++    public RuleEvaluator compile(final MaterialRuleContext context) {
++        final int size = this.sequence.size();
++        if (size == 0) {
++            return RuleEvaluator.NEVER;
++        }
++        if (size == 1) {
++            return this.sequence.getFirst().compile(context);
++        }
++
++        // GoldLeaf start - Wave 1 flatten nested SequenceRules and prune NEVER branches
++        java.util.ArrayList<RuleEvaluator> flattened = new java.util.ArrayList<>(size);
++        for (int i = 0; i < size; i++) {
++            RuleEvaluator compiled = this.sequence.get(i).compile(context);
++            if (compiled == RuleEvaluator.NEVER) {
++                continue;
++            }
++            if (compiled instanceof FlatSequenceEvaluator nested) {
++                for (RuleEvaluator child : nested.sequence) {
++                    flattened.add(child);
++                }
++            } else {
++                flattened.add(compiled);
++            }
++        }
++
++        final int activeCount = flattened.size();
++        if (activeCount == 0) {
++            return RuleEvaluator.NEVER;
++        }
++        if (activeCount == 1) {
++            return flattened.get(0);
++        }
++        return new FlatSequenceEvaluator(flattened.toArray(new RuleEvaluator[0]));
++        // GoldLeaf end - Wave 1 flatten nested SequenceRules and prune NEVER branches
+     }
+ }
+diff --git a/net/minecraft/world/level/levelgen/synth/GradientNoise.java b/net/minecraft/world/level/levelgen/synth/GradientNoise.java
+index 6da4d95f6a5f6043aaea6d62c550cd9f991da9ec..ec8b75578d2681394c36e954e5e3e67173041cce 100644
+--- a/net/minecraft/world/level/levelgen/synth/GradientNoise.java
++++ b/net/minecraft/world/level/levelgen/synth/GradientNoise.java
+@@ -54,6 +54,20 @@ public abstract class GradientNoise implements Noise {
+         return this.perms[x & 0xFF] & 0xFF;
+     }
+ 
++    // GoldLeaf start - zero-reflection noise AST accessors (ADR-017)
++    public double paper$getOffsetX() {
++        return this.offsetX;
++    }
++
++    public double paper$getOffsetY() {
++        return this.offsetY;
++    }
++
++    public double paper$getOffsetZ() {
++        return this.offsetZ;
++    }
++    // GoldLeaf end - zero-reflection noise AST accessors (ADR-017)
++
+     protected GradientNoise.Gradient permuteToGrad(final int x) {
+         return GRADIENT[this.permute(x) & 15];
+     }
+diff --git a/net/minecraft/world/level/levelgen/synth/NoiseStack.java b/net/minecraft/world/level/levelgen/synth/NoiseStack.java
+index 3cb7094148b00eba7c46c3ec56653c02d179c6bb..8278a9d3800e6a1a9b0322a507a13c91cc6c7b13 100644
+--- a/net/minecraft/world/level/levelgen/synth/NoiseStack.java
++++ b/net/minecraft/world/level/levelgen/synth/NoiseStack.java
+@@ -69,6 +69,24 @@ public class NoiseStack implements Noise {
+         return this.layers[index].noise;
+     }
+ 
++    // GoldLeaf start - zero-reflection noise AST accessors (ADR-017)
++    public int paper$getLayerCount() {
++        return this.layers.length;
++    }
++
++    public Noise paper$getLayerNoise(final int index) {
++        return this.layers[index].noise;
++    }
++
++    public double paper$getLayerFrequency(final int index) {
++        return this.layers[index].frequency;
++    }
++
++    public float paper$getLayerAmplitude(final int index) {
++        return this.layers[index].amplitude;
++    }
++    // GoldLeaf end - zero-reflection noise AST accessors (ADR-017)
++
+     public static class Builder {
+         private final List<NoiseStack.Layer> layers = new ArrayList<>();
+ 
+diff --git a/net/minecraft/world/level/levelgen/synth/PerlinNoise.java b/net/minecraft/world/level/levelgen/synth/PerlinNoise.java
+index 12be06b795343d0f61cd908dd3f62fab70592a81..d685b05cdc9b071493cec434cc547500261017d0 100644
+--- a/net/minecraft/world/level/levelgen/synth/PerlinNoise.java
++++ b/net/minecraft/world/level/levelgen/synth/PerlinNoise.java
+@@ -162,164 +162,56 @@ public class PerlinNoise extends GradientNoise implements ca.spottedleaf.moonris
+             vanillaNoise = buffer.values.clone();
+             System.arraycopy(cpy, 0, buffer.values, 0, cpy.length);
+         }
+-        float d000xz = 0.0F;
+-        float d100xz = 0.0F;
+-        float d010xz = 0.0F;
+-        float d110xz = 0.0F;
+-        float d001xz = 0.0F;
+-        float d101xz = 0.0F;
+-        float d011xz = 0.0F;
+-        float d111xz = 0.0F;
+-        float g000y = 0.0F;
+-        float g100y = 0.0F;
+-        float g010y = 0.0F;
+-        float g110y = 0.0F;
+-        float g001y = 0.0F;
+-        float g101y = 0.0F;
+-        float g011y = 0.0F;
+-        float g111y = 0.0F;
+-
+         final int sX = volume.sizeX();
+         final int sY = volume.sizeY();
+         final int sZ = volume.sizeZ();
+ 
+-        final NoiseGradients.CoordCache[] cacheX = NoiseGradients.getCoordCache(NoiseGradients.COORD_CACHE_X, sX);
+-        final NoiseGradients.CoordCache[] cacheY = NoiseGradients.getCoordCache(NoiseGradients.COORD_CACHE_Y, sY);
+-        final NoiseGradients.CoordCache[] cacheZ = NoiseGradients.getCoordCache(NoiseGradients.COORD_CACHE_Z, sZ);
+-
+-        // only compute coordinate ONCE
+-        // note: we do not need the floating point value of the coordinate, all we need is floor, alpha, and relative
++        // GoldLeaf start - Wave 2 flat-array run-length Perlin kernel with hoisted XZ lerp2
++        final io.papermc.paper.spi.DensityVectorKernels.NoiseVolumeScratch scratch =
++            io.papermc.paper.spi.DensityVectorKernels.acquireScratch(sX, sY, sZ);
++        final int[] floorX = scratch.floorX;
++        final float[] alphaX = scratch.alphaX;
++        final float[] relX = scratch.relX;
++        final int[] floorY = scratch.floorY;
++        final float[] alphaY = scratch.alphaY;
++        final float[] relY = scratch.relY;
++        final int[] floorZ = scratch.floorZ;
++        final float[] alphaZ = scratch.alphaZ;
++        final float[] relZ = scratch.relZ;
+ 
+         double xv = (double)volume.minBlockX(), xi = (double)volume.stepBlockX();
+         for (int x = 0; x < sX; ++x, xv += xi) {
+             final double val = wrap(xv * xzScale) + this.offsetX;
+             final double floorD = Math.floor(val);
+-            final int floor = (int)(long)floorD;
+             final float relative = (float)(val - floorD);
+-            final float alpha = Mth.smoothstep(relative);
+-
+-            final NoiseGradients.CoordCache cx = cacheX[x];
+-
+-            cx.floor = floor;
+-            cx.alpha = alpha;
+-            cx.relative = relative;
++            floorX[x] = (int)(long)floorD;
++            alphaX[x] = Mth.smoothstep(relative);
++            relX[x] = relative;
+         }
+         double yv = (double)volume.minBlockY(), yi = (double)volume.stepBlockY();
+         for (int y = 0; y < sY; ++y, yv += yi) {
+             final double val = wrap(yv * yScale) + this.offsetY;
+             final double floorD = Math.floor(val);
+-            final int floor = (int)(long)floorD;
+             final float relative = (float)(val - floorD);
+-            final float alpha = Mth.smoothstep(relative);
+-
+-            final NoiseGradients.CoordCache cy = cacheY[y];
+-
+-            cy.floor = floor;
+-            cy.alpha = alpha;
+-            cy.relative = relative;
++            floorY[y] = (int)(long)floorD;
++            alphaY[y] = Mth.smoothstep(relative);
++            relY[y] = relative;
+         }
+         double zv = (double)volume.minBlockZ(), zi = (double)volume.stepBlockZ();
+         for (int z = 0; z < sZ; ++z, zv += zi) {
+             final double val = wrap(zv * xzScale) + this.offsetZ;
+             final double floorD = Math.floor(val);
+-            final int floor = (int)(long)floorD;
+             final float relative = (float)(val - floorD);
+-            final float alpha = Mth.smoothstep(relative);
+-
+-            final NoiseGradients.CoordCache cz = cacheZ[z];
+-
+-            cz.floor = floor;
+-            cz.alpha = alpha;
+-            cz.relative = relative;
++            floorZ[z] = (int)(long)floorD;
++            alphaZ[z] = Mth.smoothstep(relative);
++            relZ[z] = relative;
+         }
+ 
+-        // index = indexY + indexX*(sizeY) + indexZ*(sizeY*sizeX)
+-
+-        final char[] p = this.pAdj;
+-
+-        // re-order X to be primary so we never repeat the p table lookup
+-        // note: this means we can no longer store index
+-        for (int indexX = 0; indexX < sX; ++indexX) {
+-            final NoiseGradients.CoordCache cx = cacheX[indexX];
+-            final int floorX = cx.floor;
+-            final float alphaX = cx.alpha;
+-            final float relativeX = cx.relative;
+-            // note: since the p table is arithmetic mod PERM_SIZE, we do not need to mask out the upper
+-            final int x0 = (int)p[floorX & PERM_MASK];
+-            final int x1 = x0 >>> PERM_SHIFT;
+-
+-            for (int indexZ = 0; indexZ < sZ; ++indexZ) {
+-                final NoiseGradients.CoordCache cz = cacheZ[indexZ];
+-                final int floorZ = cz.floor;
+-                final float alphaZ = cz.alpha;
+-                final float relativeZ = cz.relative;
+-                int lastFloorY = Integer.MIN_VALUE;
+-
+-                int index = sY*(indexX + indexZ*sX);
+-                for (int indexY = 0; indexY < sY; ++indexY) {
+-                    final NoiseGradients.CoordCache cy = cacheY[indexY];
+-                    final int floorY = cy.floor;
+-                    final float alphaY = cy.alpha;
+-                    final float relativeY = cy.relative;
+-                    if (lastFloorY != floorY) {
+-                        lastFloorY = floorY;
+-                        final int xy00 = (int)p[(x0 + floorY) & PERM_MASK];
+-                        final int xy01 = xy00 >>> PERM_SHIFT;
+-
+-                        final int z000 = (int)p[(xy00 + floorZ) & PERM_MASK];
+-                        final int z010 = (int)p[(xy01 + floorZ) & PERM_MASK];
+-                        final int g000 = z000 & 15;
+-                        final int g001 = (z000 >>> PERM_SHIFT) & 15;
+-                        d000xz = NoiseGradients.dotXz(g000, relativeX, relativeZ);
+-                        g000y = NoiseGradients.gradY(g000);
+-                        d001xz = NoiseGradients.dotXz(g001, relativeX, relativeZ - 1.0F);
+-                        g001y = NoiseGradients.gradY(g001);
+-
+-                        final int g010 = z010 & 15;
+-                        final int g011 = (z010 >>> PERM_SHIFT) & 15;
+-                        d010xz = NoiseGradients.dotXz(g010, relativeX, relativeZ);
+-                        g010y = NoiseGradients.gradY(g010);
+-                        d011xz = NoiseGradients.dotXz(g011, relativeX, relativeZ - 1.0F);
+-                        g011y = NoiseGradients.gradY(g011);
+-
+-                        final int xy10 = (int)p[(x1 + floorY) & PERM_MASK];
+-                        final int xy11 = xy10 >>> PERM_SHIFT;
+-
+-                        final int z100 = (int)p[(xy10 + floorZ) & PERM_MASK];
+-                        final int z110 = (int)p[(xy11 + floorZ) & PERM_MASK];
+-                        final int g100 = z100 & 15;
+-                        final int g101 = (z100 >>> PERM_SHIFT) & 15;
+-                        d100xz = NoiseGradients.dotXz(g100, relativeX - 1.0F, relativeZ);
+-                        g100y = NoiseGradients.gradY(g100);
+-                        d101xz = NoiseGradients.dotXz(g101, relativeX - 1.0F, relativeZ - 1.0F);
+-                        g101y = NoiseGradients.gradY(g101);
+-
+-                        final int g110 = z110 & 15;
+-                        final int g111 = (z110 >>> PERM_SHIFT) & 15;
+-                        d110xz = NoiseGradients.dotXz(g110, relativeX - 1.0F, relativeZ);
+-                        g110y = NoiseGradients.gradY(g110);
+-                        d111xz = NoiseGradients.dotXz(g111, relativeX - 1.0F, relativeZ - 1.0F);
+-                        g111y = NoiseGradients.gradY(g111);
+-                    }
+-
+-                    if (USE_FMA) {
+-                        buffer.values[index++] += amplitude * Mth.lerp3(
+-                            alphaX, alphaY, alphaZ,
+-                            Math.fma(g000y, relativeY, d000xz), Math.fma(g100y, relativeY, d100xz), Math.fma(g010y, (relativeY - 1.0F), d010xz),
+-                            Math.fma(g110y, (relativeY - 1.0F), d110xz), Math.fma(g001y, relativeY, d001xz), Math.fma(g101y, relativeY, d101xz),
+-                            Math.fma(g011y, (relativeY - 1.0F), d011xz), Math.fma(g111y, (relativeY - 1.0F), d111xz)
+-                        );
+-                    } else {
+-                        buffer.values[index++] += amplitude * Mth.lerp3(
+-                            alphaX, alphaY, alphaZ,
+-                            d000xz + g000y * relativeY, d100xz + g100y * relativeY, d010xz + g010y * (relativeY - 1.0F),
+-                            d110xz + g110y * (relativeY - 1.0F), d001xz + g001y * relativeY, d101xz + g101y * relativeY,
+-                            d011xz + g011y * (relativeY - 1.0F), d111xz + g111y * (relativeY - 1.0F)
+-                        );
+-                    }
+-                }
+-            }
+-        }
++        final int yRunCount = scratch.buildYRuns(sY);
++        io.papermc.paper.spi.DensityVectorKernels.addPerlinToVolume(
++            this.pAdj, buffer.values, sX, sY, sZ, scratch, yRunCount, amplitude
++        );
++        // GoldLeaf end - Wave 2 flat-array run-length Perlin kernel with hoisted XZ lerp2
+ 
+         if (DEBUG_NOISE) {
+             if (!java.util.Arrays.equals(vanillaNoise, buffer.values)) {
+diff --git a/net/minecraft/world/level/levelgen/synth/SmearedPerlinNoise.java b/net/minecraft/world/level/levelgen/synth/SmearedPerlinNoise.java
+index e8eafc7063c7563b0e97ec508dd5401efa3d2b31..88c84faaa2dcbc14e7331c3dcb954f1730ab1070 100644
+--- a/net/minecraft/world/level/levelgen/synth/SmearedPerlinNoise.java
++++ b/net/minecraft/world/level/levelgen/synth/SmearedPerlinNoise.java
+@@ -24,6 +24,12 @@ public class SmearedPerlinNoise extends PerlinNoise {
+         this.fudgeYScale = fudgeYScale;
+     }
+ 
++    // GoldLeaf start - zero-reflection AST lowerer accessor (ADR-017)
++    public double paper$getFudgeYScale() {
++        return this.fudgeYScale;
++    }
++    // GoldLeaf end - zero-reflection AST lowerer accessor (ADR-017)
++
+     public static Interval range(final double fudgeYScale) {
+         return Interval.ofSymmetric((float)(Math.abs(fudgeYScale) + 2.0));
+     }
+@@ -71,167 +77,57 @@ public class SmearedPerlinNoise extends PerlinNoise {
+             vanillaNoise = buffer.values.clone();
+             System.arraycopy(cpy, 0, buffer.values, 0, cpy.length);
+         }
+-        float d000xz = 0.0F;
+-        float d100xz = 0.0F;
+-        float d010xz = 0.0F;
+-        float d110xz = 0.0F;
+-        float d001xz = 0.0F;
+-        float d101xz = 0.0F;
+-        float d011xz = 0.0F;
+-        float d111xz = 0.0F;
+-        float g000y = 0.0F;
+-        float g100y = 0.0F;
+-        float g010y = 0.0F;
+-        float g110y = 0.0F;
+-        float g001y = 0.0F;
+-        float g101y = 0.0F;
+-        float g011y = 0.0F;
+-        float g111y = 0.0F;
+-
+         final int sX = volume.sizeX();
+         final int sY = volume.sizeY();
+         final int sZ = volume.sizeZ();
+ 
+-        final NoiseGradients.CoordCache[] cacheX = NoiseGradients.getCoordCache(NoiseGradients.COORD_CACHE_X, sX);
+-        final NoiseGradients.CoordCache[] cacheY = NoiseGradients.getCoordCache(NoiseGradients.COORD_CACHE_Y, sY);
+-        final NoiseGradients.CoordCache[] cacheZ = NoiseGradients.getCoordCache(NoiseGradients.COORD_CACHE_Z, sZ);
+-
+-        // only compute coordinate ONCE
+-        // note: we do not need the floating point value of the coordinate, all we need is floor, alpha, and relative
+-        //       this is the case even for smeared Y values
++        // GoldLeaf start - Wave 2 flat-array run-length SmearedPerlin kernel with hoisted XZ lerp2
++        final io.papermc.paper.spi.DensityVectorKernels.NoiseVolumeScratch scratch =
++            io.papermc.paper.spi.DensityVectorKernels.acquireScratch(sX, sY, sZ);
++        final int[] floorX = scratch.floorX;
++        final float[] alphaX = scratch.alphaX;
++        final float[] relX = scratch.relX;
++        final int[] floorY = scratch.floorY;
++        final float[] alphaY = scratch.alphaY;
++        final float[] relY = scratch.relY;
++        final int[] floorZ = scratch.floorZ;
++        final float[] alphaZ = scratch.alphaZ;
++        final float[] relZ = scratch.relZ;
+ 
+         double xv = (double)volume.minBlockX(), xi = (double)volume.stepBlockX();
+         for (int x = 0; x < sX; ++x, xv += xi) {
+             final double val = wrap(xv * xzScale) + this.offsetX;
+             final double floorD = Math.floor(val);
+-            final int floor = (int)(long)floorD;
+             final float relative = (float)(val - floorD);
+-            final float alpha = Mth.smoothstep(relative);
+-
+-            final NoiseGradients.CoordCache cx = cacheX[x];
+-
+-            cx.floor = floor;
+-            cx.alpha = alpha;
+-            cx.relative = relative;
++            floorX[x] = (int)(long)floorD;
++            alphaX[x] = Mth.smoothstep(relative);
++            relX[x] = relative;
+         }
+         double yv = (double)volume.minBlockY(), yi = (double)volume.stepBlockY();
+         for (int y = 0; y < sY; ++y, yv += yi) {
+             final double original = yv * yScale;
+             final double val = wrap(original) + this.offsetY;
+             final double floorD = Math.floor(val);
+-            final int floor = (int)(long)floorD;
+             final double relative = val - floorD;
+-            final float fudgedRelative = (float)(relative - this.computeFudgeY(original, relative));
+-            final float alpha = Mth.smoothstep((float)relative);
+-
+-            final NoiseGradients.CoordCache cy = cacheY[y];
+-
+-            cy.floor = floor;
+-            cy.alpha = alpha;
+-            cy.relative = fudgedRelative;
++            floorY[y] = (int)(long)floorD;
++            alphaY[y] = Mth.smoothstep((float)relative);
++            relY[y] = (float)(relative - this.computeFudgeY(original, relative));
+         }
+         double zv = (double)volume.minBlockZ(), zi = (double)volume.stepBlockZ();
+         for (int z = 0; z < sZ; ++z, zv += zi) {
+             final double val = wrap(zv * xzScale) + this.offsetZ;
+             final double floorD = Math.floor(val);
+-            final int floor = (int)(long)floorD;
+             final float relative = (float)(val - floorD);
+-            final float alpha = Mth.smoothstep(relative);
+-
+-            final NoiseGradients.CoordCache cz = cacheZ[z];
+-
+-            cz.floor = floor;
+-            cz.alpha = alpha;
+-            cz.relative = relative;
++            floorZ[z] = (int)(long)floorD;
++            alphaZ[z] = Mth.smoothstep(relative);
++            relZ[z] = relative;
+         }
+ 
+-        // index = indexY + indexX*(sizeY) + indexZ*(sizeY*sizeX)
+-
+-        final char[] p = this.pAdj;
+-
+-        // re-order X to be primary so we never repeat the p table lookup
+-        // note: this means we can no longer store index
+-        for (int indexX = 0; indexX < sX; ++indexX) {
+-            final NoiseGradients.CoordCache cx = cacheX[indexX];
+-            final int floorX = cx.floor;
+-            final float alphaX = cx.alpha;
+-            final float relativeX = cx.relative;
+-            // note: since the p table is arithmetic mod PERM_SIZE, we do not need to mask out the upper
+-            final int x0 = (int)p[floorX & PERM_MASK];
+-            final int x1 = x0 >>> PERM_SHIFT;
+-
+-            for (int indexZ = 0; indexZ < sZ; ++indexZ) {
+-                final NoiseGradients.CoordCache cz = cacheZ[indexZ];
+-                final int floorZ = cz.floor;
+-                final float alphaZ = cz.alpha;
+-                final float relativeZ = cz.relative;
+-                int lastFloorY = Integer.MIN_VALUE;
+-
+-                int index = sY*(indexX + indexZ*sX);
+-                for (int indexY = 0; indexY < sY; ++indexY) {
+-                    final NoiseGradients.CoordCache cy = cacheY[indexY];
+-                    final int floorY = cy.floor;
+-                    final float alphaY = cy.alpha;
+-                    final float relativeY = cy.relative;
+-                    if (lastFloorY != floorY) {
+-                        lastFloorY = floorY;
+-                        final int xy00 = (int)p[(x0 + floorY) & PERM_MASK];
+-                        final int xy01 = xy00 >>> PERM_SHIFT;
+-
+-                        final int z000 = (int)p[(xy00 + floorZ) & PERM_MASK];
+-                        final int z010 = (int)p[(xy01 + floorZ) & PERM_MASK];
+-                        final int g000 = z000 & 15;
+-                        final int g001 = (z000 >>> PERM_SHIFT) & 15;
+-                        d000xz = NoiseGradients.dotXz(g000, relativeX, relativeZ);
+-                        g000y = NoiseGradients.gradY(g000);
+-                        d001xz = NoiseGradients.dotXz(g001, relativeX, relativeZ - 1.0F);
+-                        g001y = NoiseGradients.gradY(g001);
+-
+-                        final int g010 = z010 & 15;
+-                        final int g011 = (z010 >>> PERM_SHIFT) & 15;
+-                        d010xz = NoiseGradients.dotXz(g010, relativeX, relativeZ);
+-                        g010y = NoiseGradients.gradY(g010);
+-                        d011xz = NoiseGradients.dotXz(g011, relativeX, relativeZ - 1.0F);
+-                        g011y = NoiseGradients.gradY(g011);
+-
+-                        final int xy10 = (int)p[(x1 + floorY) & PERM_MASK];
+-                        final int xy11 = xy10 >>> PERM_SHIFT;
+-
+-                        final int z100 = (int)p[(xy10 + floorZ) & PERM_MASK];
+-                        final int z110 = (int)p[(xy11 + floorZ) & PERM_MASK];
+-                        final int g100 = z100 & 15;
+-                        final int g101 = (z100 >>> PERM_SHIFT) & 15;
+-                        d100xz = NoiseGradients.dotXz(g100, relativeX - 1.0F, relativeZ);
+-                        g100y = NoiseGradients.gradY(g100);
+-                        d101xz = NoiseGradients.dotXz(g101, relativeX - 1.0F, relativeZ - 1.0F);
+-                        g101y = NoiseGradients.gradY(g101);
+-
+-                        final int g110 = z110 & 15;
+-                        final int g111 = (z110 >>> PERM_SHIFT) & 15;
+-                        d110xz = NoiseGradients.dotXz(g110, relativeX - 1.0F, relativeZ);
+-                        g110y = NoiseGradients.gradY(g110);
+-                        d111xz = NoiseGradients.dotXz(g111, relativeX - 1.0F, relativeZ - 1.0F);
+-                        g111y = NoiseGradients.gradY(g111);
+-                    }
+-
+-                    if (USE_FMA) {
+-                        buffer.values[index++] += amplitude * Mth.lerp3(
+-                            alphaX, alphaY, alphaZ,
+-                            Math.fma(g000y, relativeY, d000xz), Math.fma(g100y, relativeY, d100xz), Math.fma(g010y, (relativeY - 1.0F), d010xz),
+-                            Math.fma(g110y, (relativeY - 1.0F), d110xz), Math.fma(g001y, relativeY, d001xz), Math.fma(g101y, relativeY, d101xz),
+-                            Math.fma(g011y, (relativeY - 1.0F), d011xz), Math.fma(g111y, (relativeY - 1.0F), d111xz)
+-                        );
+-                    } else {
+-                        buffer.values[index++] += amplitude * Mth.lerp3(
+-                            alphaX, alphaY, alphaZ,
+-                            d000xz + g000y * relativeY, d100xz + g100y * relativeY, d010xz + g010y * (relativeY - 1.0F),
+-                            d110xz + g110y * (relativeY - 1.0F), d001xz + g001y * relativeY, d101xz + g101y * relativeY,
+-                            d011xz + g011y * (relativeY - 1.0F), d111xz + g111y * (relativeY - 1.0F)
+-                        );
+-                    }
+-                }
+-            }
+-        }
++        final int yRunCount = scratch.buildYRuns(sY);
++        io.papermc.paper.spi.DensityVectorKernels.addPerlinToVolume(
++            this.pAdj, buffer.values, sX, sY, sZ, scratch, yRunCount, amplitude
++        );
++        // GoldLeaf end - Wave 2 flat-array run-length SmearedPerlin kernel with hoisted XZ lerp2
+ 
+         if (DEBUG_NOISE) {
+             if (!java.util.Arrays.equals(vanillaNoise, buffer.values)) {

@@ -1,6 +1,6 @@
 # goldleaf-ADR-005 — Native `.lca` Format (`LCA-ICD-3.0`) Adoption Across Disk, Memory, and Network
 
-**Status:** Proposed
+**Status:** In Progress
 **Date:** 2026-11-21
 
 ## Context

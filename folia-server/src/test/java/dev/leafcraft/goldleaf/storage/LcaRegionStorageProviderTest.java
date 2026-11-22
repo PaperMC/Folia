@@ -146,5 +146,35 @@ class LcaRegionStorageProviderTest {
               max-open-regions: 0
             """);
         assertThrows(ConfigurateException.class, () -> GoldLeafConfig.load(invalidOpenLimit));
+
+        final Path invalidMode = tempDir.resolve("invalid-mode.yml");
+        Files.writeString(invalidMode, """
+            storage:
+              format: lca
+              lca-mode: turbo-invalid
+            """);
+        assertThrows(ConfigurateException.class, () -> GoldLeafConfig.load(invalidMode));
+    }
+
+    @Test
+    void nonDestructiveMcaAutoDetectionPreservesExistingMcaWorlds(@TempDir final Path worldDir) throws Exception {
+        final GoldLeafConfig.Storage cfg = new GoldLeafConfig.Storage();
+        cfg.format = "lca";
+        cfg.autoMigrateMca = false;
+
+        // Fresh empty folder -> uses .lca
+        final Path freshRegion = worldDir.resolve("fresh_region");
+        Files.createDirectories(freshRegion);
+        assertTrue(RegionStorageProvider.shouldUseLcaForFolder(freshRegion, cfg));
+
+        // Existing vanilla .mca folder with no .lca -> preserves .mca non-destructively
+        final Path legacyRegion = worldDir.resolve("legacy_region");
+        Files.createDirectories(legacyRegion);
+        Files.write(legacyRegion.resolve("r.0.0.mca"), new byte[]{0});
+        assertFalse(RegionStorageProvider.shouldUseLcaForFolder(legacyRegion, cfg));
+
+        // Enabling auto-migrate-mca switches legacy folder to .lca provider
+        cfg.autoMigrateMca = true;
+        assertTrue(RegionStorageProvider.shouldUseLcaForFolder(legacyRegion, cfg));
     }
 }

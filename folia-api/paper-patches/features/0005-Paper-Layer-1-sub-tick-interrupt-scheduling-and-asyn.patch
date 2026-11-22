@@ -1,0 +1,243 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:54:20 -0600
+Subject: [PATCH] Paper Layer 1 sub-tick interrupt scheduling and async read
+ router API
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/AsyncReadRouter.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/AsyncReadRouter.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3cc3a5a486011c84638e2aee013f52a88c88e3a5
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/AsyncReadRouter.java
+@@ -0,0 +1,108 @@
++package io.papermc.paper.threadedregions.scheduler;
++
++import org.jetbrains.annotations.NotNull;
++
++import java.util.Objects;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.Executor;
++import java.util.function.Consumer;
++import java.util.function.Supplier;
++
++/**
++ * Generic async-first read/dispatch router SPI.
++ *
++ * <p>Decouples read-heavy subsystems and plugins from the 20 TPS tick cadence by executing
++ * read workloads off-tick and dispatching state-mutating continuations onto the target region or
++ * global immediate executor. Ships with a default fallback ({@link DefaultAsyncReadRouter}) and
++ * allows server implementations or extensions to register latency-tiered routers.</p>
++ */
++public interface AsyncReadRouter {
++
++    /**
++     * Submits a read-only supplier to run asynchronously on {@code asyncExecutor}, failing closed
++     * by propagating any exception onto the returned future.
++     *
++     * @param asyncReader   The read-only supplier to execute off-tick.
++     * @param asyncExecutor The async executor to run the read on.
++     * @param <T>           The read result type.
++     * @return A future completing with the read result or failing with any thrown exception.
++     */
++    <T> @NotNull CompletableFuture<T> submitAsyncRead(
++        @NotNull Supplier<T> asyncReader,
++        @NotNull Executor asyncExecutor
++    );
++
++    /**
++     * Executes {@code asyncReader} on {@code asyncExecutor}, then dispatches {@code regionConsumer}
++     * onto {@code targetRegionExecutor} and completes the returned future with the read value once
++     * the region continuation finishes.
++     *
++     * @param asyncReader          The read-only supplier to execute off-tick.
++     * @param asyncExecutor        The async executor to run the read on.
++     * @param regionConsumer       The continuation to run on {@code targetRegionExecutor}.
++     * @param targetRegionExecutor The target region/entity/global executor.
++     * @param <T>                  The read result type.
++     * @return A future completing with the read value once {@code regionConsumer} completes.
++     */
++    <T> @NotNull CompletableFuture<T> readAndDispatch(
++        @NotNull Supplier<T> asyncReader,
++        @NotNull Executor asyncExecutor,
++        @NotNull Consumer<T> regionConsumer,
++        @NotNull Executor targetRegionExecutor
++    );
++
++    static @NotNull AsyncReadRouter get() {
++        return Holder.current;
++    }
++
++    static void register(final @NotNull AsyncReadRouter router) {
++        Holder.current = Objects.requireNonNull(router, "router");
++    }
++
++    static void resetDefault() {
++        Holder.current = DefaultAsyncReadRouter.INSTANCE;
++    }
++
++    final class Holder {
++        private static volatile AsyncReadRouter current = DefaultAsyncReadRouter.INSTANCE;
++
++        private Holder() {
++        }
++    }
++
++    /**
++     * Default implementation using standard {@link CompletableFuture} stages.
++     */
++    final class DefaultAsyncReadRouter implements AsyncReadRouter {
++
++        public static final DefaultAsyncReadRouter INSTANCE = new DefaultAsyncReadRouter();
++
++        private DefaultAsyncReadRouter() {
++        }
++
++        @Override
++        public <T> @NotNull CompletableFuture<T> submitAsyncRead(
++            final @NotNull Supplier<T> asyncReader,
++            final @NotNull Executor asyncExecutor
++        ) {
++            Objects.requireNonNull(asyncReader, "asyncReader");
++            Objects.requireNonNull(asyncExecutor, "asyncExecutor");
++            return CompletableFuture.supplyAsync(asyncReader, asyncExecutor);
++        }
++
++        @Override
++        public <T> @NotNull CompletableFuture<T> readAndDispatch(
++            final @NotNull Supplier<T> asyncReader,
++            final @NotNull Executor asyncExecutor,
++            final @NotNull Consumer<T> regionConsumer,
++            final @NotNull Executor targetRegionExecutor
++        ) {
++            Objects.requireNonNull(regionConsumer, "regionConsumer");
++            Objects.requireNonNull(targetRegionExecutor, "targetRegionExecutor");
++            return this.submitAsyncRead(asyncReader, asyncExecutor).thenApplyAsync(value -> {
++                regionConsumer.accept(value);
++                return value;
++            }, targetRegionExecutor);
++        }
++    }
++}
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
+index 99e9e20ae01f9b4b8cde585d29c57e27c53c996e..4c43c95996a70cc54e46c484791e54df0af369d4 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/EntityScheduler.java
+@@ -45,6 +45,23 @@ public interface EntityScheduler {
+      */
+     boolean execute(@NotNull Plugin plugin, @NotNull Runnable run, @Nullable Runnable retired, long delay);
+ 
++    /**
++     * Schedules a task to execute as soon as possible on the region thread owning this entity,
++     * waking the region between ticks when idle.
++     *
++     * <p>Falls back to {@link #execute(Plugin, Runnable, Runnable, long)} with a 1-tick delay
++     * on implementations that do not support sub-tick intermediate wakeups.</p>
++     *
++     * @param plugin  The plugin that owns the task.
++     * @param run     The callback to run on the owning region thread, may not be null.
++     * @param retired Retire callback to run if the entity is retired before {@code run} executes, may be null.
++     * @return {@code true} if scheduled (either {@code run} or {@code retired} will execute, never both),
++     *         or {@code false} if the scheduler is already retired.
++     */
++    default boolean executeImmediate(@NotNull Plugin plugin, @NotNull Runnable run, @Nullable Runnable retired) {
++        return this.execute(plugin, run, retired, 1L);
++    }
++
+     /**
+      * Schedules a task to execute on the next tick. If the task failed to schedule because the scheduler is retired (entity
+      * removed), then returns {@code null}. Otherwise, either the task callback will be invoked after the specified delay,
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
+index 57455aca80ecc458b96b44c086cea94ddcecae47..73f1ddb3b5608bdf7d6cc7136fce1ee63bc9f54d 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/GlobalRegionScheduler.java
+@@ -21,6 +21,20 @@ public interface GlobalRegionScheduler {
+      */
+     void execute(@NotNull Plugin plugin, @NotNull Runnable run);
+ 
++    /**
++     * Schedules a task to execute as soon as possible on the global region thread, waking the
++     * global region between ticks when idle.
++     *
++     * <p>Falls back to {@link #execute(Plugin, Runnable)} on implementations that do not support
++     * sub-tick intermediate wakeups.</p>
++     *
++     * @param plugin The plugin that owns the task.
++     * @param run    The task to execute.
++     */
++    default void executeImmediate(@NotNull Plugin plugin, @NotNull Runnable run) {
++        this.execute(plugin, run);
++    }
++
+     /**
+      * Schedules a task to be executed on the global region on the next tick.
+      * @param plugin The plugin that owns the task
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
+index 7557e170f84cde7292869fbd92b44b0e6eb43b4f..51dc8dbd325596a118ecc998a8c813b5d8b5670f 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/RegionScheduler.java
+@@ -6,7 +6,9 @@ import org.bukkit.entity.Entity;
+ import org.bukkit.plugin.Plugin;
+ import org.jetbrains.annotations.NotNull;
+ 
++import java.util.concurrent.CompletableFuture;
+ import java.util.function.Consumer;
++import java.util.function.Supplier;
+ 
+ /**
+  * The region task scheduler can be used to schedule tasks by location to be executed on the region which owns the location.
+@@ -41,6 +43,53 @@ public interface RegionScheduler {
+         this.execute(plugin, location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4, run);
+     }
+ 
++    /**
++     * Schedules a strictly read-only task to execute at the next clean mid-tick phase boundary on the
++     * region owning the chunk (under a bounded micro-budget), falling back to {@link #execute} when
++     * the region is not currently active or when mid-tick drains are unsupported.
++     *
++     * <p>Tasks submitted here <strong>must not</strong> mutate world, block, or entity state.</p>
++     *
++     * @param plugin The plugin that owns the task
++     * @param world  The world of the region that owns the task
++     * @param chunkX The chunk X coordinate of the region that owns the task
++     * @param chunkZ The chunk Z coordinate of the region that owns the task
++     * @param run    The strictly read-only task to execute
++     */
++    default void executeReadOnlyMidTick(@NotNull Plugin plugin, @NotNull World world, int chunkX, int chunkZ, @NotNull Runnable run) {
++        this.execute(plugin, world, chunkX, chunkZ, run);
++    }
++
++    /**
++     * Schedules a strictly read-only query to execute at the next clean mid-tick phase boundary on the
++     * region owning the chunk, returning a future completed with the query result.
++     *
++     * @param plugin The plugin that owns the task
++     * @param world  The world of the region that owns the task
++     * @param chunkX The chunk X coordinate of the region that owns the task
++     * @param chunkZ The chunk Z coordinate of the region that owns the task
++     * @param query  The strictly read-only query to execute
++     * @param <T>    The query result type
++     * @return A future completed with the query result or failed if the query throws
++     */
++    default <T> @NotNull CompletableFuture<T> submitReadOnlyMidTick(
++        @NotNull Plugin plugin,
++        @NotNull World world,
++        int chunkX,
++        int chunkZ,
++        @NotNull Supplier<T> query
++    ) {
++        final CompletableFuture<T> future = new CompletableFuture<>();
++        this.executeReadOnlyMidTick(plugin, world, chunkX, chunkZ, () -> {
++            try {
++                future.complete(query.get());
++            } catch (final Throwable t) {
++                future.completeExceptionally(t);
++            }
++        });
++        return future;
++    }
++
+     /**
+      * Schedules a task to be executed on the region which owns the location on the next tick.
+      *

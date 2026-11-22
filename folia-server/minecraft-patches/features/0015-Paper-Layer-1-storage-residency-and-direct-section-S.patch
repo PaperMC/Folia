@@ -1,0 +1,656 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:29:28 -0600
+Subject: [PATCH] Paper Layer 1 storage residency and direct section SPI seams
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/net/minecraft/world/level/chunk/LevelChunk.java b/net/minecraft/world/level/chunk/LevelChunk.java
+index b5508c0488ba395ad9eb03baeee01922e2ec3364..fd869e4a0c649fe20f243429ecdf9dd6f10b6b3f 100644
+--- a/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -108,6 +108,53 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+     // Paper start
+     boolean loadedTicketLevel;
+     // Paper end
++    // GoldLeaf start - chunk telemetry & execution mask SPI (ADR-006)
++    private int paper$executionMask = io.papermc.paper.spi.PaperTelemetrySpi.MASK_NONE;
++    private long paper$maskEpoch = 0L;
++    private byte paper$exemptionFlags = 0;
++    private io.papermc.paper.spi.@Nullable ChunkActivityCounters paper$activityCounters;
++
++    public long paper$getMaskEpoch() {
++        return this.paper$maskEpoch;
++    }
++
++    public void paper$setMaskEpoch(final long epoch) {
++        this.paper$maskEpoch = epoch;
++    }
++
++    public byte paper$resolveExemptionFlags() {
++        return this.paper$exemptionFlags;
++    }
++
++    public int paper$getExecutionMask() {
++        return this.paper$executionMask;
++    }
++
++    public void paper$setExecutionMask(final int mask) {
++        this.paper$executionMask = mask;
++    }
++
++    public byte paper$getExemptionFlags() {
++        return this.paper$exemptionFlags;
++    }
++
++    public void paper$setExemptionFlags(final byte flags) {
++        this.paper$exemptionFlags = flags;
++    }
++
++    public io.papermc.paper.spi.@Nullable ChunkActivityCounters paper$getActivityCountersIfPresent() {
++        return this.paper$activityCounters;
++    }
++
++    public io.papermc.paper.spi.ChunkActivityCounters paper$getOrCreateActivityCounters() {
++        io.papermc.paper.spi.ChunkActivityCounters counters = this.paper$activityCounters;
++        if (counters == null) {
++            counters = new io.papermc.paper.spi.ChunkActivityCounters();
++            this.paper$activityCounters = counters;
++        }
++        return counters;
++    }
++    // GoldLeaf end - chunk telemetry & execution mask SPI (ADR-006)
+     // Paper start - rewrite chunk system
+     private boolean postProcessingDone;
+     private ca.spottedleaf.moonrise.patches.chunk_system.scheduling.NewChunkHolder chunkAndHolder;
+@@ -387,6 +434,33 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+         if (oldState == state) {
+             return null;
+         }
++        // Paper start - cold-section residency and dirty-voxel halo SPI notifications
++        final ca.spottedleaf.moonrise.spi.ChunkResidencySpi residencySpi = ca.spottedleaf.moonrise.spi.ChunkResidencySpi.get();
++        final boolean haloActive = io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink.isActive();
++        if ((residencySpi != null || haloActive) && this.level instanceof ServerLevel serverLevel) {
++            final int localPos12 = (localY << 8) | (localZ << 4) | localX;
++            final int runtimeStateId = Block.getId(state) & io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink.RUNTIME_STATE_MASK;
++            if (residencySpi != null) {
++                residencySpi.onChunkBlockEdited(
++                    serverLevel.dimension().identifier().toString(),
++                    this.chunkPos.x(),
++                    this.chunkPos.z(),
++                    this.getSectionIndex(y),
++                    localPos12,
++                    runtimeStateId
++                );
++            }
++            if (haloActive) {
++                serverLevel.getCurrentWorldData().recordDirtyVoxelHalo(
++                    this.chunkPos.x(),
++                    this.chunkPos.z(),
++                    SectionPos.blockToSectionCoord(y),
++                    localPos12,
++                    runtimeStateId
++                );
++            }
++        }
++        // Paper end - cold-section residency and dirty-voxel halo SPI notifications
+ 
+         Block newBlock = state.getBlock();
+         this.heightmaps.get(Heightmap.Types.MOTION_BLOCKING).update(localX, y, localZ, state);
+@@ -690,6 +764,15 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+         // Paper start
+         this.loadedTicketLevel = false;
+         // Paper end
++        // GoldLeaf start - reset execution mask & release lazy telemetry sidecar on unload (ADR-006, S-002)
++        this.paper$executionMask = io.papermc.paper.spi.PaperTelemetrySpi.MASK_NONE;
++        this.paper$exemptionFlags = 0;
++        this.paper$activityCounters = null;
++        final ca.spottedleaf.moonrise.spi.ChunkResidencySpi residencySpi = ca.spottedleaf.moonrise.spi.ChunkResidencySpi.get();
++        if (residencySpi != null && this.level instanceof ServerLevel serverLevel) {
++            residencySpi.onChunkUnloaded(serverLevel.dimension().identifier().toString(), this.chunkPos.x(), this.chunkPos.z());
++        }
++        // Paper end - reset execution mask, release lazy telemetry sidecar & evict residency on unload (S-002)
+     }
+ 
+     @Override
+diff --git a/net/minecraft/world/level/chunk/LevelChunkSection.java b/net/minecraft/world/level/chunk/LevelChunkSection.java
+index 4e1359f85d66185c57a27302fd4672cd7e265874..d38f32cf69f7c417e1be55fd93a0bd46416f6937 100644
+--- a/net/minecraft/world/level/chunk/LevelChunkSection.java
++++ b/net/minecraft/world/level/chunk/LevelChunkSection.java
+@@ -16,6 +16,63 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+     private short tickingFluidCount;
+     private final PalettedContainer<BlockState> states;
+     private PalettedContainer<Holder<Biome>> biomes; // CraftBukkit - read/write
++    private volatile int paper$sectionEpoch; // GoldLeaf - ADR-009 section mutation epoch
++
++    public int paper$getSectionEpoch() {
++        return this.paper$sectionEpoch;
++    }
++
++    // GoldLeaf start - ADR-005/ADR-017 zero-per-voxel bulk section install
++    public boolean paper$installUniformBlockSection(
++        final BlockState state,
++        final short nonEmptyCount,
++        final short fluidCount,
++        final short tickingFluidCount
++    ) {
++        if (!this.hasOnlyAir()
++            || state.isRandomlyTicking()
++            || ca.spottedleaf.moonrise.patches.collisions.CollisionUtil.isSpecialCollidingBlock(state)) {
++            return false;
++        }
++        this.states.paper$installUniform(state);
++        this.nonEmptyBlockCount = nonEmptyCount;
++        this.fluidCount = fluidCount;
++        this.tickingBlockCount = 0;
++        this.tickingFluidCount = tickingFluidCount;
++        this.specialCollidingBlocks = 0;
++        this.tickingBlocks.clear();
++        this.paper$sectionEpoch++;
++        return true;
++    }
++
++    public boolean paper$installBulk4BitSection(
++        final java.util.List<BlockState> uniquePalette,
++        final long[] raw4BitLongs,
++        final short nonEmptyCount,
++        final short fluidCount,
++        final short tickingFluidCount
++    ) {
++        if (!this.hasOnlyAir() || raw4BitLongs.length != 256 || uniquePalette.size() < 2 || uniquePalette.size() > 16) {
++            return false;
++        }
++        for (int i = 0; i < uniquePalette.size(); i++) {
++            final BlockState s = uniquePalette.get(i);
++            if (s.isRandomlyTicking()
++                || ca.spottedleaf.moonrise.patches.collisions.CollisionUtil.isSpecialCollidingBlock(s)) {
++                return false;
++            }
++        }
++        this.states.paper$installLinear4Bit(uniquePalette, raw4BitLongs);
++        this.nonEmptyBlockCount = nonEmptyCount;
++        this.fluidCount = fluidCount;
++        this.tickingBlockCount = 0;
++        this.tickingFluidCount = tickingFluidCount;
++        this.specialCollidingBlocks = 0;
++        this.tickingBlocks.clear();
++        this.paper$sectionEpoch++;
++        return true;
++    }
++    // GoldLeaf end - ADR-005/ADR-017 zero-per-voxel bulk section install
+ 
+     // Paper start - block counting
+     private static final it.unimi.dsi.fastutil.shorts.ShortArrayList FULL_LIST = new it.unimi.dsi.fastutil.shorts.ShortArrayList(16*16*16);
+@@ -165,6 +222,9 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+         }
+ 
+         this.updateBlockCallback(sectionX, sectionY, sectionZ, state, previous); // Paper - block counting
++        if (state != previous) {
++            this.paper$sectionEpoch++; // GoldLeaf - ADR-009 section mutation epoch
++        }
+ 
+         return previous;
+     }
+@@ -199,6 +259,37 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+         this.specialCollidingBlocks = (short)0;
+         this.tickingBlocks.clear();
+ 
++        // GoldLeaf start - ADR-005 Stage 4 cold-section block counting without SimpleBitStorage unpack
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<BlockState> coldBacking = this.states.paper$getColdBacking();
++        if (coldBacking != null) {
++            coldBacking.count((final BlockState state, final int paletteCount) -> {
++                if (state.isAir() || paletteCount <= 0) {
++                    return;
++                }
++                if (ca.spottedleaf.moonrise.patches.collisions.CollisionUtil.isSpecialCollidingBlock(state)) {
++                    this.specialCollidingBlocks += (short) paletteCount;
++                }
++                this.nonEmptyBlockCount += (short) paletteCount;
++                if (state.isRandomlyTicking()) {
++                    this.tickingBlockCount += (short) paletteCount;
++                }
++                final FluidState fluid = state.getFluidState();
++                if (!fluid.isEmpty()) {
++                    this.fluidCount += (short) paletteCount;
++                    if (fluid.isRandomlyTicking()) {
++                        this.tickingFluidCount += (short) paletteCount;
++                    }
++                }
++            });
++            if (this.tickingBlockCount > 0) {
++                final ca.spottedleaf.moonrise.common.list.ShortList tickingBlocks = this.tickingBlocks;
++                tickingBlocks.setMinCapacity(Math.min(this.tickingBlockCount * 3 / 2 + 1, 16 * 16 * 16));
++                coldBacking.forEachMatchingCoordinate(BlockState::isRandomlyTicking, (final int pos12) -> tickingBlocks.add((short) pos12));
++            }
++            return;
++        }
++        // GoldLeaf end - ADR-005 Stage 4 cold-section block counting without SimpleBitStorage unpack
++
+         if (this.maybeHas((final BlockState state) -> !state.isAir())) {
+             final PalettedContainer.Data<BlockState> data = this.states.data;
+             final Palette<BlockState> palette = data.palette();
+diff --git a/net/minecraft/world/level/chunk/PalettedContainer.java b/net/minecraft/world/level/chunk/PalettedContainer.java
+index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca9e44c4da 100644
+--- a/net/minecraft/world/level/chunk/PalettedContainer.java
++++ b/net/minecraft/world/level/chunk/PalettedContainer.java
+@@ -27,6 +27,7 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     public volatile PalettedContainer.Data<T> data; // Paper - optimise collisions - public
+     public final Strategy<T> strategy; // Paper - optimise chunk generation - public
+     private final T @Nullable [] presetValues; // Paper - Anti-Xray - Add preset values
++    private volatile ca.spottedleaf.moonrise.spi.@Nullable ColdSectionBackingSpi<T> paper$coldBacking; // GoldLeaf - ADR-005 Stage 4 native cold backing
+     //private final ThreadingDetector threadingDetector = new ThreadingDetector("PalettedContainer"); // Paper - unused
+ 
+     public void acquire() {
+@@ -164,6 +165,45 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     }
+     // Paper end - Anti-Xray
+ 
++    // GoldLeaf start - ADR-005/ADR-017 zero-per-voxel bulk section install & Stage 4 cold backing
++    public ca.spottedleaf.moonrise.spi.@Nullable ColdSectionBackingSpi<T> paper$getColdBacking() {
++        return this.paper$coldBacking;
++    }
++
++    public void paper$attachColdBacking(
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing,
++        final T uniformFallback
++    ) {
++        this.paper$coldBacking = backing;
++        final Configuration cfg = this.strategy.getConfigurationForBitCount(0);
++        final Palette<T> palette = cfg.createPalette(this.strategy, List.of(uniformFallback));
++        final BitStorage storage = new ZeroBitStorage(this.strategy.entryCount());
++        this.data = new PalettedContainer.Data<>(cfg, storage, palette);
++    }
++
++    public void paper$detachColdBacking() {
++        this.paper$coldBacking = null;
++    }
++
++    public void paper$installUniform(final T value) {
++        this.paper$coldBacking = null;
++        final Configuration cfg = this.strategy.getConfigurationForBitCount(0);
++        final Palette<T> palette = cfg.createPalette(this.strategy, List.of(value));
++        final BitStorage storage = new ZeroBitStorage(this.strategy.entryCount());
++        this.data = new PalettedContainer.Data<>(cfg, storage, palette);
++        this.addPresetValues();
++    }
++
++    public void paper$installLinear4Bit(final List<T> uniqueValues, final long[] raw4BitLongs) {
++        this.paper$coldBacking = null;
++        final Configuration cfg = this.strategy.getConfigurationForBitCount(4);
++        final Palette<T> palette = cfg.createPalette(this.strategy, uniqueValues);
++        final BitStorage storage = new SimpleBitStorage(4, this.strategy.entryCount(), raw4BitLongs);
++        this.data = new PalettedContainer.Data<>(cfg, storage, palette);
++        this.addPresetValues();
++    }
++    // GoldLeaf end - ADR-005/ADR-017 zero-per-voxel bulk section install & Stage 4 cold backing
++
+     @Override
+     public synchronized int onResize(int bits, final T lastAddedValue) { // Paper - synchronize // Paper start - Anti-Xray - remove final
+         PalettedContainer.Data<T> oldData = this.data;
+@@ -188,6 +228,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     // Paper end - Anti-Xray
+ 
+     public synchronized T getAndSet(final int x, final int y, final int z, final T value) { // Paper - synchronize
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return backing.getAndSet(x, y, z, value);
++        }
+         this.acquire();
+ 
+         try {
+@@ -198,6 +242,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     }
+ 
+     public T getAndSetUnchecked(final int x, final int y, final int z, final T value) {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return backing.getAndSet(x, y, z, value);
++        }
+         return this.getAndSet(this.strategy.getIndex(x, y, z), value);
+     }
+ 
+@@ -211,6 +259,11 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     }
+ 
+     public synchronized void set(final int x, final int y, final int z, final T value) { // Paper - synchronize
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            backing.set(x, y, z, value);
++            return;
++        }
+         this.acquire();
+ 
+         try {
+@@ -221,16 +274,29 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     }
+ 
+     public void set(final int index, final T value) { // Paper - optimise chunk generation - public
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            backing.setByIndex(index, value);
++            return;
++        }
+         int id = this.data.palette.idFor(value, this);
+         this.data.storage.set(index, id);
+     }
+ 
+     @Override
+     public T get(final int x, final int y, final int z) {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return backing.get(x, y, z);
++        }
+         return this.get(this.strategy.getIndex(x, y, z));
+     }
+ 
+     public T get(final int index) { // Paper - public
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return backing.getByIndex(index);
++        }
+         // Paper start - optimise palette reads
+         final PalettedContainer.Data<T> data = this.data;
+         return readPalette(data, data.storage.get(index));
+@@ -239,6 +305,11 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+ 
+     @Override
+     public void getAll(final Consumer<T> consumer) {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            backing.forEachDistinct(consumer);
++            return;
++        }
+         Palette<T> palette = this.data.palette();
+         IntSet allExistingEntries = new IntArraySet();
+         this.data.storage.getAll(allExistingEntries::add);
+@@ -246,6 +317,7 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     }
+ 
+     public synchronized void read(final FriendlyByteBuf buffer) { // Paper - synchronize
++        this.paper$coldBacking = null;
+         this.acquire();
+ 
+         try {
+@@ -270,6 +342,15 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+     public synchronized void write(final FriendlyByteBuf buffer, final io.papermc.paper.antixray.@Nullable ChunkPacketInfo<T> chunkPacketInfo,
+                                    final int chunkSectionIndex) { // Paper - synchronize
+         // Paper end - Anti-Xray - add parameters
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            if (chunkPacketInfo != null) {
++                this.copy().write(buffer, chunkPacketInfo, chunkSectionIndex);
++            } else {
++                backing.writeVanilla(buffer, this.strategy.globalMap());
++            }
++            return;
++        }
+         this.acquire();
+ 
+         try {
+@@ -350,6 +431,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+ 
+     @Override
+     public synchronized PalettedContainerRO.PackedData<T> pack(final Strategy<T> strategy) { // Paper - synchronize
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return this.copy().pack(strategy);
++        }
+         // Paper start - optimise PalettedContainer packing
+         this.acquire();
+ 
+@@ -449,6 +534,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+ 
+     @Override
+     public int getSerializedSize() {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return backing.getSerializedSize(this.strategy.globalMap());
++        }
+         return this.data.getSerializedSize(this.strategy.globalMap());
+     }
+ 
+@@ -459,11 +548,20 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+ 
+     @Override
+     public boolean maybeHas(final Predicate<T> predicate) {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return backing.maybeHas(predicate);
++        }
+         return this.data.palette.maybeHas(predicate);
+     }
+ 
+     @Override
+     public void forEachInPalette(final Consumer<T> consumer) {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            backing.forEachDistinct(consumer);
++            return;
++        }
+         for (int i = 0; i < this.data.palette.getSize(); i++) {
+             consumer.accept(this.data.palette.valueFor(i));
+         }
+@@ -471,16 +569,31 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+ 
+     @Override
+     public PalettedContainer<T> copy() {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            final PalettedContainer<T> ephemeral = new PalettedContainer<>(backing.uniformFallback(), this.strategy, this.presetValues);
++            backing.copyInto(ephemeral);
++            return ephemeral;
++        }
+         return new PalettedContainer<>(this, this.presetValues); // Paper - Anti-Xray - Add preset values
+     }
+ 
+     @Override
+     public PalettedContainer<T> recreate() {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            return new PalettedContainer<>(backing.uniformFallback(), this.strategy, this.presetValues);
++        }
+         return new PalettedContainer<>(this.data.palette.valueFor(0), this.strategy, this.presetValues); // Paper - Anti-Xray - Add preset values
+     }
+ 
+     @Override
+     public void count(final PalettedContainer.CountConsumer<T> output) {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing != null) {
++            backing.count(output);
++            return;
++        }
+         if (this.data.palette.getSize() == 1) {
+             output.accept(this.data.palette.valueFor(0), this.data.storage.getSize());
+         } else {
+diff --git a/net/minecraft/world/level/chunk/storage/RegionFileStorage.java b/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+index 7e815fee19ab2c283bf1fdc3d6a530d4101de3de..1ab7b121b788758a93189da690a78aabdf9e6178 100644
+--- a/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
++++ b/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+@@ -26,6 +26,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     private final RegionStorageInfo info;
+     private final Path folder;
+     private final boolean sync;
++    // Paper start - pluggable RegionStorageSpi
++    private final ca.spottedleaf.moonrise.spi.@Nullable RegionStorageSpi storageSpi;
++    // Paper end - pluggable RegionStorageSpi
+ 
+     // Paper start - rewrite chunk system
+     private static final int REGION_SHIFT = 5;
+@@ -63,6 +66,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+ 
+     @Override
+     public final boolean moonrise$doesRegionFileNotExistNoIO(final int chunkX, final int chunkZ) {
++        if (this.storageSpi != null) {
++            return this.storageSpi.doesRegionFileNotExistNoIO(chunkX, chunkZ);
++        }
+         return !this.doesRegionFilePossiblyExist(ChunkPos.pack(chunkX >> REGION_SHIFT, chunkZ >> REGION_SHIFT));
+     }
+ 
+@@ -81,6 +87,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     public final ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.WriteData moonrise$startWrite(
+         final int chunkX, final int chunkZ, final CompoundTag compound
+     ) throws IOException {
++        if (this.storageSpi != null) {
++            return this.storageSpi.startWrite(chunkX, chunkZ, compound);
++        }
+         if (compound == null) {
+             return new ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.WriteData(
+                 compound, ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.WriteData.WriteResult.DELETE,
+@@ -121,6 +130,10 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     public final void moonrise$finishWrite(
+         final int chunkX, final int chunkZ, final ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.WriteData writeData
+     ) throws IOException {
++        if (this.storageSpi != null) {
++            this.storageSpi.finishWrite(chunkX, chunkZ, writeData);
++            return;
++        }
+         final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+         if (writeData.result() == ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.WriteData.WriteResult.DELETE) {
+             final RegionFile regionFile = this.moonrise$getRegionFileIfExists(chunkX, chunkZ);
+@@ -138,6 +151,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     public final ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.ReadData moonrise$readData(
+         final int chunkX, final int chunkZ
+     ) throws IOException {
++        if (this.storageSpi != null) {
++            return this.storageSpi.readData(chunkX, chunkZ);
++        }
+         final RegionFile regionFile = this.moonrise$getRegionFileIfExists(chunkX, chunkZ);
+ 
+         // retrieve the count after reading under the regionfile lock, so that it matches the header the data was read with
+@@ -185,6 +201,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     public final CompoundTag moonrise$finishRead(
+         final int chunkX, final int chunkZ, final ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.RegionDataController.ReadData readData
+     ) throws IOException {
++        if (this.storageSpi != null) {
++            return this.storageSpi.finishRead(chunkX, chunkZ, readData);
++        }
+         final CompoundTag ret;
+         try {
+             ret = ca.spottedleaf.moonrise.patches.nbt_rw.FastNBTParser.nbtIoRead(readData.input()); // Paper - Optimize NBT reading/writing
+@@ -224,6 +243,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+         this.folder = folder;
+         this.sync = sync;
+         this.info = info;
++        // Paper start - pluggable RegionStorageSpi
++        this.storageSpi = ca.spottedleaf.moonrise.spi.RegionStorageSpi.createFor(info, folder);
++        // Paper end - pluggable RegionStorageSpi
+     }
+ 
+     private @Nullable RegionFile getRegionFile(final ChunkPos pos, final boolean create) throws IOException {
+@@ -282,6 +304,9 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     }
+ 
+     public @Nullable CompoundTag read(final ChunkPos pos) throws IOException {
++        if (this.storageSpi != null) {
++            return this.storageSpi.read(pos.x(), pos.z());
++        }
+         RegionFile region = this.getRegionFile(pos, false);
+         if (region == null) {
+             return null;
+@@ -321,6 +346,10 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     }
+ 
+     public void scanChunk(final ChunkPos pos, final StreamTagVisitor scanner) throws IOException {
++        if (this.storageSpi != null) {
++            this.storageSpi.scanChunk(pos.x(), pos.z(), scanner);
++            return;
++        }
+         RegionFile region = this.getRegionFile(pos, false);
+         if (region != null) {
+             try (DataInputStream regionChunkInputStream = region.getChunkDataInputStream(pos)) {
+@@ -332,6 +361,10 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     }
+ 
+     public void write(final ChunkPos pos, final @Nullable CompoundTag value) throws IOException {
++        if (this.storageSpi != null) {
++            this.storageSpi.write(pos.x(), pos.z(), value);
++            return;
++        }
+         // Paper start - rewrite chunk system
+         // if the RegionFile doesn't exist, no point in deleting from it
+         if (value == null && this.moonrise$getRegionFileIfExists(pos.x(), pos.z()) == null) {
+@@ -361,6 +394,10 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+ 
+     @Override
+     public void close() throws IOException {
++        if (this.storageSpi != null) {
++            this.storageSpi.close();
++            return;
++        }
+         // Paper start - rewrite chunk system
+         synchronized (this) {
+             final ExceptionCollector<IOException> exceptionCollector = new ExceptionCollector<>();
+@@ -380,6 +417,10 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
+     }
+ 
+     public void flush() throws IOException {
++        if (this.storageSpi != null) {
++            this.storageSpi.flush();
++            return;
++        }
+         // Paper start - rewrite chunk system
+         synchronized (this) {
+             final ExceptionCollector<IOException> exceptionCollector = new ExceptionCollector<>();
+diff --git a/net/minecraft/world/level/chunk/storage/SerializableChunkData.java b/net/minecraft/world/level/chunk/storage/SerializableChunkData.java
+index f40a1d56d7c5e47d20bce5fe7ea0e29a1afeadec..f9ceb277285618652d171f371e00ef620bc4edac 100644
+--- a/net/minecraft/world/level/chunk/storage/SerializableChunkData.java
++++ b/net/minecraft/world/level/chunk/storage/SerializableChunkData.java
+@@ -141,6 +141,15 @@ public record SerializableChunkData(
+             }
+         });
+         // Paper end - Do not let the server load chunks from newer versions
++        // GoldLeaf start - ADR-005 Stage 4 direct zero-decode section deserialization SPI
++        final ca.spottedleaf.moonrise.spi.DirectSectionSerializationSpi directSpi = ca.spottedleaf.moonrise.spi.DirectSectionSerializationSpi.get();
++        if (directSpi != null && directSpi.supportsDataVersion(chunkData.getIntOr("DataVersion", -1))) {
++            final SerializableChunkData directParsed = directSpi.tryDeserializeDirect(serverLevel, containerFactory, chunkData);
++            if (directParsed != null) {
++                return directParsed;
++            }
++        }
++        // GoldLeaf end - ADR-005 Stage 4 direct zero-decode section deserialization SPI
+         ChunkPos chunkPos = new ChunkPos(chunkData.getIntOr("xPos", 0), chunkData.getIntOr("zPos", 0)); // Paper - guard against serializing mismatching coordinates; diff on change, see ChunkSerializer#getChunkCoordinate
+         long lastUpdateTime = chunkData.getLongOr("LastUpdate", 0L);
+         long inhabitedTime = chunkData.getLongOr("InhabitedTime", 0L);
+@@ -524,6 +533,16 @@ public record SerializableChunkData(
+     }
+ 
+     public CompoundTag write() {
++        // Paper start - direct-section serialization SPI
++        final ca.spottedleaf.moonrise.spi.DirectSectionSerializationSpi directSerializer = ca.spottedleaf.moonrise.spi.DirectSectionSerializationSpi.get();
++        if (directSerializer != null
++            && directSerializer.supportsDataVersion(net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version())) {
++            final CompoundTag directTag = directSerializer.trySerializeDirect(this);
++            if (directTag != null) {
++                return directTag;
++            }
++        }
++        // Paper end - direct-section serialization SPI
+         CompoundTag tag = NbtUtils.addCurrentDataVersion(new CompoundTag());
+         tag.putInt("xPos", this.chunkPos.x());
+         tag.putInt("yPos", this.minSectionY);
+@@ -609,10 +628,15 @@ public record SerializableChunkData(
+             tag.putInt(ca.spottedleaf.moonrise.patches.starlight.util.SaveUtil.STARLIGHT_VERSION_TAG, ca.spottedleaf.moonrise.patches.starlight.util.SaveUtil.STARLIGHT_LIGHT_VERSION);
+         }
+         // Paper end - starlight
++        // Paper start - direct-section serialization SPI notification
++        if (directSerializer != null) {
++            directSerializer.onChunkSerialized(this, tag);
++        }
++        // Paper end - direct-section serialization SPI notification
+         return tag;
+     }
+ 
+-    private static void saveTicks(final CompoundTag levelData, final ChunkAccess.PackedTicks ticksForSerialization) {
++    public static void saveTicks(final CompoundTag levelData, final ChunkAccess.PackedTicks ticksForSerialization) {
+         levelData.store("block_ticks", BLOCK_TICKS_CODEC, ticksForSerialization.blocks());
+         levelData.store("fluid_ticks", FLUID_TICKS_CODEC, ticksForSerialization.fluids());
+     }
+@@ -733,7 +757,7 @@ public record SerializableChunkData(
+         return outmap;
+     }
+ 
+-    private static ListTag packOffsets(final @Nullable ShortList[] sections) {
++    public static ListTag packOffsets(final @Nullable ShortList[] sections) {
+         ListTag listTag = new ListTag();
+ 
+         for (ShortList offsetList : sections) {

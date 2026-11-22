@@ -1,0 +1,346 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:29:28 -0600
+Subject: [PATCH] Paper Layer 1 threading diagnostics and preflight SPI hooks
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/util/MoonriseCommon.java b/src/main/java/ca/spottedleaf/moonrise/common/util/MoonriseCommon.java
+index b9f788693b0c4be48e8a923a3dec50555d135e7e..f4ff609f73870ea583adbdbcf8c3bf17508bf186 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/util/MoonriseCommon.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/util/MoonriseCommon.java
+@@ -40,19 +40,16 @@ public final class MoonriseCommon {
+     public static final BalancedPrioritisedThreadPool.OrderedStreamGroup SERVER_GROUP = MoonriseCommon.WORKER_POOL.createOrderedStreamGroup();
+ 
+     public static void adjustWorkerThreads(final int configWorkerThreads, final int configIoThreads) {
+-        int defaultWorkerThreads = OSNuma.getNativeInstance().getTotalCores()  / 2;
+-        if (defaultWorkerThreads <= 4) {
+-            defaultWorkerThreads = defaultWorkerThreads <= 3 ? 1 : 2;
+-        } else {
+-            defaultWorkerThreads = defaultWorkerThreads / 2;
++        // Paper start - hardware-envelope worker pacing SPI
++        int defaultWorkerThreads = io.papermc.paper.spi.PaperThreadingSpi.resolveWorldgenWorkerThreads(
++            configWorkerThreads
++        );
++        if (configWorkerThreads <= 0) {
++            defaultWorkerThreads = Integer.getInteger(PlatformHooks.get().getBrand() + ".WorkerThreadCount", Integer.valueOf(defaultWorkerThreads));
+         }
+-        defaultWorkerThreads = Integer.getInteger(PlatformHooks.get().getBrand() + ".WorkerThreadCount", Integer.valueOf(defaultWorkerThreads));
+ 
+-        int workerThreads = configWorkerThreads;
+-
+-        if (workerThreads <= 0) {
+-            workerThreads = defaultWorkerThreads;
+-        }
++        int workerThreads = configWorkerThreads > 0 ? configWorkerThreads : defaultWorkerThreads;
++        // GoldLeaf end - ADR-004 hardware-envelope worker pacing coordinated with ADR-003
+ 
+         final int ioThreads = Math.max(1, configIoThreads);
+ 
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java b/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
+index 72a3478a98912caae8899df37218dd2a628a6e05..51c00631fc8a1806e02d4e9c96d6f71838a5ffca 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
+@@ -50,6 +50,7 @@ public class TickThread extends Thread {
+     public static void ensureTickThread(final String reason) {
+         if (!isTickThread()) {
+             LOGGER.error("Thread failed main thread check: " + reason + ", context=" + getThreadContext(), new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, getThreadContext());
+             throw new IllegalStateException(reason);
+         }
+     }
+@@ -59,6 +60,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                                reason + ", context=" + getThreadContext() + ", world=" + WorldUtil.getWorldName(world) + ", block_pos=" + pos;
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+@@ -68,6 +70,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                 reason + ", context=" + getThreadContext() + ", world=" + WorldUtil.getWorldName(world) + ", block_pos=" + pos + ", block_radius=" + blockRadius;
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+@@ -77,6 +80,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                 reason + ", context=" + getThreadContext() + ", world=" + WorldUtil.getWorldName(world) + ", chunk_pos=" + pos;
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+@@ -86,6 +90,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                 reason + ", context=" + getThreadContext() + ", world=" + WorldUtil.getWorldName(world) + ", chunk_pos=" + new ChunkPos(chunkX, chunkZ);
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+@@ -95,6 +100,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                 reason + ", context=" + getThreadContext() + ", entity=" + EntityUtil.dumpEntity(entity);
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+@@ -104,6 +110,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                 reason + ", context=" + getThreadContext() + ", world=" + WorldUtil.getWorldName(world) + ", aabb=" + aabb;
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+@@ -113,6 +120,7 @@ public class TickThread extends Thread {
+             final String ex = "Thread failed main thread check: " +
+                 reason + ", context=" + getThreadContext() + ", world=" + WorldUtil.getWorldName(world) + ", block_pos=" + new Vec3(blockX, 0.0, blockZ);
+             LOGGER.error(ex, new Throwable());
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordWrongRegionAccess(reason, ex);
+             throw new IllegalStateException(ex);
+         }
+     }
+diff --git a/src/main/java/io/papermc/paper/plugin/provider/source/DirectoryProviderSource.java b/src/main/java/io/papermc/paper/plugin/provider/source/DirectoryProviderSource.java
+index b6dcbd88ea31ea5f87e036afadfb748e5f430fec..05aafd1e54b5d5a0c367d1d9749051310805c279 100644
+--- a/src/main/java/io/papermc/paper/plugin/provider/source/DirectoryProviderSource.java
++++ b/src/main/java/io/papermc/paper/plugin/provider/source/DirectoryProviderSource.java
+@@ -48,6 +48,9 @@ public class DirectoryProviderSource implements ProviderSource<Path, List<Path>>
+                 LOGGER.error("Error preparing plugin context: " + e.getMessage(), e);
+             }
+         });
++        // Paper start - off-thread zero-classloading plugin preflight discovery hook
++        io.papermc.paper.spi.PaperDiagnosticsSpi.runPluginPreflight(files);
++        // Paper end - off-thread zero-classloading plugin preflight discovery hook
+         return files;
+     }
+ 
+diff --git a/src/main/java/io/papermc/paper/plugin/provider/source/PluginFlagProviderSource.java b/src/main/java/io/papermc/paper/plugin/provider/source/PluginFlagProviderSource.java
+--- a/src/main/java/io/papermc/paper/plugin/provider/source/PluginFlagProviderSource.java
++++ b/src/main/java/io/papermc/paper/plugin/provider/source/PluginFlagProviderSource.java
+@@ -27,6 +27,9 @@ public class PluginFlagProviderSource implements ProviderSource<List<Path>, List
+                 LOGGER.error("Error preparing plugin context: " + e.getMessage(), e);
+             }
+         }
++        // Paper start - off-thread zero-classloading plugin preflight discovery hook
++        io.papermc.paper.spi.PaperDiagnosticsSpi.runPluginPreflight(files);
++        // Paper end - off-thread zero-classloading plugin preflight discovery hook
+         return files;
+     }
+ 
+ diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+index 9012d664958c433478ecb774241d7555d8c1a35e..2071e638a2075f62aecac33581d02e7081475de9 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+@@ -10,6 +10,7 @@ import java.util.ArrayDeque;
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.util.Objects;
++import java.util.concurrent.ConcurrentLinkedQueue;
+ import java.util.concurrent.atomic.AtomicLong;
+ import java.util.concurrent.locks.StampedLock;
+ import java.util.function.Consumer;
+@@ -50,6 +51,9 @@ public final class EntityScheduler {
+     private boolean insideScheduledList;
+ 
+     private final ArrayDeque<ScheduledTask> currentlyExecuting = new ArrayDeque<>();
++    // GoldLeaf start - sub-tick immediate entity task queue (ADR-002)
++    private final ConcurrentLinkedQueue<ScheduledTask> immediateTasks = new ConcurrentLinkedQueue<>();
++    // GoldLeaf end - sub-tick immediate entity task queue (ADR-002)
+ 
+     public EntityScheduler(final CraftEntity entity) {
+         this.entity = Objects.requireNonNull(entity);
+@@ -57,7 +61,7 @@ public final class EntityScheduler {
+ 
+     // must own state lock
+     private boolean hasTasks() {
+-        return !this.currentlyExecuting.isEmpty() || !this.oneTimeDelayed.isEmpty();
++        return !this.currentlyExecuting.isEmpty() || !this.oneTimeDelayed.isEmpty() || !this.immediateTasks.isEmpty();
+     }
+ 
+     public void registerTo(final EntitySchedulerTickList newTickList) {
+@@ -140,6 +144,17 @@ public final class EntityScheduler {
+             retireTask.accept(thisEntity);
+         }
+ 
++        // GoldLeaf start - retire pending sub-tick immediate tasks (ADR-002)
++        ScheduledTask immediateTask;
++        while ((immediateTask = this.immediateTasks.poll()) != null) {
++            final Consumer<Entity> retireTask = (Consumer<Entity>)immediateTask.retired;
++            if (retireTask == null) {
++                continue;
++            }
++            retireTask.accept(thisEntity);
++        }
++        // GoldLeaf end - retire pending sub-tick immediate tasks (ADR-002)
++
+         for (final List<ScheduledTask> tasks : this.oneTimeDelayed.values()) {
+             for (int i = 0, len = tasks.size(); i < len; ++i) {
+                 final ScheduledTask task = tasks.get(i);
+@@ -227,6 +242,84 @@ public final class EntityScheduler {
+         return true;
+     }
+ 
++    // GoldLeaf start - sub-tick immediate entity task scheduling (ADR-002)
++    /**
++     * Schedules a task for immediate sub-tick execution on the region owning this entity.
++     * Re-checks ownership and retirement on the owning region thread before invocation; falls back
++     * to the next entity tick if the entity is currently detached or transferring between regions.
++     */
++    public boolean scheduleImmediate(final Consumer<? extends Entity> run, final Consumer<? extends Entity> retired) {
++        Objects.requireNonNull(run, "Run task may not be null");
++
++        final ScheduledTask task = new ScheduledTask(run, retired);
++        synchronized (this.stateLock) {
++            if (this.tickCount == RETIRED_TICK_COUNT) {
++                return false;
++            }
++            this.immediateTasks.add(task);
++            if (!this.insideScheduledList && this.scheduledList != null) {
++                this.scheduledList.add(this);
++                this.insideScheduledList = true;
++            }
++        }
++
++        final Entity handle = this.entity.getHandleRaw();
++        if (handle != null && handle.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
++            final net.minecraft.world.level.ChunkPos chunkPos = handle.chunkPosition();
++            RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
++                serverLevel,
++                chunkPos.x(),
++                chunkPos.z(),
++                this::drainImmediateTasks,
++                ca.spottedleaf.concurrentutil.util.Priority.HIGHER
++            );
++        }
++
++        return true;
++    }
++
++    /**
++     * Drains queued immediate tasks if the calling thread currently owns this entity and it is not
++     * retired. Re-routes to the entity's current chunk if ownership moved before this callback ran.
++     */
++    public void drainImmediateTasks() {
++        final Entity thisEntity = this.entity.getHandleRaw();
++        if (thisEntity == null) {
++            return;
++        }
++        if (!TickThread.isTickThreadFor(thisEntity)) {
++            if (!this.isRetiredOffThread() && !this.immediateTasks.isEmpty()
++                && thisEntity.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
++                final net.minecraft.world.level.ChunkPos chunkPos = thisEntity.chunkPosition();
++                RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
++                    serverLevel,
++                    chunkPos.x(),
++                    chunkPos.z(),
++                    this::drainImmediateTasks,
++                    ca.spottedleaf.concurrentutil.util.Priority.HIGHER
++                );
++            }
++            return;
++        }
++
++        ScheduledTask task;
++        while ((task = this.immediateTasks.poll()) != null) {
++            if (this.tickCount == RETIRED_TICK_COUNT) {
++                final Consumer<Entity> retireTask = (Consumer<Entity>)task.retired;
++                if (retireTask != null) {
++                    retireTask.accept(thisEntity);
++                }
++                continue;
++            }
++            if (!TickThread.isTickThreadFor(thisEntity)) {
++                this.immediateTasks.add(task);
++                break;
++            }
++            ((Consumer<Entity>)task.run).accept(thisEntity);
++        }
++    }
++    // GoldLeaf end - sub-tick immediate entity task scheduling (ADR-002)
++
+     /**
+      * Executes a tick for the scheduler.
+      *
+@@ -236,6 +329,10 @@ public final class EntityScheduler {
+         final Entity thisEntity = this.entity.getHandleRaw();
+ 
+         TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
++        // GoldLeaf start - drain any remaining sub-tick immediate tasks at tick boundary (ADR-002)
++        this.drainImmediateTasks();
++        // GoldLeaf end - drain any remaining sub-tick immediate tasks at tick boundary (ADR-002)
++
+         final List<ScheduledTask> toRun;
+         synchronized (this.stateLock) {
+             if (this.tickCount == RETIRED_TICK_COUNT) {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+index 45cf8599aa5d5c7f1b44702da26fa9869e952eec..da760cd4ed05cd8c809646076eed6b76827559d8 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+@@ -45,6 +45,16 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+         return this.entity.taskScheduler.schedule(runNMS, runRetired, delay);
+     }
+ 
++    // GoldLeaf start - sub-tick immediate entity task execution (ADR-002)
++    @Override
++    public boolean executeImmediate(final Plugin plugin, final Runnable run, final Runnable retired) {
++        final Consumer<? extends Entity> runNMS = wrap(plugin, run);
++        final Consumer<? extends Entity> runRetired = retired == null ? null : wrap(plugin, retired);
++
++        return this.entity.taskScheduler.scheduleImmediate(runNMS, runRetired);
++    }
++    // GoldLeaf end - sub-tick immediate entity task execution (ADR-002)
++
+     @Override
+     public @Nullable ScheduledTask run(final Plugin plugin, final Consumer<ScheduledTask> task, final Runnable retired) {
+         return this.runDelayed(plugin, task, retired, 1);
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+index 922d82af5289db65f562da82eb51c0a4eb7a3107..811dba81649c9ca0a91711b4bde0bfd84b315f83 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+@@ -47,6 +47,27 @@ public class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
+         });
+     }
+ 
++    // GoldLeaf start - sub-tick immediate global region execution (ADR-002)
++    @Override
++    public void executeImmediate(final Plugin plugin, final Runnable run) {
++        Objects.requireNonNull(plugin, "Plugin may not be null");
++        Objects.requireNonNull(run, "Runnable may not be null");
++        if (!plugin.isEnabled()) {
++            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
++        }
++        io.papermc.paper.threadedregions.RegionizedServer.getInstance().addTask(() -> {
++            if (!plugin.isEnabled()) {
++                return;
++            }
++            try {
++                run.run();
++            } catch (final Throwable throwable) {
++                plugin.getLogger().log(Level.WARNING, "Immediate global task for " + plugin.getDescription().getFullName() + " generated an exception", throwable);
++            }
++        });
++    }
++    // GoldLeaf end - sub-tick immediate global region execution (ADR-002)
++
+     @Override
+     public ScheduledTask run(final Plugin plugin, final Consumer<ScheduledTask> task) {
+         return this.runDelayed(plugin, task, 1);
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 2cc1b8c44e1f76f3e058d631f101aa06ee5edc2a..a1fbc2e8c660fe86218b7d4f835deb736c45e285 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -613,7 +613,9 @@ public final class CraftServer implements Server {
+             }
+             this.paperPluginManager.addPermissions(permsToLoad); // Paper
+ 
++            final long paperEnableStart = System.nanoTime(); // GoldLeaf - ADR-016
+             this.pluginManager.enablePlugin(plugin);
++            io.papermc.paper.spi.PaperDiagnosticsSpi.recordPluginEnable(plugin.getName(), System.nanoTime() - paperEnableStart);
+         } catch (Throwable ex) {
+             Logger.getLogger(CraftServer.class.getName()).log(Level.SEVERE, ex.getMessage() + " loading " + plugin.getDescription().getFullName() + " (Is it up to date?)", ex);
+         }

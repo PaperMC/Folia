@@ -1,6 +1,6 @@
 # goldleaf-ADR-011 — Folia Operational Ergonomics, Region-Context Watchdog Diagnostics, and Region-Safe Admin Commands
 
-**Status:** Proposed
+**Status:** In Progress
 **Date:** 2026-11-21
 
 ## Context

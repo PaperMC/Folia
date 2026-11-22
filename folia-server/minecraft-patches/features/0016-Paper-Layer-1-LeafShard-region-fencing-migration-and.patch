@@ -1,0 +1,554 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:29:28 -0600
+Subject: [PATCH] Paper Layer 1 LeafShard region fencing migration and halo SPI
+ seams
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
+index 2cd24e12a545781acfae24c980d8e56fb7576a0a..ede0e658340698b589a4e3a327fc2b13d9b65ac9 100644
+--- a/io/papermc/paper/threadedregions/RegionizedServer.java
++++ b/io/papermc/paper/threadedregions/RegionizedServer.java
+@@ -45,6 +45,9 @@ public final class RegionizedServer {
+     private final MultiThreadedQueue<Runnable> globalTickQueue = new MultiThreadedQueue<>();
+ 
+     private final GlobalTickTickHandle tickHandle = new GlobalTickTickHandle(this);
++    // GoldLeaf start - 0->1 global wakeup coalescer (ADR-002)
++    private final io.papermc.paper.threadedregions.spi.WakeupCoalescer globalWakeupCoalescer = new io.papermc.paper.threadedregions.spi.WakeupCoalescer();
++    // GoldLeaf end - 0->1 global wakeup coalescer (ADR-002)
+ 
+     public final PacketProcessor packetProcessor = new PacketProcessor(null);
+ 
+@@ -88,7 +91,9 @@ public final class RegionizedServer {
+     }
+ 
+     public void notifyTasks() {
+-        TickRegions.getScheduler().setHasTasks(this.tickHandle);
++        // GoldLeaf start - 0->1 global wakeup coalescing (ADR-002)
++        this.globalWakeupCoalescer.signalAndNotify(() -> TickRegions.getScheduler().setHasTasks(this.tickHandle));
++        // GoldLeaf end - 0->1 global wakeup coalescing (ADR-002)
+     }
+ 
+     private boolean hasAnyGlobalChunkTasks() {
+@@ -216,11 +221,19 @@ public final class RegionizedServer {
+ 
+         @Override
+         protected void runRegionTasks(final BooleanSupplier canContinue) {
+-            do {
+-                if (!this.runOneTask() && !this.runOnePacketTask() && !this.runGlobalTask()) {
+-                    return;
+-                }
+-            } while (canContinue.getAsBoolean());
++            // GoldLeaf start - DSN-1 clear-before-drain / re-arm-if-nonempty global wakeup protocol (ADR-002)
++            this.server.globalWakeupCoalescer.drain(
++                this::hasIntermediateTasks,
++                () -> {
++                    do {
++                        if (!this.runOneTask() && !this.runOnePacketTask() && !this.runGlobalTask()) {
++                            return;
++                        }
++                    } while (canContinue.getAsBoolean());
++                },
++                () -> TickRegions.getScheduler().setHasTasks(this)
++            );
++            // GoldLeaf end - DSN-1 clear-before-drain / re-arm-if-nonempty global wakeup protocol (ADR-002)
+         }
+ 
+         @Override
+diff --git a/io/papermc/paper/threadedregions/RegionizedWorldData.java b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+index b579875434672b16806af27c3389fc1ef7c81371..fde145390d017e9ef352bda2c0937bf3a6b0bd19 100644
+--- a/io/papermc/paper/threadedregions/RegionizedWorldData.java
++++ b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+@@ -408,8 +408,10 @@ public final class RegionizedWorldData {
+     @VisibleForDebug
+     public NaturalSpawner.SpawnState lastSpawnState;
+     public boolean shouldSignal = true;
+-    public final Map<ServerExplosion.CacheKey, Float> explosionDensityCache = new HashMap<>(64, 0.25f);
+-    public final PathTypeCache pathTypesByPosCache = new PathTypeCache();
++    // GoldLeaf start - lazy RegionizedWorldData heavy subsystems (ADR-003)
++    private @Nullable Map<ServerExplosion.CacheKey, Float> explosionDensityCache;
++    private @Nullable PathTypeCache pathTypesByPosCache;
++    // GoldLeaf end - lazy RegionizedWorldData heavy subsystems (ADR-003)
+     public final List<LevelChunk> temporaryChunkTickList = new java.util.ArrayList<>();
+     public final Set<ChunkHolder> chunkHoldersToBroadcast = new ReferenceLinkedOpenHashSet<>();
+ 
+@@ -434,12 +436,13 @@ public final class RegionizedWorldData {
+         public int spawnZ;
+     }
+     // Redstone
+-    public final alternate.current.wire.WireHandler wireHandler;
+-    public final io.papermc.paper.redstone.RedstoneWireTurbo turbo;
++    // GoldLeaf start - lazy RegionizedWorldData heavy subsystems and shell reuse (ADR-003)
++    private @Nullable alternate.current.wire.WireHandler wireHandler;
++    private @Nullable io.papermc.paper.redstone.RedstoneWireTurbo turbo;
+     // Environment attribute system
+     public Reference2ObjectOpenHashMap<EnvironmentAttribute<?>, EnvironmentAttributeSystem.ValueSampler<?>> attributeSamplers;
+ 
+-    public final TickRegions.TickRegionData regionData;
++    public TickRegions.TickRegionData regionData;
+ 
+     public RegionizedWorldData(final ServerLevel world, final TickRegions.TickRegionData regionData) {
+         this.world = world;
+@@ -447,14 +450,147 @@ public final class RegionizedWorldData {
+         this.fluidLevelTicks = new LevelTicks<>(world::isPositionTickingWithEntitiesLoaded, world, false);
+         this.neighborUpdater = new CollectingNeighborUpdater(world, world.neighbourUpdateMax);
+         this.nearbyPlayers = new NearbyPlayers(world);
+-        this.wireHandler = new alternate.current.wire.WireHandler(world);
+-        this.turbo = new io.papermc.paper.redstone.RedstoneWireTurbo((RedstoneWireBlock)Blocks.REDSTONE_WIRE);
+         this.regionData = regionData;
+ 
+         // tasks may be drained before the region ticks, so we must set up the tick data early just in case
+         this.updateTickData();
+     }
+ 
++    public alternate.current.wire.WireHandler getWireHandler() {
++        alternate.current.wire.WireHandler handler = this.wireHandler;
++        if (handler == null) {
++            handler = new alternate.current.wire.WireHandler(this.world);
++            this.wireHandler = handler;
++        }
++        return handler;
++    }
++
++    public io.papermc.paper.redstone.RedstoneWireTurbo getTurbo() {
++        io.papermc.paper.redstone.RedstoneWireTurbo ret = this.turbo;
++        if (ret == null) {
++            ret = new io.papermc.paper.redstone.RedstoneWireTurbo((RedstoneWireBlock)Blocks.REDSTONE_WIRE);
++            this.turbo = ret;
++        }
++        return ret;
++    }
++
++    public Map<ServerExplosion.CacheKey, Float> getExplosionDensityCache() {
++        Map<ServerExplosion.CacheKey, Float> cache = this.explosionDensityCache;
++        if (cache == null) {
++            cache = new HashMap<>(64, 0.25f);
++            this.explosionDensityCache = cache;
++        }
++        return cache;
++    }
++
++    public void clearExplosionDensityCache() {
++        if (this.explosionDensityCache != null) {
++            this.explosionDensityCache.clear();
++        }
++    }
++
++    public PathTypeCache getPathTypesByPosCache() {
++        PathTypeCache cache = this.pathTypesByPosCache;
++        if (cache == null) {
++            cache = new PathTypeCache();
++            this.pathTypesByPosCache = cache;
++        }
++        return cache;
++    }
++
++    public void invalidatePathTypeCache(final BlockPos pos) {
++        if (this.pathTypesByPosCache != null) {
++            this.pathTypesByPosCache.invalidate(pos);
++        }
++    }
++
++    public boolean canPool() {
++        return this.localPlayers.isEmpty()
++            && this.allEntities.size() == 0
++            && this.loadedEntities.size() == 0
++            && this.entityTickList.size() == 0
++            && this.navigatingMobs.size() == 0
++            && this.trackerEntities.size() == 0
++            && this.connections.size() == 0
++            && this.chunks.size() == 0
++            && this.tickingChunks.size() == 0
++            && this.entityTickingChunks.size() == 0
++            && this.blockLevelTicks.count() == 0
++            && this.fluidLevelTicks.count() == 0
++            && this.blockEntityTickers.isEmpty()
++            && this.pendingBlockEntityTickers.isEmpty()
++            && this.blockEvents.isEmpty();
++    }
++
++    public void resetForPool() {
++        this.tickData = null;
++        this.regionData = null;
++        this.isHandlingTick = false;
++        this.iteratingTrackerEntities = false;
++        this.tickingBlockEntities = false;
++        this.redstoneTime = 1L;
++        this.hasPhysicsEvent = true;
++        this.hasEntityMoveEvent = false;
++        this.skipPullModeEventFire = false;
++        this.skipPushModeEventFire = false;
++        this.skipHopperEvents = false;
++        this.lastMidTickExecute = 0L;
++        this.lastMidTickExecuteFailure = 0L;
++        this.lagCompensationTick = 0L;
++        this.populating = false;
++        this.captureBlockStates = false;
++        this.captureTreeGeneration = false;
++        this.capturedBlockStates.clear();
++        this.capturedTileEntities.clear();
++        this.captureDrops = null;
++        this.wakeupInactiveRemainingAnimals = 0;
++        this.wakeupInactiveRemainingFlying = 0;
++        this.wakeupInactiveRemainingMonsters = 0;
++        this.wakeupInactiveRemainingVillagers = 0;
++        this.currentPrimedTnt = 0;
++        this.lastSpawnState = null;
++        this.shouldSignal = true;
++        this.explosionDensityCache = null;
++        this.pathTypesByPosCache = null;
++        this.temporaryChunkTickList.clear();
++        this.chunkHoldersToBroadcast.clear();
++        this.redstoneUpdateInfos = null;
++        this.catSpawnerNextTick = 0;
++        this.patrolSpawnerNextTick = 0;
++        this.phantomSpawnerNextTick = 0;
++        this.villageSiegeState = new VillageSiegeState();
++        this.wanderingTraderData = null;
++        this.wireHandler = null;
++        this.turbo = null;
++        this.attributeSamplers = null;
++        this.midTickReadDrain.clear();
++        this.telemetryAccumulator.reset();
++        this.dirtyVoxelCount = 0;
++        this.dirtyVoxelChunkKeys = null;
++        this.dirtyVoxelSectionYs = null;
++        this.dirtyVoxelPackedCells = null;
++        this.residencyTickEndKeys = null;
++    }
++
++    // Paper start - mid-tick read-only safe-point drain & telemetry accumulator
++    private final io.papermc.paper.threadedregions.spi.MidTickReadDrain midTickReadDrain = new io.papermc.paper.threadedregions.spi.MidTickReadDrain();
++    private final io.papermc.paper.spi.PaperTelemetrySpi.RegionAccumulator telemetryAccumulator = new io.papermc.paper.spi.PaperTelemetrySpi.RegionAccumulator();
++
++    public io.papermc.paper.threadedregions.spi.MidTickReadDrain getMidTickReadDrain() {
++        return this.midTickReadDrain;
++    }
++
++    public io.papermc.paper.spi.PaperTelemetrySpi.RegionAccumulator getTelemetryAccumulator() {
++        return this.telemetryAccumulator;
++    }
++    // Paper end - mid-tick read-only safe-point drain & telemetry accumulator
++
++    public void rebind(final TickRegions.TickRegionData newRegionData) {
++        this.regionData = newRegionData;
++        this.updateTickData();
++    }
++    // GoldLeaf end - lazy RegionizedWorldData heavy subsystems and shell reuse (ADR-003)
++
+     public void checkWorld(final Level against) {
+         if (this.world != against) {
+             throw new IllegalStateException("World mismatch: expected " + this.world.getWorld().getName() + " but got " + (against == null ? "null" : against.getWorld().getName()));
+@@ -784,4 +920,85 @@ public final class RegionizedWorldData {
+     public int getChunkCount() {
+         return this.chunks.size();
+     }
++
++    // Paper start - per-region dirty-voxel halo buffer for multi-node sharding SPI
++    private long[] dirtyVoxelChunkKeys;
++    private int[] dirtyVoxelSectionYs;
++    private int[] dirtyVoxelPackedCells;
++    private int dirtyVoxelCount;
++
++    public void recordDirtyVoxelHalo(
++        final int chunkX,
++        final int chunkZ,
++        final int sectionY,
++        final int localPos12,
++        final int runtimeStateId
++    ) {
++        final io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink sink =
++            io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink.get();
++        if (sink == null) {
++            return;
++        }
++        final int packed = io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink.packDirtyVoxel(localPos12, runtimeStateId);
++        sink.recordDirtyVoxel(this.world, chunkX, chunkZ, sectionY, packed);
++        if (this.dirtyVoxelPackedCells == null) {
++            this.dirtyVoxelChunkKeys = new long[64];
++            this.dirtyVoxelSectionYs = new int[64];
++            this.dirtyVoxelPackedCells = new int[64];
++        } else if (this.dirtyVoxelCount >= this.dirtyVoxelPackedCells.length) {
++            final int nextCap = this.dirtyVoxelPackedCells.length << 1;
++            this.dirtyVoxelChunkKeys = Arrays.copyOf(this.dirtyVoxelChunkKeys, nextCap);
++            this.dirtyVoxelSectionYs = Arrays.copyOf(this.dirtyVoxelSectionYs, nextCap);
++            this.dirtyVoxelPackedCells = Arrays.copyOf(this.dirtyVoxelPackedCells, nextCap);
++        }
++        final int idx = this.dirtyVoxelCount++;
++        this.dirtyVoxelChunkKeys[idx] = CoordinateUtils.getChunkKey(chunkX, chunkZ);
++        this.dirtyVoxelSectionYs[idx] = sectionY;
++        this.dirtyVoxelPackedCells[idx] = packed;
++    }
++
++    public void flushDirtyVoxelHalo(final long regionId) {
++        if (this.dirtyVoxelCount == 0) {
++            return;
++        }
++        final int count = this.dirtyVoxelCount;
++        this.dirtyVoxelCount = 0;
++        final io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink sink =
++            io.papermc.paper.threadedregions.spi.DirtyVoxelHaloSink.get();
++        if (sink != null) {
++            sink.flushRegionHalo(
++                this.world,
++                regionId,
++                this.dirtyVoxelChunkKeys,
++                this.dirtyVoxelSectionYs,
++                this.dirtyVoxelPackedCells,
++                count
++            );
++        }
++    }
++
++    private long[] residencyTickEndKeys;
++
++    public void flushResidencyTickEnd() {
++        final ca.spottedleaf.moonrise.spi.ChunkResidencySpi spi = ca.spottedleaf.moonrise.spi.ChunkResidencySpi.get();
++        if (spi == null) {
++            return;
++        }
++        final int count = this.chunks.size();
++        if (count == 0) {
++            return;
++        }
++        long[] keys = this.residencyTickEndKeys;
++        if (keys == null || keys.length < count) {
++            keys = new long[Math.max(64, count)];
++            this.residencyTickEndKeys = keys;
++        }
++        final Object[] raw = this.chunks.getRawDataUnchecked();
++        for (int i = 0; i < count; i++) {
++            final LevelChunk chunk = (LevelChunk) raw[i];
++            keys[i] = CoordinateUtils.getChunkKey(chunk.getPos().x(), chunk.getPos().z());
++        }
++        spi.onRegionTickEnd(this.world.dimension().identifier().toString(), keys, count);
++    }
++    // Paper end - per-region dirty-voxel halo buffer for multi-node sharding SPI
+ }
+\ No newline at end of file
+diff --git a/io/papermc/paper/threadedregions/ThreadedRegionizer.java b/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+index 6b142ca35fbb5d15c1b7df72f61c9b3c8d559a5a..23af90ddb9b0ab20b24b0ae2db34b9f688b37489 100644
+--- a/io/papermc/paper/threadedregions/ThreadedRegionizer.java
++++ b/io/papermc/paper/threadedregions/ThreadedRegionizer.java
+@@ -308,6 +308,7 @@ public final class ThreadedRegionizer<R extends ThreadedRegionizer.ThreadedRegio
+             final int createRadius = this.emptySectionCreateRadius;
+             final int searchRadius = createRadius + this.regionSectionMergeRadius;
+             ReferenceOpenHashSet<ThreadedRegion<R, S>> nearbyRegions = null;
++            final io.papermc.paper.threadedregions.spi.RegionShardFence shardFence = io.papermc.paper.threadedregions.spi.RegionShardFence.get();
+             for (int dx = -searchRadius; dx <= searchRadius; ++dx) {
+                 for (int dz = -searchRadius; dz <= searchRadius; ++dz) {
+                     if ((dx | dz) == 0) {
+@@ -318,6 +319,9 @@ public final class ThreadedRegionizer<R extends ThreadedRegionizer.ThreadedRegio
+ 
+                     final int neighbourX = dx + sectionX;
+                     final int neighbourZ = dz + sectionZ;
++                    if (shardFence != null && shardFence.isMergeFenced(this.world, sectionX, sectionZ, neighbourX, neighbourZ)) {
++                        continue;
++                    }
+                     final long neighbourKey = CoordinateUtils.getChunkKey(neighbourX, neighbourZ);
+ 
+                     ThreadedRegionSection<R, S> neighbourSection = this.sections.get(neighbourKey);
+diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
+index a6ab9cb01f4f49f5f44b6ed324fa6d51139aabb6..01c03d75c7e9492bc731734eecaae4ea9663c791 100644
+--- a/io/papermc/paper/threadedregions/TickRegions.java
++++ b/io/papermc/paper/threadedregions/TickRegions.java
+@@ -42,19 +42,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+     }
+ 
+     private static int getTickThreads(final GlobalConfiguration.ThreadedRegions config) {
+-        int tickThreads;
+-        if (config.threads <= 0) {
+-            tickThreads = OSNuma.getNativeInstance().getTotalCores() / 2;
+-            if (tickThreads <= 4) {
+-                tickThreads = 1;
+-            } else {
+-                tickThreads =  tickThreads / 4;
+-            }
+-        } else {
+-            tickThreads = config.threads;
+-        }
+-
+-        return tickThreads;
++        // Paper start - workstation-aware tick-thread auto-tuner SPI
++        return io.papermc.paper.spi.PaperThreadingSpi.resolveTickThreads(config.threads);
++        // Paper end - workstation-aware tick-thread auto-tuner SPI
+     }
+ 
+     public static void init(final GlobalConfiguration.ThreadedRegions config) {
+@@ -96,8 +86,10 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+     @Override
+     public void onRegionCreate(final ThreadedRegionizer.ThreadedRegion<TickRegionData, TickRegionSectionData> region) {
+         final TickRegionData data = region.getData();
+-        // post-region merge/split regioninfo update
+-        data.getRegionStats().updateFrom(data.getOrCreateRegionizedData(data.world.worldRegionData));
++        // GoldLeaf start - defer RegionizedWorldData allocation until first region activity (ADR-003)
++        // post-region merge/split regioninfo update without eagerly allocating RegionizedWorldData
++        data.getRegionStats().updateFrom(data.getRegionizedData(data.world.worldRegionData));
++        // GoldLeaf end - defer RegionizedWorldData allocation until first region activity (ADR-003)
+     }
+ 
+     @Override
+@@ -108,6 +100,17 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+             region.getData().profiler.stopProfiler();
+         }
+         // Folia end - profiler
++        // GoldLeaf start - bounded RegionizedWorldData shell reuse on destroy (ADR-003)
++        final TickRegionData data = region.getData();
++        final io.papermc.paper.threadedregions.spi.RegionMigrationHook migrationHook = io.papermc.paper.threadedregions.spi.RegionMigrationHook.get();
++        if (migrationHook != null) {
++            migrationHook.onRegionDestroy(data.world, data.id);
++        }
++        final Object removed = data.regionizedData.remove(data.world.worldRegionData);
++        if (removed instanceof RegionizedWorldData worldData) {
++            io.papermc.paper.spi.PaperThreadingSpi.releaseRegionShell(worldData);
++        }
++        // GoldLeaf end - bounded RegionizedWorldData shell reuse on destroy (ADR-003)
+     }
+ 
+     @Override
+@@ -125,6 +128,10 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         scheduler.descheduleRegion(data.tickHandle);
+         // old handle cannot be scheduled anymore, copy to a new handle
+         data.tickHandle = data.tickHandle.copy();
++        final io.papermc.paper.threadedregions.spi.RegionMigrationHook migrationHook = io.papermc.paper.threadedregions.spi.RegionMigrationHook.get();
++        if (migrationHook != null) {
++            migrationHook.onRegionInactive(data.world, data.id);
++        }
+     }
+ 
+     @Override
+@@ -136,6 +143,10 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+             profiler.profilerGroup.preMerge(from, into);
+         }
+         // Folia end - profiler
++        final io.papermc.paper.threadedregions.spi.RegionMigrationHook migrationHook = io.papermc.paper.threadedregions.spi.RegionMigrationHook.get();
++        if (migrationHook != null) {
++            migrationHook.onPreMerge(from.getData().world, from.getData().id, into.getData().id);
++        }
+     }
+ 
+     @Override
+@@ -147,6 +158,14 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+             profiler.profilerGroup.preSplit(from, into);
+         }
+         // Folia end - profiler
++        final io.papermc.paper.threadedregions.spi.RegionMigrationHook migrationHook = io.papermc.paper.threadedregions.spi.RegionMigrationHook.get();
++        if (migrationHook != null) {
++            final long[] intoIds = new long[into.size()];
++            for (int i = 0; i < intoIds.length; i++) {
++                intoIds[i] = into.get(i).getData().id;
++            }
++            migrationHook.onPreSplit(from.getData().world, from.getData().id, intoIds);
++        }
+     }
+ 
+     public static final class TickRegionSectionData implements ThreadedRegionizer.ThreadedRegionSectionData {}
+@@ -205,6 +224,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         private final RegionStats regionStats;
+ 
+         private final AtomicBoolean hasPackets = new AtomicBoolean(false);
++        // Paper start - 0->1 wakeup coalescer for intermediate region tasks
++        private final io.papermc.paper.threadedregions.spi.WakeupCoalescer taskWakeupCoalescer = new io.papermc.paper.threadedregions.spi.WakeupCoalescer();
++        // Paper end - 0->1 wakeup coalescer for intermediate region tasks
+ 
+         public volatile ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle profiler; // Folia - profiler
+ 
+@@ -216,7 +238,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         }
+ 
+         public void setHasTasks() {
+-            TickRegions.getScheduler().setHasTasks(this.tickHandle);
++            // GoldLeaf start - 0->1 wakeup coalescing (ADR-002)
++            this.taskWakeupCoalescer.signalAndNotify(() -> TickRegions.getScheduler().setHasTasks(this.tickHandle));
++            // GoldLeaf end - 0->1 wakeup coalescing (ADR-002)
+         }
+ 
+         public void setHasPackets() {
+@@ -483,6 +507,20 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+             final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle profiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler(); // Folia - profiler
+             profiler.startTick(); try { // Folia - profiler
+             MinecraftServer.getServer().tickServer(startTime, scheduledEnd, TimeUnit.MILLISECONDS.toMillis(10L), this.region);
++            // Paper start - flush dirty-voxel halo, residency tick-end snapshot, and region telemetry SPI
++            final RegionizedWorldData worldData = this.region.world.getCurrentWorldData();
++            if (worldData != null) {
++                worldData.flushDirtyVoxelHalo(this.region.id);
++                worldData.flushResidencyTickEnd();
++                io.papermc.paper.spi.PaperTelemetrySpi.onRegionTickEnd(
++                    this.region.id,
++                    this.region.world.dimension().identifier().toString(),
++                    System.nanoTime() - startTime,
++                    worldData.getPlayerCount(),
++                    worldData.getChunkCount()
++                );
++            }
++            // Paper end - flush dirty-voxel halo, residency tick-end snapshot, and region telemetry SPI
+             } finally { profiler.stopTick(); } // Folia - profiler
+         }
+ 
+@@ -490,25 +528,33 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         protected void runRegionTasks(final BooleanSupplier canContinue) {
+             final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle profiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler(); // Folia start - profiler
+             profiler.startInBetweenTick(); try { // Folia - profiler
+-            final RegionizedTaskQueue.RegionTaskQueueData queue = this.region.taskQueueData;
+-
+-            boolean processedChunkTask = false;
+-
+-            boolean executeChunkTask;
+-            boolean executeTickTask;
+-            boolean executePacketTask;
+-            do {
+-                executeTickTask = queue.executeTickTask();
+-                executeChunkTask = queue.executeChunkTask();
+-                executePacketTask = this.region.drainOnePacket();
+-
+-                processedChunkTask |= executeChunkTask;
+-            } while ((executeChunkTask | executeTickTask | executePacketTask) && canContinue.getAsBoolean());
+-
+-            if (processedChunkTask) {
+-                // if we processed any chunk tasks, try to process ticket level updates for full status changes
+-                this.region.world.moonrise$getChunkTaskScheduler().chunkHolderManager.processTicketUpdates();
+-            }
++            // GoldLeaf start - DSN-1 clear-before-drain / re-arm-if-nonempty wakeup protocol (ADR-002)
++            this.region.taskWakeupCoalescer.drain(
++                this::hasIntermediateTasks,
++                () -> {
++                    final RegionizedTaskQueue.RegionTaskQueueData queue = this.region.taskQueueData;
++
++                    boolean processedChunkTask = false;
++
++                    boolean executeChunkTask;
++                    boolean executeTickTask;
++                    boolean executePacketTask;
++                    do {
++                        executeTickTask = queue.executeTickTask();
++                        executeChunkTask = queue.executeChunkTask();
++                        executePacketTask = this.region.drainOnePacket();
++
++                        processedChunkTask |= executeChunkTask;
++                    } while ((executeChunkTask | executeTickTask | executePacketTask) && canContinue.getAsBoolean());
++
++                    if (processedChunkTask) {
++                        // if we processed any chunk tasks, try to process ticket level updates for full status changes
++                        this.region.world.moonrise$getChunkTaskScheduler().chunkHolderManager.processTicketUpdates();
++                    }
++                },
++                () -> TickRegions.getScheduler().setHasTasks(this)
++            );
++            // GoldLeaf end - DSN-1 clear-before-drain / re-arm-if-nonempty wakeup protocol (ADR-002)
+             } finally { profiler.stopInBetweenTick(); } // Folia - profiler
+         }
+ 
+diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
+index cb569d164a29e4d910d47644a4d1691e6b15eeea..a806012568c765807f83aa2513b1909d587229c3 100644
+--- a/net/minecraft/world/level/Level.java
++++ b/net/minecraft/world/level/Level.java
+@@ -817,7 +817,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+     // Folia start - region ticking
+     public final io.papermc.paper.threadedregions.RegionizedData<io.papermc.paper.threadedregions.RegionizedWorldData> worldRegionData
+         = new io.papermc.paper.threadedregions.RegionizedData<>(
+-        (ServerLevel)this, (regionData) -> new io.papermc.paper.threadedregions.RegionizedWorldData((ServerLevel)Level.this, regionData),
++        (ServerLevel)this, (regionData) -> io.papermc.paper.spi.PaperThreadingSpi.acquireRegionShell((ServerLevel)Level.this, regionData), // Paper - bounded region shell reuse SPI
+         io.papermc.paper.threadedregions.RegionizedWorldData.REGION_CALLBACK
+     );
+     public volatile io.papermc.paper.threadedregions.RegionizedServer.WorldLevelData tickData;

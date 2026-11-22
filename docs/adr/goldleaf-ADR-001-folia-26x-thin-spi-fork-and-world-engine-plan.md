@@ -1,6 +1,6 @@
 # goldleaf-ADR-001 — Folia `26.3.x` Thin-SPI Fork, Barbell Performance Model, and `.lca` / `LeafShard` World-Engine Plan
 
-**Status:** Proposed
+**Status:** In Progress
 **Date:** 2026-11-20
 
 ## Context
@@ -137,3 +137,14 @@ All stages must be validated against two concrete hardware targets plus strict v
   - `resource/LeafAnvil/docs/adr/leafanvil-ADR-002-in-memory-lca-chunk-representation-and-dirty-overlay-compaction.md`
   - `resource/LeafShard/docs/adr/leafshard-ADR-001-hybrid-32x32-lca-region-leases-and-split-brain-fencing.md`
   - `resource/LeafShard/docs/adr/leafshard-ADR-004-brokerless-lshd-control-ring-proxy-direct-kinematics-and-dictionary-lcas-sync.md`
+
+## Implementation & Verification Status
+
+- **Decision §1 (Patch Discipline & Layer 1/2 Separation):** Complete — upstream Folia `0002` and `0004` patches are untouched; `0015` has been dropped so `0017` diffs directly onto upstream `TickRegions.java`; all generic SPI seams (`io.papermc.paper.spi.*`, `io.papermc.paper.threadedregions.spi.*`, `ca.spottedleaf.moonrise.spi.*`) in Layer 1 patches (`paper-patches/features/0009-*`, `minecraft-patches/features/0016..0020-*`) contain zero `dev.leafcraft.goldleaf` imports and zero `goldleaf$`/`goldleaf*` code identifiers. Layer 2 bootstrap wiring lives in `PaperConfigurations.java` (`0010-*`) -> `dev.leafcraft.goldleaf.GoldLeafBootstrap` on both initial boot and config reload.
+- **Stages 1–5 (Code & Unit Verification):** Complete for local verification —
+  - Stage 1 workstation auto-tuner (`TickThreadAutoTuner`) and `goldleaf.yml` validation (`GoldLeafConfig`).
+  - Stage 2 Tier 1 (`LcaRegionStorageProvider` with unified dimension `worldId`) & Tier 2 (`LcaDirectSectionSerializer` zero-NBT CoW section splicing via `commitAndGetSplicedChunkFrameCoW` + `DIRECT_COW_COMMITTED_TAG` write bypass, off-tick `installBaseFrame` residency population, `LevelChunk` unload eviction, and region tick-end `flushResidencyTickEnd`).
+  - Stage 3 two-mode worldgen SPIs (`PaperWorldgenSpi`, `vanilla-exact` default, opt-in `fast` mode).
+  - Stage 4 `LeafShard` seams (`RegionShardFence`, `RegionMigrationHook`, `RegionizedWorldData#flushDirtyVoxelHalo` wired at region tick end and cleared in `resetForPool()`).
+  - Stage 5 (`io_uring` Netty 4.2 transport, `BytecodeFoliaPreflightProvider`, `LcaNetWireEngine` per-world residency resolution, `PaperTelemetrySpi#onRegionTickEnd` driving `GoldLeafMetricsCollector` and `GoldLeafPredictPacer`, and config-gated default-off `BuiltInTechnicalProtocolHandlers` for Servux/Syncmatica/Jade/AppleSkin/Map World-ID; Mob AI deferred past `v0.1`).
+- **Decision §3 (Hardware Benchmark Envelope):** Multi-section `.lca` round-trip, bit-exact `.lca <-> .mca` migration (`LcaMigrationCli --verify`), zero-NBT CoW write bypass, workstation auto-tuner, and Stage 5 telemetry/pacer/protocol gates are verified by `Adr001Decision3VerificationTest` under `GoldLeafTestSuite` and `PaperSpiTestSuite`. Physical Floor (4–8 core NVMe/HDD + live vanilla redstone farms) and Ceiling (4+ node `LeafShard` cluster) hardware benchmarks remain environment-gated before transitioning status from `In Progress` to `Accepted`.

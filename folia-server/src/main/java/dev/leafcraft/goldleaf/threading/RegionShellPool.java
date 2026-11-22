@@ -117,4 +117,32 @@ public final class RegionShellPool {
             this.currentSize.decrementAndGet();
         }
     }
+
+    public record PoolTelemetry(long hits, long misses, long rejectedNonEmpty, int pooledCount) {
+    }
+
+    public PoolTelemetry telemetrySnapshot() {
+        return new PoolTelemetry(
+            this.hits.get(),
+            this.misses.get(),
+            this.rejectedNonEmpty.get(),
+            this.currentSize.get()
+        );
+    }
+
+    public static PoolTelemetry globalTelemetry() {
+        long totalHits = 0L;
+        long totalMisses = 0L;
+        long totalRejected = 0L;
+        int totalPooled = 0;
+        synchronized (POOLS) {
+            for (final RegionShellPool pool : POOLS.values()) {
+                totalHits += pool.getPoolHits();
+                totalMisses += pool.getPoolMisses();
+                totalRejected += pool.getRejectedNonEmpty();
+                totalPooled += pool.getPooledCount();
+            }
+        }
+        return new PoolTelemetry(totalHits, totalMisses, totalRejected, totalPooled);
+    }
 }

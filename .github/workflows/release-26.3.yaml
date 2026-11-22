@@ -76,6 +76,20 @@ jobs:
           set -euo pipefail
           ./gradlew test :folia-server:createPaperclipJar --console=plain --stacktrace
 
+      - name: ADR-007 Preflight & Runtime Hazard Verification Gate
+        run: |
+          set -euo pipefail
+          ./gradlew :folia-server:test \
+            --tests "dev.leafcraft.goldleaf.diagnostics.PluginPreflightAndHazardTest" \
+            --tests "dev.leafcraft.goldleaf.diagnostics.Stage5WiringTest" \
+            --console=plain --stacktrace
+          if [[ -n "${LEAFFUZZ_GATE_SCRIPT:-}" && -x "${LEAFFUZZ_GATE_SCRIPT}" ]]; then
+            echo "Running LeafFuzz release-candidate gate (${LEAFFUZZ_GATE_SCRIPT})"
+            "${LEAFFUZZ_GATE_SCRIPT}" folia-server/build/libs/*paperclip*.jar
+          else
+            echo "LeafFuzz external acceptance harness not configured in runner environment; unit/SPI gates passed."
+          fi
+
       - name: Package Release Artifacts and Checksums
         run: |
           set -euo pipefail

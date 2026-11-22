@@ -1,6 +1,6 @@
 # goldleaf-ADR-003 — Small-Machine Tick-Thread Scaling Curve & Ephemeral Region Allocation Reuse
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-21
 
 ## Context

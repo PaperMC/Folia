@@ -1,0 +1,887 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:29:28 -0600
+Subject: [PATCH] Paper Layer 1 network io_uring protocol diagnostics and
+ telemetry SPI seams
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+index 8dc428c5508ef6ebea772638db1a607fc914c7eb..724a970e5198faa8fbd4aeaf08b2c1079ae75a27 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+@@ -773,7 +773,17 @@ public final class RegionizedPlayerChunkLoader {
+             }
+ 
+             // try to push more chunk generations
+-            final long maxGens = Math.max(0L, Math.min(MAX_RATE, Math.min(this.genQueue.size(), this.getMaxChunkGenerates())));
++            final long baseMaxGens = Math.max(0L, Math.min(MAX_RATE, Math.min(this.genQueue.size(), this.getMaxChunkGenerates())));
++            // GoldLeaf start - ADR-012 per-player chunk-gen backpressure (zero effect below saturation watermark)
++            final long paperNowNanos = System.nanoTime();
++            final long maxGens = ca.spottedleaf.moonrise.spi.ChunkLoadBackpressureSpi.evaluateOrDefault(
++                this.player.getUUID(),
++                this.genQueue.size() + this.generatingQueue.size(),
++                baseMaxGens,
++                this.lastSendDistance,
++                paperNowNanos
++            );
++            // GoldLeaf end - ADR-012 per-player chunk-gen backpressure
+             final long maxGensThisTick = this.chunkGenerateTicketLimiter.takeAllocation(maxGens);
+             long ratedGensThisTick = 0L;
+             while (!this.genQueue.isEmpty()) {
+@@ -804,6 +814,15 @@ public final class RegionizedPlayerChunkLoader {
+                 );
+                 this.generatingQueue.enqueue(chunkKey);
+             }
++            // Paper start - record actual ungenerated-chunk debt (excludes pre-generated disk reads)
++            if (ratedGensThisTick > 0L) {
++                ca.spottedleaf.moonrise.spi.ChunkLoadBackpressureSpi.recordNewChunkGenerationsIfPresent(
++                    this.player.getUUID(),
++                    (int) Math.min(Integer.MAX_VALUE, ratedGensThisTick),
++                    paperNowNanos
++                );
++            }
++            // Paper end - record actual ungenerated-chunk debt
+             // take the allocations we actually used
+             this.chunkGenerateTicketLimiter.returnUnused(maxGensThisTick - ratedGensThisTick);
+ 
+diff --git a/io/papermc/paper/threadedregions/FoliaWatchdogThread.java b/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
+index e9ca1a15049b0211d10401cb78e953b93afaf6c7..7995bfa2d2573614f1285ef7d7c3bda6fbc61664 100644
+--- a/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
++++ b/io/papermc/paper/threadedregions/FoliaWatchdogThread.java
+@@ -82,8 +82,38 @@ public final class FoliaWatchdogThread extends Thread {
+                     LOGGER.error("Global region has not responded in " + totalElapsedS + "s:");
+                 }
+ 
++                final java.lang.management.ThreadInfo threadInfo =
++                    ManagementFactory.getThreadMXBean().getThreadInfo(tick.thread.threadId(), Integer.MAX_VALUE);
++
++                // Paper start - lock-free, fault-isolated region-context watchdog diagnostics SPI
++                if (tick.handle instanceof TickRegions.ConcreteRegionTickHandle region) {
++                    final net.minecraft.world.level.ChunkPos center = region.region.region.getCenterChunk();
++                    io.papermc.paper.spi.PaperDiagnosticsSpi.emitWatchdogContext(
++                        LOGGER,
++                        region.region.world.getWorld().getName(),
++                        center != null ? center.x() : 0,
++                        center != null ? center.z() : 0,
++                        totalElapsedS,
++                        tick.thread.getName(),
++                        false,
++                        threadInfo != null ? threadInfo.getStackTrace() : null
++                    );
++                } else {
++                    io.papermc.paper.spi.PaperDiagnosticsSpi.emitWatchdogContext(
++                        LOGGER,
++                        "global",
++                        0,
++                        0,
++                        totalElapsedS,
++                        tick.thread.getName(),
++                        true,
++                        threadInfo != null ? threadInfo.getStackTrace() : null
++                    );
++                }
++                // Paper end - lock-free, fault-isolated region-context watchdog diagnostics SPI
++
+                 WatchdogThread.dumpThread(
+-                    ManagementFactory.getThreadMXBean().getThreadInfo(tick.thread.threadId(), Integer.MAX_VALUE),
++                    threadInfo,
+                     Bukkit.getServer().getLogger()
+                 );
+             }
+diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+index 5a72fa0d72bfdb927293abe921c57f6ae964a6ec..6ecf91847d36fcb1f5a4ba7e114677ea5908b041 100644
+--- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
++++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+@@ -501,6 +501,13 @@ public final class TickRegionScheduler {
+                 );
+ 
+                 this.addTickTime(time);
++                // Paper start - opt-in TICK_STALL runtime hazard monitor SPI
++                if (io.papermc.paper.spi.PaperDiagnosticsSpi.isHazardMonitorActive()) {
++                    final long regionId = this.region != null ? this.region.id : -1L;
++                    final String tickPhase = this.region != null ? "region_tick" : "global_tick";
++                    io.papermc.paper.spi.PaperDiagnosticsSpi.recordTickIfStalled(regionId, tickEnd - tickStart, tickPhase);
++                }
++                // Paper end - opt-in TICK_STALL runtime hazard monitor SPI
+                 TickRegionScheduler.setTickTask(null);
+                 if (this.region != null) {
+                     TickRegionScheduler.setTickingRegion(null);
+diff --git a/net/minecraft/nbt/NbtAccounter.java b/net/minecraft/nbt/NbtAccounter.java
+index 47628e375ae9e1004a74f3e19247139973c7e4cb..aa7cfb1f03e20fe3c6ab38b35478667c2d98652c 100644
+--- a/net/minecraft/nbt/NbtAccounter.java
++++ b/net/minecraft/nbt/NbtAccounter.java
+@@ -24,6 +24,13 @@ public class NbtAccounter {
+         return new NbtAccounter(DEFAULT_NBT_QUOTA, MAX_STACK_DEPTH);
+     }
+ 
++    // Paper start - untrusted serverbound packet NBT quota SPI (distinct from disk saves)
++    public static NbtAccounter serverboundQuota() {
++        final NbtAccounter custom = io.papermc.paper.spi.PaperNetworkSpi.createServerboundNbtAccounter();
++        return custom != null ? custom : new NbtAccounter(DEFAULT_NBT_QUOTA, 64);
++    }
++    // Paper end - untrusted serverbound packet NBT quota SPI
++
+     public static NbtAccounter uncompressedQuota() {
+         return new NbtAccounter(UNCOMPRESSED_NBT_QUOTA, MAX_STACK_DEPTH);
+     }
+diff --git a/net/minecraft/network/FriendlyByteBuf.java b/net/minecraft/network/FriendlyByteBuf.java
+index 4f2bd2e89f683bbc148e49cc8262c9b1f4544031..53ae99697f2c9f60d87bcbd6b81230a4e2086f86 100644
+--- a/net/minecraft/network/FriendlyByteBuf.java
++++ b/net/minecraft/network/FriendlyByteBuf.java
+@@ -458,7 +458,7 @@ public class FriendlyByteBuf extends ByteBuf {
+     }
+ 
+     public static @Nullable CompoundTag readNbt(final ByteBuf input) {
+-        Tag result = readNbt(input, NbtAccounter.defaultQuota());
++        Tag result = readNbt(input, NbtAccounter.serverboundQuota()); // GoldLeaf - ADR-012 serverbound NBT hardening
+         if (result != null && !(result instanceof CompoundTag)) {
+             throw new DecoderException("Not a compound tag: " + result);
+         } else {
+diff --git a/net/minecraft/server/Main.java b/net/minecraft/server/Main.java
+index a6d9b95c42926754acd2e54e7af7ade3f7d2c322..6372b0e94713c88d68e76ac1948d8fcd78640922 100644
+--- a/net/minecraft/server/Main.java
++++ b/net/minecraft/server/Main.java
+@@ -110,9 +110,16 @@ public class Main {
+                 JvmProfiler.INSTANCE.start(Environment.SERVER);
+             }
+ 
++            final java.nio.file.Path paperConfigDir = (options.valueOf("paper-dir") instanceof java.io.File f) ? f.toPath() : java.nio.file.Path.of(io.papermc.paper.configuration.PaperConfigurations.CONFIG_DIR); // GoldLeaf - ADR-007
++            dev.leafcraft.goldleaf.GoldLeafBootstrap.init(paperConfigDir); // GoldLeaf - ADR-007 early bootstrap before plugin preflight
++            io.papermc.paper.spi.PaperDiagnosticsSpi.markBootStart(); // GoldLeaf - ADR-016
++            final java.nio.file.Path paperPluginsDir = (options.valueOf("plugins") instanceof java.io.File f) ? f.toPath() : java.nio.file.Path.of("plugins"); // GoldLeaf - ADR-016
++            io.papermc.paper.spi.PaperDiagnosticsSpi.startPluginIoPrefetch(paperPluginsDir); // GoldLeaf - ADR-016
++            io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_BOOTSTRAP); // GoldLeaf - ADR-016
+             io.papermc.paper.plugin.PluginInitializerManager.load(options); // Paper
+             Bootstrap.bootStrap();
+             Bootstrap.validate();
++            io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_BOOTSTRAP); // GoldLeaf - ADR-016
+             // Paper start - Perf: Init DataConverter asynchronously
+             // Init for both of these are fairly expensive class-loading wise. Both are called again below/in MinecraftServer.spin,
+             // so failure during class init will become visible there.
+@@ -238,6 +245,7 @@ public class Main {
+ 
+             WorldStem worldStem;
+             try {
++                io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_DATAPACKS); // GoldLeaf - ADR-016
+                 WorldLoader.InitConfig worldLoadConfig = loadOrCreateConfig(settings.getProperties(), levelDataTag, safeModeEnabled, packRepository);
+                 worldStem = Util.<WorldStem>blockUntilDone(
+                         executor -> WorldLoader.load(
+@@ -285,6 +293,7 @@ public class Main {
+                         )
+                     )
+                     .get();
++                io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_DATAPACKS); // GoldLeaf - ADR-016
+             } catch (Exception e) {
+                 LOGGER.warn(
+                     "Failed to load datapacks, can't proceed with server load. You can either fix your datapacks or reset to vanilla with --safeMode", e
+diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
+index f1b703eb2dfdbd0a192a2e68ff479f9799e7f075..527634aadd4fbde41b0b1b68a54a071870137161 100644
+--- a/net/minecraft/server/MinecraftServer.java
++++ b/net/minecraft/server/MinecraftServer.java
+@@ -1069,11 +1069,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         }
+ 
+         LOGGER.info("Stopping server");
++        io.papermc.paper.spi.PaperDiagnosticsSpi.markShutdownStart(); // GoldLeaf - ADR-016
+         Commands.COMMAND_SENDING_POOL.shutdownNow(); // Paper - Perf: Async command map building; Shutdown and don't bother finishing
+         // CraftBukkit start
+         if (this.server != null) {
+             this.server.spark.disable(); // Paper - spark
++            io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_SHUTDOWN_PLUGINS_DISABLE); // GoldLeaf - ADR-016
+             this.server.disablePlugins();
++            io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_SHUTDOWN_PLUGINS_DISABLE); // GoldLeaf - ADR-016
+             this.server.waitForAsyncTasksShutdown(); // Paper - Wait for Async Tasks during shutdown
+         }
+         // CraftBukkit end
+@@ -1147,7 +1150,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         // Spigot end
+         // Paper start - rewrite chunk system
+         LOGGER.info("Waiting for all RegionFile I/O tasks to complete...");
++        io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_SHUTDOWN_IO_FLUSH); // GoldLeaf - ADR-016
+         ca.spottedleaf.moonrise.patches.chunk_system.io.MoonriseRegionFileIO.flush((MinecraftServer)(Object)this);
++        io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_SHUTDOWN_IO_FLUSH); // GoldLeaf - ADR-016
+         LOGGER.info("All RegionFile I/O tasks to complete");
+         if ((Object)this instanceof net.minecraft.server.dedicated.DedicatedServer) {
+             ca.spottedleaf.moonrise.common.util.MoonriseCommon.haltExecutors();
+@@ -1155,6 +1160,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         // Paper end - rewrite chunk system
+         // Paper start - Improved watchdog support - move final shutdown items here
+         Util.shutdownExecutors();
++        io.papermc.paper.spi.PaperDiagnosticsSpi.logShutdownSummaryAndAudit(); // GoldLeaf - ADR-016
+         this.onServerExit();
+         // Paper end - Improved watchdog support - move final shutdown items here
+     }
+@@ -1935,7 +1941,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+ 
+             profiler.pop();
+             profiler.pop();
+-            regionizedWorldData.explosionDensityCache.clear(); // Paper - Optimize explosions // Folia - region threading
++            regionizedWorldData.clearExplosionDensityCache(); // Paper - Optimize explosions // Folia - region threading // GoldLeaf - lazy explosion cache (ADR-003)
+         }
+         //this.isIteratingOverLevels = false; // Paper - Throw exception on world create while being ticked // Folia - region threading
+ 
+diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
+index 762822ce2ccf98952dc92be4824c48fe6bc1bacb..33d27a3211f1f63102b282c53a5a26ee07f6c4fb 100644
+--- a/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -294,8 +294,13 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         }
+ 
+         // CraftBukkit start
++        io.papermc.paper.spi.PaperDiagnosticsSpi.drainPluginIoPrefetch(); // GoldLeaf - ADR-016
++        io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_PLUGINS_LOAD); // GoldLeaf - ADR-016
+         this.server.loadPlugins();
++        io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_PLUGINS_LOAD); // GoldLeaf - ADR-016
++        io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_PLUGINS_ENABLE_STARTUP); // GoldLeaf - ADR-016
+         this.server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
++        io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_PLUGINS_ENABLE_STARTUP); // GoldLeaf - ADR-016
+         // CraftBukkit end
+ 
+         // Paper start - Add Velocity IP Forwarding Support
+@@ -336,11 +341,15 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         long levelNanoTime = Util.getNanos();
+         this.services.nameToIdCache().resolveOfflineUsers(!this.usesAuthentication());
+         LOGGER.info("Preparing level \"{}\"", this.getLevelIdName());
++        io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_LEVEL_LOAD); // GoldLeaf - ADR-016
+         this.loadLevel(this.storageSource.getLevelId()); // CraftBukkit
++        io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_LEVEL_LOAD); // GoldLeaf - ADR-016
+         long elapsed = Util.getNanos() - levelNanoTime;
+         String time = String.format(Locale.ROOT, "%.3fs", elapsed / 1.0E9);
+         LOGGER.info("Done preparing level \"{}\" ({})", this.getLevelIdName(), time); // Paper - Improve startup message, add total time
++        io.papermc.paper.spi.PaperDiagnosticsSpi.startBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_PLUGINS_ENABLE_POSTWORLD); // GoldLeaf - ADR-016
+         this.initPostWorld(); // Paper - don't include plugins in world preparation time
++        io.papermc.paper.spi.PaperDiagnosticsSpi.endBootPhase(io.papermc.paper.spi.PaperDiagnosticsSpi.PHASE_PLUGINS_ENABLE_POSTWORLD); // GoldLeaf - ADR-016
+         if (properties.announcePlayerAchievements != null) {
+             this.getAllLevels().forEach(l -> l.getGameRules().set(GameRules.SHOW_ADVANCEMENT_MESSAGES, properties.announcePlayerAchievements, this.overworld())); // Paper - per-world game rules
+         }
+@@ -369,6 +378,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+ 
+         this.saveEverything(false, true, true);
+         this.notificationManager().serverStarted();
++        io.papermc.paper.spi.PaperDiagnosticsSpi.logBootSummary(); // GoldLeaf - ADR-016
+         return true;
+     }
+ 
+@@ -767,6 +777,11 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+ 
+     @Override
+     public boolean enforceSecureProfile() {
++        // GoldLeaf start - ADR-018 opt-in chat signing disable
++        if (io.papermc.paper.spi.PaperNetworkSpi.isChatSigningDisabled()) {
++            return false;
++        }
++        // GoldLeaf end - ADR-018 opt-in chat signing disable
+         DedicatedServerProperties properties = this.getProperties();
+         // Paper start - Add setting for proxy online mode status
+         return properties.enforceSecureProfile
+diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
+index f5601ee683c9daef74ab34c96b70d990ac6cf534..5685914d4340e7dde1047a4f9642962efaa26068 100644
+--- a/net/minecraft/server/level/ChunkMap.java
++++ b/net/minecraft/server/level/ChunkMap.java
+@@ -1254,6 +1254,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+         // Paper start - optimise entity tracker
+         private long lastChunkUpdate = -1L;
+         private ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk lastTrackedChunk;
++        private final io.papermc.paper.spi.EntityTrackerScaling paper$trackerScaling = new io.papermc.paper.spi.EntityTrackerScaling(); // Paper - entity tracker scaling
+ 
+         @Override
+         public final void moonrise$tick(final ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk chunk) {
+@@ -1274,22 +1275,36 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+             final ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk lastTrackedChunk = this.lastTrackedChunk;
+             this.lastChunkUpdate = currChunkUpdate;
+             this.lastTrackedChunk = chunk;
++            final boolean spatialDirty = this.paper$trackerScaling.observeSpatialState(this.entity.getX(), this.entity.getY(), this.entity.getZ(), this.range, currChunkUpdate); // GoldLeaf - ADR-009
+ 
+             final ServerPlayer[] playersRaw = players.getRawDataUnchecked();
+-
+-            for (int i = 0, len = players.size(); i < len; ++i) {
+-                final ServerPlayer player = playersRaw[i];
+-                this.updatePlayer(player);
++            final int playerCount = players.size();
++            if (playerCount > 0 && (spatialDirty || lastChunkUpdate != currChunkUpdate || lastTrackedChunk != chunk || !this.seenBy.isEmpty() || this.entity.isAlive())) {
++                for (int i = 0; i < playerCount; ++i) {
++                    final ServerPlayer player = playersRaw[i];
++                    this.updatePlayer(player);
++                }
+             }
+ 
+             if (lastChunkUpdate != currChunkUpdate || lastTrackedChunk != chunk) {
+                 // need to purge any players possible not in the chunk list
+-                for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
+-                    final ServerPlayer player = conn.getPlayer();
+-                    if (!players.contains(player)) {
+-                        this.removePlayer(player);
++                // Paper start - allocation-free seenBy purge
++                if (io.papermc.paper.spi.PaperNetworkSpi.isEntityTrackerAllocationFreePurgeEnabled()) {
++                    this.paper$trackerScaling.forEachSnapshot(this.seenBy, (final ServerPlayerConnection conn) -> {
++                        final ServerPlayer player = conn.getPlayer();
++                        if (!players.contains(player)) {
++                            this.removePlayer(player);
++                        }
++                    });
++                } else {
++                    for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
++                        final ServerPlayer player = conn.getPlayer();
++                        if (!players.contains(player)) {
++                            this.removePlayer(player);
++                        }
+                     }
+                 }
++                // GoldLeaf end - ADR-009 allocation-free seenBy purge
+             }
+         }
+ 
+@@ -1307,12 +1322,23 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+                 return;
+             }
+ 
+-            for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
+-                ServerPlayer player = conn.getPlayer();
+-                if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player)) {
+-                    this.removePlayer(player);
++            // Paper start - allocation-free seenBy purge
++            if (io.papermc.paper.spi.PaperNetworkSpi.isEntityTrackerAllocationFreePurgeEnabled()) {
++                this.paper$trackerScaling.forEachSnapshot(this.seenBy, (final ServerPlayerConnection conn) -> {
++                    final ServerPlayer player = conn.getPlayer();
++                    if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player)) {
++                        this.removePlayer(player);
++                    }
++                });
++            } else {
++                for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
++                    ServerPlayer player = conn.getPlayer();
++                    if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player)) {
++                        this.removePlayer(player);
++                    }
+                 }
+             }
++            // GoldLeaf end - ADR-009 allocation-free seenBy purge
+         }
+ 
+         @Override
+@@ -1322,10 +1348,18 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+             if (this.seenBy.isEmpty()) {
+                 return;
+             }
+-            for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
+-                ServerPlayer player = conn.getPlayer();
+-                this.removePlayer(player);
++            // Paper start - allocation-free seenBy clear
++            if (io.papermc.paper.spi.PaperNetworkSpi.isEntityTrackerAllocationFreePurgeEnabled()) {
++                this.paper$trackerScaling.forEachSnapshot(this.seenBy, (final ServerPlayerConnection conn) -> {
++                    this.removePlayer(conn.getPlayer());
++                });
++            } else {
++                for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
++                    ServerPlayer player = conn.getPlayer();
++                    this.removePlayer(player);
++                }
+             }
++            // GoldLeaf end - ADR-009 allocation-free seenBy clear
+         }
+ 
+         @Override
+@@ -1353,6 +1387,11 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+ 
+         @Override
+         public void sendToTrackingPlayers(final Packet<? super ClientGamePacketListener> packet) {
++            // Paper start - BroadcastPacketEncoder SPI
++            if (io.papermc.paper.spi.PaperNetworkSpi.tryBroadcast(this.entity, this.seenBy, packet)) {
++                return;
++            }
++            // Paper end - BroadcastPacketEncoder SPI
+             for (ServerPlayerConnection connection : this.seenBy) {
+                 connection.send(packet);
+             }
+diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
+index 4f52b4d4f1d64599435bb0c252764275e640b83e..d8f08f3b107dd6468629c2c65a81385ea5ff72c4 100644
+--- a/net/minecraft/server/level/ServerChunkCache.java
++++ b/net/minecraft/server/level/ServerChunkCache.java
+@@ -104,6 +104,13 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         // Folia start - region threading
+         if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+             ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.level, chunkX, chunkZ, "Cannot asynchronously load chunks");
++            // Paper start - opt-in SYNC_CHUNK_LOAD runtime hazard counter SPI
++            if (io.papermc.paper.spi.PaperDiagnosticsSpi.isHazardMonitorActive()) {
++                io.papermc.paper.spi.PaperDiagnosticsSpi.recordSyncChunkLoad(
++                    this.level.getWorld().getName(), chunkX, chunkZ, null
++                );
++            }
++            // Paper end - opt-in SYNC_CHUNK_LOAD runtime hazard counter SPI
+         }
+         // Folia end - region threading
+         final ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler chunkTaskScheduler = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler();
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index 882874b3513e1bdc32f03751e8adc359b882d33a..29ceeaff8ee2b9a6737a278e37fcef97ce308cd5 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -885,6 +885,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         }
+ 
+         regionizedWorldData.setHandlingTick(false); // Folia - regionised ticking
++        // GoldLeaf start - mid-tick read-only safe-point drain (ADR-002 §1.3)
++        if (!regionizedWorldData.getMidTickReadDrain().isEmpty()) {
++            regionizedWorldData.getMidTickReadDrain().drain();
++        }
++        // GoldLeaf end - mid-tick read-only safe-point drain (ADR-002 §1.3)
+         profiler.pop();
+         boolean isActive = true || !paperConfig().unsupportedSettings.disableWorldTickingWhenEmpty || this.chunkSource.hasActiveTickets(); // CraftBukkit - this prevents entity cleanup, other issues on servers with no players // Paper - restore this // Folia - unrestore this, we always need to tick empty worlds
+         if (isActive) {
+@@ -955,6 +960,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+             } // Paper - option to disable ticking
+             regionizedWorldData.currentPrimedTnt = 0; // Spigot // Folia - regionised ticking
+         }
++        // GoldLeaf start - mid-tick read-only safe-point drain (ADR-002 §1.3)
++        if (!regionizedWorldData.getMidTickReadDrain().isEmpty()) {
++            regionizedWorldData.getMidTickReadDrain().drain();
++        }
++        // GoldLeaf end - mid-tick read-only safe-point drain (ADR-002 §1.3)
+ 
+         profiler.push("entityManagement");
+         // Paper - rewrite chunk system
+@@ -1990,7 +2000,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         }
+ 
+         this.getChunkSource().blockChanged(pos);
+-        regionizedWorldData.pathTypesByPosCache.invalidate(pos); // Folia - region threading
++        regionizedWorldData.invalidatePathTypeCache(pos); // Folia - region threading // GoldLeaf - lazy PathTypeCache (ADR-003)
+         if (this.paperConfig().misc.updatePathfindingOnBlockUpdate) { // Paper - option to disable pathfinding updates
+         VoxelShape oldShape = old.getCollisionShape(this, pos);
+         VoxelShape newShape = current.getCollisionShape(this, pos);
+@@ -3030,7 +3040,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+     }
+ 
+     public PathTypeCache getPathTypeCache() {
+-        return this.getCurrentWorldData().pathTypesByPosCache; // Folia - region threading
++        return this.getCurrentWorldData().getPathTypesByPosCache(); // Folia - region threading // GoldLeaf - lazy PathTypeCache (ADR-003)
+     }
+ 
+     public void waitForEntities(final ChunkPos centerChunk, final int radius) {
+@@ -3177,7 +3187,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+     // Paper start - optimize redstone (Alternate Current)
+     @Override
+     public alternate.current.wire.WireHandler getWireHandler() {
+-        return this.getCurrentWorldData().wireHandler; // Folia - region threading
++        return this.getCurrentWorldData().getWireHandler(); // Folia - region threading // GoldLeaf - lazy WireHandler (ADR-003)
+     }
+     // Paper end - optimize redstone (Alternate Current)
+ 
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+index feb1a72f3d2765dacb354f34723ababec458a27e..19ba585f022ba16dc46b6244856326806007fc5b 100644
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -444,6 +444,20 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+     public boolean suppressTrackerForLogin = false; // Paper - Fire PlayerJoinEvent when Player is actually ready
+     // CraftBukkit end
+     public boolean isRealPlayer; // Paper
++    // GoldLeaf start - explicit synthetic player tag (ADR-015)
++    private boolean paper$syntheticPlayer;
++
++    public boolean paper$isSyntheticPlayer() {
++        return this.paper$syntheticPlayer;
++    }
++
++    public void paper$setSyntheticPlayer(final boolean synthetic) {
++        this.paper$syntheticPlayer = synthetic;
++        if (synthetic) {
++            this.isRealPlayer = false;
++        }
++    }
++    // GoldLeaf end - explicit synthetic player tag (ADR-015)
+     public com.destroystokyo.paper.event.entity.@Nullable PlayerNaturallySpawnCreaturesEvent playerNaturallySpawnedEvent; // Paper - PlayerNaturallySpawnCreaturesEvent
+     public org.bukkit.event.player.PlayerQuitEvent.@Nullable QuitReason quitReason = null; // Paper - Add API for quit reason; there are a lot of changes to do if we change all methods leading to the event
+ 
+diff --git a/net/minecraft/server/network/EventLoopGroupHolder.java b/net/minecraft/server/network/EventLoopGroupHolder.java
+index 9544eaee7e02d00226d957ea0b79cd1a1fb0c4d0..9ea0d4bed5adb59f1e3413eb326e9795c21a25c7 100644
+--- a/net/minecraft/server/network/EventLoopGroupHolder.java
++++ b/net/minecraft/server/network/EventLoopGroupHolder.java
+@@ -10,6 +10,10 @@ import io.netty.channel.epoll.Epoll;
+ import io.netty.channel.epoll.EpollIoHandler;
+ import io.netty.channel.epoll.EpollServerSocketChannel;
+ import io.netty.channel.epoll.EpollSocketChannel;
++import io.netty.channel.uring.IoUring;
++import io.netty.channel.uring.IoUringIoHandler;
++import io.netty.channel.uring.IoUringServerSocketChannel;
++import io.netty.channel.uring.IoUringSocketChannel;
+ import io.netty.channel.kqueue.KQueue;
+ import io.netty.channel.kqueue.KQueueIoHandler;
+ import io.netty.channel.kqueue.KQueueServerSocketChannel;
+@@ -30,6 +34,13 @@ public abstract class EventLoopGroupHolder {
+             return NioIoHandler.newFactory();
+         }
+     };
++    private static final boolean DISABLE_IO_URING = Boolean.getBoolean("Paper.disableIoUring");
++    private static final EventLoopGroupHolder IO_URING = new EventLoopGroupHolder("io_uring", IoUringSocketChannel.class, IoUringServerSocketChannel.class) {
++        @Override
++        protected IoHandlerFactory ioHandlerFactory() {
++            return IoUringIoHandler.newFactory();
++        }
++    };
+     private static final EventLoopGroupHolder EPOLL = new EventLoopGroupHolder("Epoll", EpollSocketChannel.class, EpollServerSocketChannel.class) {
+         @Override
+         protected IoHandlerFactory ioHandlerFactory() {
+@@ -69,6 +80,10 @@ public abstract class EventLoopGroupHolder {
+     public static EventLoopGroupHolder remote(final java.net.@Nullable SocketAddress address, final boolean allowNativeTransport) {
+         // Paper end - Unix domain socket support
+         if (allowNativeTransport) {
++            if (!DISABLE_IO_URING && !(address instanceof io.netty.channel.unix.DomainSocketAddress) && IoUring.isAvailable()) {
++                return IO_URING;
++            }
++
+             if (KQueue.isAvailable()) {
+                 return KQUEUE;
+             }
+diff --git a/net/minecraft/server/network/PlayerChunkSender.java b/net/minecraft/server/network/PlayerChunkSender.java
+index 196c01fe5f200ed57e6f23e0939cac616305571a..c7341d290b574eb6df2658d6b1d9ed08d882b074 100644
+--- a/net/minecraft/server/network/PlayerChunkSender.java
++++ b/net/minecraft/server/network/PlayerChunkSender.java
+@@ -81,7 +81,11 @@ public class PlayerChunkSender {
+     public static void sendChunk(final ServerGamePacketListenerImpl connection, final ServerLevel level, final LevelChunk chunk) { // Paper - rewrite chunk system - public
+         // Paper start - Anti-Xray
+         final boolean shouldModify = level.chunkPacketBlockController.shouldModify(connection.player, chunk);
+-        connection.send(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null, shouldModify));
++        // Paper start - chunk stream interceptor & off-tick chunk packet SPI
++        if (!io.papermc.paper.spi.PaperNetworkSpi.trySendChunk(connection, level, chunk, shouldModify)) {
++            connection.send(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null, shouldModify));
++        }
++        // Paper end - chunk stream interceptor & off-tick chunk packet SPI
+         // Paper end - Anti-Xray
+         // Paper start - PlayerChunkLoadEvent
+         if (io.papermc.paper.event.packet.PlayerChunkLoadEvent.getHandlerList().getRegisteredListeners().length > 0) {
+diff --git a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
+index 010180899d69d0457dcc9feee4f1c062c5354995..d9e84fe0fba7bea59f0074f114d25e8dd0001fa3 100644
+--- a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
+@@ -176,6 +176,17 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+                 this.clientBrand = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.wrappedBuffer(data)).readUtf(256);
+             }
+ 
++            // Paper start - region-safe technical client protocol SPI
++            if (this instanceof ServerGamePacketListenerImpl gameListener) {
++                io.papermc.paper.spi.PaperNetworkSpi.dispatchTechnicalProtocol(
++                    gameListener.player.getUUID(),
++                    identifier.toString(),
++                    data,
++                    (uuid, perm) -> gameListener.getCraftPlayer().hasPermission(perm)
++                );
++            }
++            // Paper end - region-safe technical client protocol SPI
++
+             this.cserver.getMessenger().dispatchIncomingMessage(paperConnection(), identifier.toString(), data);
+         } catch (final Exception e) {
+             LOGGER.error("Couldn't handle custom payload on channel {}", identifier, e);
+diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index e26167a0943b370c7a4d2aec7a798254955d9413..651b9e8a26febc584927bb5a9563e0ce89069bcf 100644
+--- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -1390,6 +1390,15 @@ public class ServerGamePacketListenerImpl
+ 
+     @Override
+     public void handleEditBook(final ServerboundEditBookPacket packet) {
++        // GoldLeaf start - ADR-012 decode-time book payload hardening
++        final int goldleafBookDecision = io.papermc.paper.spi.PaperNetworkSpi.validateBookEdit(this.player.getUUID(), packet.pages());
++        if (goldleafBookDecision != 0) {
++            if (goldleafBookDecision == 2) {
++                this.disconnectAsync(Component.literal("Invalid book payload!"), org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION);
++            }
++            return;
++        }
++        // GoldLeaf end - ADR-012 decode-time book payload hardening
+         // Paper start - Book size limits
+         final io.papermc.paper.configuration.type.number.IntOr.Disabled pageMax = io.papermc.paper.configuration.GlobalConfiguration.get().itemValidation.bookSize.pageMax;
+         if (!this.cserver.isPrimaryThread() && pageMax.enabled()) {
+@@ -2880,6 +2889,12 @@ public class ServerGamePacketListenerImpl
+     }
+ 
+     public void sendPlayerChatMessage(final PlayerChatMessage message, final ChatType.Bound chatType) {
++        // GoldLeaf start - ADR-018 opt-in chat signing disable (strip signature via disguised chat)
++        if (io.papermc.paper.spi.PaperNetworkSpi.isChatSigningDisabled()) {
++            this.sendDisguisedChatMessage(message.decoratedContent(), chatType);
++            return;
++        }
++        // GoldLeaf end - ADR-018 opt-in chat signing disable
+         // CraftBukkit start - SPIGOT-7262: if hidden we have to send as disguised message. Query whether we should send at all (but changing this may not be expected).
+         if (!this.getCraftPlayer().canSeePlayer(message.link().sender())) {
+             this.sendDisguisedChatMessage(message.decoratedContent(), chatType);
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+index 8bc6dd5163861d2e10380acf07e6b3ed097f79b3..7aeab1e84c64d7f716c2112a233b16ffb303a1ac 100644
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -224,6 +224,7 @@ public abstract class PlayerList {
+ 
+     public void placeNewPlayer(final Connection connection, final ServerPlayer player, final CommonListenerCookie cookie) {
+         player.isRealPlayer = true; // Paper
++        io.papermc.paper.spi.PaperNetworkSpi.onPlayerJoin(player.getUUID()); // GoldLeaf - ADR-010/011 player lifecycle hook
+         player.loginTime = System.currentTimeMillis(); // Paper - Replace OfflinePlayer#getLastPlayed
+         NameAndId gameProfile = player.nameAndId();
+         UserNameToIdResolver profileCache = this.server.services().nameToIdCache();
+@@ -597,6 +598,7 @@ public abstract class PlayerList {
+         // This removes the scoreboard (and player reference) for the specific player in the manager
+         this.cserver.getScoreboardManager().removePlayer(player.getBukkitEntity());
+         // CraftBukkit end
++        io.papermc.paper.spi.PaperNetworkSpi.onPlayerQuit(player.getUUID()); // GoldLeaf - S-002 per-player state eviction
+         return playerQuitEvent.quitMessage(); // Paper - Adventure
+     }
+ 
+diff --git a/net/minecraft/world/level/ServerExplosion.java b/net/minecraft/world/level/ServerExplosion.java
+index 79eb05b5f7ac2388eaa41c31239cf4594ce37b53..3e323fc1d7db43e54fd21a89bf66d51d97e4a597 100644
+--- a/net/minecraft/world/level/ServerExplosion.java
++++ b/net/minecraft/world/level/ServerExplosion.java
+@@ -738,10 +738,11 @@ public class ServerExplosion implements Explosion {
+         }
+         io.papermc.paper.threadedregions.RegionizedWorldData worldData = this.level.getCurrentWorldData(); // Folia - region threading
+         CacheKey key = new CacheKey(this, entity.getBoundingBox());
+-        Float blockDensity = worldData.explosionDensityCache.get(key); // Folia - region threading
++        java.util.Map<CacheKey, Float> explosionCache = worldData.getExplosionDensityCache(); // GoldLeaf - lazy explosion cache (ADR-003)
++        Float blockDensity = explosionCache.get(key); // Folia - region threading
+         if (blockDensity == null) {
+             blockDensity = this.getSeenFraction(center, entity, this.directMappedBlockCache, this.mutablePos); // Paper - collision optimisations
+-            worldData.explosionDensityCache.put(key, blockDensity); // Folia - region threading
++            explosionCache.put(key, blockDensity); // Folia - region threading
+         }
+ 
+         return blockDensity;
+diff --git a/net/minecraft/world/level/block/RedstoneWireBlock.java b/net/minecraft/world/level/block/RedstoneWireBlock.java
+index 92a174eb11521a68a1d2d65f6786ea4eea7438e5..1bc75d582ff5367445511e9275a79221253caca2 100644
+--- a/net/minecraft/world/level/block/RedstoneWireBlock.java
++++ b/net/minecraft/world/level/block/RedstoneWireBlock.java
+@@ -268,7 +268,7 @@ public class RedstoneWireBlock extends Block {
+     io.papermc.paper.redstone.RedstoneWireTurbo turbo = new io.papermc.paper.redstone.RedstoneWireTurbo(this);
+     // Folia start - region threading
+     private io.papermc.paper.redstone.RedstoneWireTurbo getTurbo(Level world) {
+-        return world.getCurrentWorldData().turbo;
++        return world.getCurrentWorldData().getTurbo(); // GoldLeaf - lazy RedstoneWireTurbo (ADR-003)
+     }
+     // Folia end - region threading
+ 
+@@ -278,6 +278,17 @@ public class RedstoneWireBlock extends Block {
+      * Note: Added 'source' argument so as to help determine direction of information flow
+      */
+     private void updateSurroundingRedstone(Level worldIn, BlockPos pos, BlockState state, @Nullable Orientation orientation, boolean blockAdded) {
++        // GoldLeaf start - ChunkExecutionMask & ChunkActivityCounters hook (ADR-006)
++        final net.minecraft.world.level.chunk.LevelChunk paperChunk = worldIn.getChunkIfLoaded(pos);
++        if (paperChunk != null) {
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isExecutionSuppressed(paperChunk, io.papermc.paper.spi.PaperTelemetrySpi.SUPPRESS_REDSTONE)) {
++                return;
++            }
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isTelemetryActive()) {
++                paperChunk.paper$getOrCreateActivityCounters().recordRedstoneUpdate();
++            }
++        }
++        // GoldLeaf end - ChunkExecutionMask & ChunkActivityCounters hook (ADR-006)
+         if (worldIn.paperConfig().misc.redstoneImplementation == io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.EIGENCRAFT) {
+             // since 24w33a the source pos is no longer given, but instead an Orientation parameter
+             // when this is not null, it can be used to find the source pos, which the turbo uses
+diff --git a/net/minecraft/world/level/block/entity/BaseContainerBlockEntity.java b/net/minecraft/world/level/block/entity/BaseContainerBlockEntity.java
+index c2f8479eef826efca3ed2993973b2cfc2c51ed00..3aacc7dc1ee014451834003f755086519df85925 100644
+--- a/net/minecraft/world/level/block/entity/BaseContainerBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/BaseContainerBlockEntity.java
+@@ -201,4 +201,18 @@ public abstract class BaseContainerBlockEntity extends BlockEntity implements Co
+         return org.bukkit.craftbukkit.util.CraftLocation.toBukkit(this.worldPosition, this.level);
+     }
+     // CraftBukkit end
++
++    // GoldLeaf start - vanilla-exact container change-count epoch (ADR-013)
++    private int paper$changeCount;
++
++    public int paper$getChangeCount() {
++        return this.paper$changeCount;
++    }
++
++    @Override
++    public void setChanged() {
++        this.paper$changeCount++;
++        super.setChanged();
++    }
++    // GoldLeaf end - vanilla-exact container change-count epoch (ADR-013)
+ }
+diff --git a/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+index bdfce5533041d609f6ee94c888a6298a138a4e92..35b0f92cf6c91bdf4ecb2dda052ccec3a527fc19 100644
+--- a/net/minecraft/world/level/block/entity/HopperBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -127,10 +127,26 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         itemStack.limitSize(this.getMaxStackSize(itemStack));
+     }
+ 
++    // GoldLeaf start - vanilla-exact hopper cache (ADR-013)
++    private final io.papermc.paper.spi.HopperExactCache paper$exactCache =
++        new io.papermc.paper.spi.HopperExactCache();
++
++    public io.papermc.paper.spi.HopperExactCache paper$getExactCache() {
++        return this.paper$exactCache;
++    }
++
++    @Override
++    public void setRemoved() {
++        this.paper$exactCache.invalidateAll();
++        super.setRemoved();
++    }
++    // GoldLeaf end - vanilla-exact hopper cache (ADR-013)
++
+     @Override
+     public void setBlockState(final BlockState blockState) {
+         super.setBlockState(blockState);
+         this.facing = blockState.getValue(HopperBlock.FACING);
++        this.paper$exactCache.invalidateAll(); // GoldLeaf - ADR-013
+     }
+ 
+     @Override
+@@ -139,6 +155,17 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     }
+ 
+     public static void pushItemsTick(final Level level, final BlockPos pos, final BlockState state, final HopperBlockEntity entity) {
++        // GoldLeaf start - ChunkExecutionMask & ChunkActivityCounters hook (ADR-006)
++        final net.minecraft.world.level.chunk.LevelChunk paperChunk = level.getChunkIfLoaded(pos);
++        if (paperChunk != null) {
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isExecutionSuppressed(paperChunk, io.papermc.paper.spi.PaperTelemetrySpi.SUPPRESS_HOPPERS)) {
++                return;
++            }
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isTelemetryActive()) {
++                paperChunk.paper$getOrCreateActivityCounters().recordHopperTransfer();
++            }
++        }
++        // GoldLeaf end - ChunkExecutionMask & ChunkActivityCounters hook (ADR-006)
+         entity.cooldownTime--;
+         entity.tickedGameTime = level.getRedstoneGameTime(); // Folia - region threading
+         if (!entity.isOnCooldown()) {
+@@ -421,18 +448,55 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     private static final java.util.function.BiPredicate<ItemStack, Integer> IS_EMPTY_TEST = (itemStack, _) -> itemStack.isEmpty();
+     // Paper end - Perf: Optimize Hoppers
+ 
++    // GoldLeaf start - ADR-013 sectionEpoch helper for HopperExactCache
++    private static int goldleaf$getSectionEpoch(final Level level, final BlockPos pos) {
++        final net.minecraft.world.level.chunk.ChunkAccess chunk = level.getChunkIfLoadedImmediately(pos.getX() >> 4, pos.getZ() >> 4);
++        if (chunk == null) {
++            return Integer.MIN_VALUE;
++        }
++        final int sectionIndex = chunk.getSectionIndex(pos.getY());
++        final net.minecraft.world.level.chunk.LevelChunkSection[] sections = chunk.getSections();
++        if (sectionIndex < 0 || sectionIndex >= sections.length) {
++            return Integer.MIN_VALUE;
++        }
++        return sections[sectionIndex].paper$getSectionEpoch();
++    }
++    // GoldLeaf end - ADR-013
++
+     private static boolean ejectItems(final Level level, final BlockPos blockPos, final HopperBlockEntity self) {
+         Container container = getAttachedContainer(level, blockPos, self);
+         if (container == null) {
++            self.paper$exactCache.invalidatePush(); // GoldLeaf - ADR-013
++            return false;
++        }
++
++        // GoldLeaf start - ADR-013 HopperExactCache push fast-path
++        final BaseContainerBlockEntity destBe = (container instanceof BaseContainerBlockEntity be
++            && io.papermc.paper.event.inventory.PrepareHopperTransferEvent.getHandlerList().getRegisteredListeners().length == 0) ? be : null;
++        final int destSectionEpoch = destBe != null ? goldleaf$getSectionEpoch(level, destBe.getBlockPos()) : Integer.MIN_VALUE;
++        if (destBe != null && destSectionEpoch != Integer.MIN_VALUE
++            && self.paper$exactCache.canSkipPushScan(self.paper$getChangeCount(), destBe.paper$getChangeCount(), destSectionEpoch, destBe)) {
+             return false;
+         }
++        // GoldLeaf end - ADR-013
+ 
+         Direction direction = self.facing.getOpposite();
+         if (isFullContainer(container, direction)) {
++            if (destBe != null && destSectionEpoch != Integer.MIN_VALUE) {
++                self.paper$exactCache.recordPushNoOp(self.paper$getChangeCount(), destBe.paper$getChangeCount(), destSectionEpoch, destBe);
++            }
+             return false;
+         }
+ 
+-        return hopperPush(level, container, direction, self); // Paper - Perf: Optimize Hoppers
++        final boolean pushed = hopperPush(level, container, direction, self); // Paper - Perf: Optimize Hoppers
++        if (destBe != null && destSectionEpoch != Integer.MIN_VALUE) {
++            if (pushed) {
++                self.paper$exactCache.invalidatePush();
++            } else {
++                self.paper$exactCache.recordPushNoOp(self.paper$getChangeCount(), destBe.paper$getChangeCount(), destSectionEpoch, destBe);
++            }
++        }
++        return pushed;
+     }
+ 
+     // Paper start - Add PrepareHopperTransferEvent
+@@ -517,6 +581,17 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         BlockState blockState = level.getBlockState(blockPos);
+         Container container = getSourceContainer(level, hopper, blockPos, blockState);
+         if (container != null) {
++            // GoldLeaf start - ADR-013 HopperExactCache pull fast-path
++            final HopperBlockEntity selfHopper = hopper instanceof HopperBlockEntity hbe ? hbe : null;
++            final BaseContainerBlockEntity srcBe = (selfHopper != null
++                && container instanceof BaseContainerBlockEntity be
++                && io.papermc.paper.event.inventory.PrepareHopperTransferEvent.getHandlerList().getRegisteredListeners().length == 0) ? be : null;
++            final int srcSectionEpoch = srcBe != null ? goldleaf$getSectionEpoch(level, srcBe.getBlockPos()) : Integer.MIN_VALUE;
++            if (srcBe != null && srcSectionEpoch != Integer.MIN_VALUE
++                && selfHopper.paper$exactCache.canSkipPullScan(selfHopper.paper$getChangeCount(), srcBe.paper$getChangeCount(), srcSectionEpoch, srcBe)) {
++                return false;
++            }
++            // GoldLeaf end - ADR-013
+             Direction direction = Direction.DOWN;
+             worldData.skipPullModeEventFire = worldData.skipHopperEvents; // Paper - Perf: Optimize Hoppers // Folia - region threading
+             final long disallowedSlots = callPrepareTransferEvent(level, container, hopper, false); // Paper - Add PrepareHopperTransferEvent
+@@ -524,10 +599,16 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             for (int slot : getSlots(container, direction)) {
+                 if (isSlotDisallowed(disallowedSlots, slot)) continue; // Paper - Add PrepareHopperTransferEvent
+                 if (tryTakeInItemFromSlot(hopper, container, slot, direction, level)) { // Spigot
++                    if (selfHopper != null) {
++                        selfHopper.paper$exactCache.invalidatePull();
++                    }
+                     return true;
+                 }
+             }
+ 
++            if (srcBe != null && srcSectionEpoch != Integer.MIN_VALUE) {
++                selfHopper.paper$exactCache.recordPullNoOp(selfHopper.paper$getChangeCount(), srcBe.paper$getChangeCount(), srcSectionEpoch, srcBe);
++            }
+             return false;
+         } else {
+             boolean isBlocked = hopper.isGridAligned()
+diff --git a/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+index a71916d41a6e02106fd73725dfb180170bed00d6..c5139f5dd5517fbee26c0f2ba65814b478352ad6 100644
+--- a/net/minecraft/world/level/block/piston/PistonBaseBlock.java
++++ b/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+@@ -92,6 +92,17 @@ public class PistonBaseBlock extends DirectionalBlock {
+     }
+ 
+     private void checkIfExtend(final Level level, final BlockPos pos, final BlockState state) {
++        // GoldLeaf start - ChunkExecutionMask & ChunkActivityCounters hook (ADR-006)
++        final net.minecraft.world.level.chunk.LevelChunk paperChunk = level.getChunkIfLoaded(pos);
++        if (paperChunk != null) {
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isExecutionSuppressed(paperChunk, io.papermc.paper.spi.PaperTelemetrySpi.SUPPRESS_PISTONS)) {
++                return;
++            }
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isTelemetryActive()) {
++                paperChunk.paper$getOrCreateActivityCounters().recordPistonMove();
++            }
++        }
++        // GoldLeaf end - ChunkExecutionMask & ChunkActivityCounters hook (ADR-006)
+         Direction direction = state.getValue(FACING);
+         boolean extend = this.getNeighborSignal(level, pos, direction);
+         if (extend && !state.getValue(EXTENDED)) {
+diff --git a/net/minecraft/world/level/chunk/BulkSectionAccess.java b/net/minecraft/world/level/chunk/BulkSectionAccess.java
+index 84733ae2f3543089a675d82542e77123044de477..db2634dfd352ffe701f0b4a8bd9d3b739a56de4f 100644
+--- a/net/minecraft/world/level/chunk/BulkSectionAccess.java
++++ b/net/minecraft/world/level/chunk/BulkSectionAccess.java
+@@ -24,12 +24,16 @@ public class BulkSectionAccess implements AutoCloseable {
+         if (sectionIndex >= 0 && sectionIndex < this.level.getSectionsCount()) {
+             long sectionKey = SectionPos.asLong(pos);
+             if (this.lastSection == null || this.lastSectionKey != sectionKey) {
+-                this.lastSection = this.acquiredSections.computeIfAbsent(sectionKey, key -> {
++                // GoldLeaf start - Wave 3 eliminate computeIfAbsent capturing lambda
++                LevelChunkSection cached = this.acquiredSections.get(sectionKey);
++                if (cached == null) {
+                     ChunkAccess chunk = this.level.getChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
+-                    LevelChunkSection result = chunk.getSection(sectionIndex);
+-                    result.acquire();
+-                    return result;
+-                });
++                    cached = chunk.getSection(sectionIndex);
++                    cached.acquire();
++                    this.acquiredSections.put(sectionKey, cached);
++                }
++                this.lastSection = cached;
++                // GoldLeaf end - Wave 3 eliminate computeIfAbsent capturing lambda
+                 this.lastSectionKey = sectionKey;
+             }
+ 

@@ -1,6 +1,6 @@
 # goldleaf-ADR-007 — Off-Thread Plugin Safety Preflight and Opt-In Runtime Hazard SPI
 
-**Status:** Proposed
+**Status:** In Progress
 **Date:** 2026-11-21
 
 ## Context

@@ -1,6 +1,6 @@
 # goldleaf-ADR-004 — Worldgen Patching Boundary, Ecosystem Build-vs-Adopt Matrix, and Native 26.3+ GPU Offload SPI
 
-**Status:** Proposed
+**Status:** In Progress
 **Date:** 2026-11-21
 
 ## Context
@@ -42,7 +42,7 @@ Inspecting the materialized `ver/26.3.x` `folia-server` source reveals a major M
 
 ## Decision
 
-GoldLeaf adopts a **thin-SPI, typed-AST worldgen acceleration architecture** tailored to MC `26.3+` (`ChunkStatus.BIOMES` and `ChunkStatus.TERRAIN`), strictly separated into **Layer 1 (upstream-mergeable Folia/Paper patches)** and **Layer 2 (external `LeafAnvil` + `GoldLeaf`/`LeafGen` accelerator modules)** per `goldleaf-ADR-001`.
+GoldLeaf adopts a **thin-SPI, typed-AST-to-IR worldgen acceleration architecture** tailored to MC `26.3+` (`ChunkStatus.BIOMES` and `ChunkStatus.TERRAIN`), strictly separated into **Layer 1 (upstream-mergeable Folia/Paper patches + native `LeafAnvil` `.lca` interop)** and **Layer 2 (native GoldLeaf `IrOpenClTerrainAccelerator` + `:bytecode-api` IR/OpenCL backend + `OpenClKernelCache`, see [`goldleaf-ADR-017`](goldleaf-ADR-017-typed-ast-ir-opencl-worldgen-pipeline-and-throughput-envelope.md))** per `goldleaf-ADR-001`. `LeafGen` is retired as a standalone plugin (`resource/LeafGen/*` unwired), and `LeafAnvil` (`io.github.leafcraftdev:anvil-api`) is native to GoldLeaf so worldgen, storage, residency caching, and network paths interoperate directly on `.lca` section frames without double-translation overhead.
 
 ### 1. Ecosystem Build-vs-Adopt-vs-Reject Matrix
 
@@ -53,12 +53,12 @@ Every major capability operators seek from C2ME/`c2me-ocl`, companion Fabric mod
 | **Multithreaded chunk scheduler & lighting** (`C2ME FlowSched`, `ScalableLux`) | **Inherited (Keep Moonrise + Starlight)** | Paper/Folia already ship Moonrise `ChunkSystem` and Starlight. Replacing Moonrise with `FlowSched` would break Folia regionizer integration and double maintenance. |
 | **Section-batched `doFill` palette & heightmap writes** (`Noisium` / `NoisiumForked` class) | **Implement Ourselves (Layer 1 — Upstream-Candidate)** | Directly fixes `NoiseBasedChunkGenerator#doFill`'s per-voxel `getSection()` + `setBlockState()` overhead. 100% vanilla-exact, zero external dependencies, benefits every CPU-only server (including 4–8 core floor hardware). |
 | **Typed `DensityVolume` & `BIOMES`/`TERRAIN` Batch-Dispatch SPI + Moonrise wave coalescer** | **Implement Ourselves (Layer 1 — Upstream-Candidate)** | Clean, generic SPI seam in `ChunkStatusTasks` / `NoiseBasedChunkGenerator` + optional bounded wave coalescer (`16–32` chunks/wave with `1–2 ms` flush deadline) so GPU/SIMD engines never starve at `1–2` chunks/batch and never use reflection. |
-| **Zero-NBT chunk persistence & cold-section RAM savings** (`Linear`, `FerriteCore`, `c2me gcFreeChunkSerializer`) | **Implement Ourselves (Layer 2 — `LeafAnvil` `.lca`, `goldleaf-ADR-001` Stage 2)** | Eliminates `.mca` + `CompoundTag`/`NbtIo` + zlib backpressure during generation without `.linear`'s full-region RAM penalty, while adding `SEC-DED` integrity and lossless `.lca <-> .mca` conversion. |
-| **Typed `DensityFunction` / `NoiseRouter` Compiler -> OpenCL GPU & JDK 25 Vector API CPU** (`c2me-ocl` / C2ME DFC class) | **Implement Ourselves (Layer 2 — External Engine Module)** | Walks Mojang's unobfuscated `26.3` typed `DensityFunction` / `NoiseRouter` / `SurfaceRules` ASTs directly (Vanilla + all datapacks: Terralith, Tectonic, Incendium, Nullscape). Targets `BIOMES` + `TERRAIN` (`DensityVolume` + `doFill`, then `buildSurface` if profiled hot). Ships a flat JDK 25 Vector API CPU backend for no-GPU hosts alongside OpenCL for dGPU/iGPU hosts. |
+| **Zero-NBT chunk persistence & cold-section RAM savings** (`Linear`, `FerriteCore`, `c2me gcFreeChunkSerializer`) | **Implement Ourselves (Native GoldLeaf — `LeafAnvil` `.lca`, `goldleaf-ADR-001` Stage 2, `goldleaf-ADR-005`)** | Eliminates `.mca` + `CompoundTag`/`NbtIo` + zlib backpressure during generation without `.linear`'s full-region RAM penalty, while adding `SEC-DED` integrity, lossless `.lca <-> .mca` conversion, and zero double-translation across storage/worldgen/network interop. |
+| **Typed Java AST -> `:bytecode-api` IR -> OpenCL GPU & Disk/JAR Kernel Cache** (`goldleaf-ADR-017`) | **Implement Ourselves (Native GoldLeaf — `IrOpenClTerrainAccelerator`)** | Retires `LeafGen` as a standalone plugin. Lowers Mojang's typed `26.3` `DensityFunction` / `NoiseRouter` / `BiomeSource` record trees directly into `:bytecode-api`'s pure Tier-1 `ConceptModule` IR (`OpenClBackendEmitter`, retaining ASM `BytecodeSsaLifter` only as optional/non-hot-path). Supports JAR-packed verified vanilla `.cl` kernels (`META-INF/goldleaf/kernels/`) plus single-flight atomic disk caching of `.cl` and `.clbin` binaries (`~0.61 ms` warm reload on RTX 3090), with explicit PoCL CPU-driver blacklist. |
 | **Jigsaw / structure bounding-box pruning** (`Structure Layout Optimizer` class) | **Adopt / Re-implement Selectively (Layer 1 — Profile-Gated)** | Implement as a small, MIT/upstream-clean Layer 1 patch *only* if profiling after `.lca` + `TERRAIN` acceleration shows `STRUCTURE_STARTS` or `FEATURES` is the dominant remaining bottleneck. |
 | **World-random concurrency guard** (`C2ME CheckedThreadLocalRandom` class) | **Adopt Pattern Selectively (Layer 1 — Opt-in Debug)** | Useful opt-in diagnostic for catching unsafe concurrent `RandomSource` access in plugins or custom generators without affecting production hot paths. |
-| **Bundling `C2ME` / `c2me-ocl` directly** | **Do NOT Include** | Fabric/NeoForge Mixin architecture conflicts with Moonrise; `c2me-ocl` is separately licensed and targets `FlowSched`. Adopt its proven architectural scoping (typed DFC, `BIOMES` + `TERRAIN` focus, PoCL blacklist, honest parity disclosure), not its code. |
-| **JVM bytecode lifting (`ClosedWorldGraphLifter`) & hand-authored `FN_*` carver/feature stampers** (`leafgen-ADR-009`) | **Do NOT Include in GoldLeaf** | Folia servers do not run Fabric/NeoForge Java worldgen mods. Keeping `generateCarvers` (chunk-local inside `TERRAIN`) and `generateFeatures` (native `3×3` `WorldGenRegion`) on Mojang Java eliminates `LeafGen`'s primary regression source. |
+| **Bundling `C2ME` / `c2me-ocl` directly** | **Do NOT Include** | Fabric/NeoForge Mixin architecture conflicts with Moonrise; `c2me-ocl` is separately licensed and targets `FlowSched`. Adopt its proven architectural scoping (`BIOMES` + `TERRAIN` focus, PoCL blacklist, honest parity disclosure), not its code. |
+| **External `LeafGen` reflection plugin (`LeafGenChunkStatusInterceptor`) & hand-authored `FN_*` carver/feature stampers** (`leafgen-ADR-009`) | **Do NOT Include (Retired)** | Reflective `ChunkStatusTasks` interception and hand-authored `FN_*` stampers were `LeafGen`'s primary regression source. Keeping `generateCarvers` (chunk-local inside `TERRAIN`) and `generateFeatures` (native `3×3` `WorldGenRegion`) on Mojang Java while running `:bytecode-api`'s pure IR lifter behind GoldLeaf's typed `TerrainGenerationAccelerator` SPI keeps GPU kernels directly testable and reliable. |
 | **`.linear` region format** (`Kaiiju`, `Luminol`) | **Do NOT Include** | Superseded by `.lca` (`goldleaf-ADR-001` Stage 2). |
 | **Gameplay-altering / unsafe fork patches** (`LeafMC`/`Purpur` DAB, async unsafe mutations, chunk-error auto-regeneration) | **Do NOT Include** | Violates `goldleaf-ADR-001`'s vanilla technical fidelity invariant and creates data-loss or rebase debt. |
 
@@ -79,12 +79,12 @@ Every major capability operators seek from C2ME/`c2me-ocl`, companion Fabric mod
    - Coalesce ready `BIOMES` and `TERRAIN` generation tasks sharing `(ServerLevel, RandomState)` into bounded waves (`16–32` chunks) with a strict low-latency flush deadline (`1–2 ms`) so single-player exploration never waits on a full batch while pre-gen (`Chunky`) and `LeafRTP` bursts saturate the GPU.
    - Coordinate Moonrise generation worker count with `goldleaf-ADR-003`'s `4–8` core hardware-envelope curve so background generation does not starve active region tick threads on small machines.
 
-#### Layer 2 — External Accelerator Engine (`LeafGen` GoldLeaf Backend + `LeafAnvil`)
+#### Layer 2 — Native GoldLeaf Accelerator (`IrOpenClTerrainAccelerator` + `:bytecode-api` IR Backend) + Native `LeafAnvil` Interop
 
-1. **Typed `26.3` AST-to-IR Compiler (No Bytecode Lifter):**
-   - Lower Mojang's typed `NoiseRouter` / `DensityFunction` / `BiomeSource` (and optionally `SurfaceRules.MaterialRule` if profiled hot) directly to a compact SSA/DAG IR compiled to:
-     - **OpenCL C backend** (discrete GPUs & capable iGPUs; disk-cached compiled binaries keyed by `(deviceSignature, routerHash)` so server restarts avoid shader-compile stalls; explicit **PoCL CPU-driver blacklist**).
-     - **JDK 25 Vector API / flat CPU backend** (zero-allocation SIMD/scalar evaluation for surplus 4–8 core hosts and headless VPSes without OpenCL).
+1. **Typed `26.3` Java AST -> `:bytecode-api` `ConceptModule` IR Compiler (No Mandatory Bytecode Scanning on Hot Path; see `goldleaf-ADR-017`):**
+   - Lower Mojang's typed `NoiseRouter` / `DensityFunction` / `BiomeSource` (and optionally `SurfaceRules.MaterialRule` if profiled hot) directly into `:bytecode-api`'s `ConceptModule` SSA IR (`ConceptOptimizerPass` + `OpenClBackendEmitter#emitDensityVolumeBatchProgram`), retaining ASM `BytecodeSsaLifter` only as an optional non-hot-path capability:
+     - **OpenCL C backend (`GoldLeafOpenClBridge` + `OpenClKernelCache`):** Discrete GPUs & capable iGPUs; supports JAR-packed verified vanilla `.cl` kernels (`META-INF/goldleaf/kernels/`) plus single-flight atomic disk caching of lifted `.cl` sources and compiled `.clbin` binaries (`clGetProgramInfo(CL_PROGRAM_BINARIES)` / `clCreateProgramWithBinary`, `~0.61 ms` warm reload on RTX 3090) keyed by `(vendor, deviceName, driverVersion, buildOpts, routerIrSha256)`, with explicit **PoCL CPU-driver blacklist**.
+     - **Flat auto-vectorizable CPU backend (`DensityVectorKernels`):** Zero-allocation SIMD/scalar evaluation for surplus 4–8 core hosts and headless VPSes without OpenCL.
    - **Unsupported / Custom Constructs Fail Closed Cleanly:** If a dimension uses a `CustomChunkGenerator`, an unrecognized `DensityFunction` type, or `Blender` old-chunk blending, route that chunk cleanly to stock Mojang Java *before* GPU dispatch—never half-execute on GPU and fall back mid-stage.
 2. **Scoped Stage Boundary (`BIOMES` + `TERRAIN` Fill; Native `CARVERS` & `FEATURES`):**
    - Accelerate `BIOMES` and `TERRAIN`'s `DensityVolume` + `doFill` (plus `buildSurface` once `doFill` is proven and profiled).
@@ -142,6 +142,7 @@ Every major capability operators seek from C2ME/`c2me-ocl`, companion Fabric mod
 - Related `GoldLeaf` and sibling engine ADRs:
   - `GoldLeaf/docs/adr/goldleaf-ADR-001-folia-26x-thin-spi-fork-and-world-engine-plan.md`
   - `GoldLeaf/docs/adr/goldleaf-ADR-003-gradient-modeled-region-threading-and-small-machine-overhead-elimination.md`
+  - `GoldLeaf/docs/adr/goldleaf-ADR-017-typed-ast-ir-opencl-worldgen-pipeline-and-throughput-envelope.md`
   - `resource/LeafGen/docs/adr/leafgen-ADR-007-dynamic-request-to-response-worldgen-coverage-and-auto-gate.md`
   - `resource/LeafGen/docs/adr/leafgen-ADR-008-ir-idiom-recognition-unified-gpu-lowering-and-anti-regression-gates.md`
   - `resource/LeafGen/docs/adr/leafgen-ADR-009-bytecode-lifted-stateful-voxel-effect-ir-for-carvers-placements-and-features.md`

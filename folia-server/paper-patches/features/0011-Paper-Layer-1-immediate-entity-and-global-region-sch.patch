@@ -1,0 +1,183 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:54:29 -0600
+Subject: [PATCH] Paper Layer 1 immediate entity and global region scheduler
+ dispatch
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+index 2071e638a2075f62aecac33581d02e7081475de9..00c917f09c92519318aa2f8b19aab1e194c948e5 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+@@ -51,9 +51,9 @@ public final class EntityScheduler {
+     private boolean insideScheduledList;
+ 
+     private final ArrayDeque<ScheduledTask> currentlyExecuting = new ArrayDeque<>();
+-    // GoldLeaf start - sub-tick immediate entity task queue (ADR-002)
++    // Paper start - sub-tick immediate entity task queue
+     private final ConcurrentLinkedQueue<ScheduledTask> immediateTasks = new ConcurrentLinkedQueue<>();
+-    // GoldLeaf end - sub-tick immediate entity task queue (ADR-002)
++    // Paper end - sub-tick immediate entity task queue
+ 
+     public EntityScheduler(final CraftEntity entity) {
+         this.entity = Objects.requireNonNull(entity);
+@@ -144,7 +144,7 @@ public final class EntityScheduler {
+             retireTask.accept(thisEntity);
+         }
+ 
+-        // GoldLeaf start - retire pending sub-tick immediate tasks (ADR-002)
++        // Paper start - retire pending sub-tick immediate tasks
+         ScheduledTask immediateTask;
+         while ((immediateTask = this.immediateTasks.poll()) != null) {
+             final Consumer<Entity> retireTask = (Consumer<Entity>)immediateTask.retired;
+@@ -153,7 +153,7 @@ public final class EntityScheduler {
+             }
+             retireTask.accept(thisEntity);
+         }
+-        // GoldLeaf end - retire pending sub-tick immediate tasks (ADR-002)
++        // Paper end - retire pending sub-tick immediate tasks
+ 
+         for (final List<ScheduledTask> tasks : this.oneTimeDelayed.values()) {
+             for (int i = 0, len = tasks.size(); i < len; ++i) {
+@@ -242,7 +242,7 @@ public final class EntityScheduler {
+         return true;
+     }
+ 
+-    // GoldLeaf start - sub-tick immediate entity task scheduling (ADR-002)
++    // Paper start - sub-tick immediate entity task scheduling
+     /**
+      * Schedules a task for immediate sub-tick execution on the region owning this entity.
+      * Re-checks ownership and retirement on the owning region thread before invocation; falls back
+@@ -263,7 +263,11 @@ public final class EntityScheduler {
+             }
+         }
+ 
+-        final Entity handle = this.entity.getHandleRaw();
++        this.enqueueImmediateDrainIfAttached(this.entity.getHandleRaw());
++        return true;
++    }
++
++    private void enqueueImmediateDrainIfAttached(final Entity handle) {
+         if (handle != null && handle.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+             final net.minecraft.world.level.ChunkPos chunkPos = handle.chunkPosition();
+             RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
+@@ -274,13 +278,11 @@ public final class EntityScheduler {
+                 ca.spottedleaf.concurrentutil.util.Priority.HIGHER
+             );
+         }
+-
+-        return true;
+     }
+ 
+     /**
+      * Drains queued immediate tasks if the calling thread currently owns this entity and it is not
+-     * retired. Re-routes to the entity's current chunk if ownership moved before this callback ran.
++     * retired. Re-routes to the entity's current chunk if ownership moved before or during drain.
+      */
+     public void drainImmediateTasks() {
+         final Entity thisEntity = this.entity.getHandleRaw();
+@@ -288,23 +290,19 @@ public final class EntityScheduler {
+             return;
+         }
+         if (!TickThread.isTickThreadFor(thisEntity)) {
+-            if (!this.isRetiredOffThread() && !this.immediateTasks.isEmpty()
+-                && thisEntity.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+-                final net.minecraft.world.level.ChunkPos chunkPos = thisEntity.chunkPosition();
+-                RegionizedServer.getInstance().taskQueue.queueTickTaskQueue(
+-                    serverLevel,
+-                    chunkPos.x(),
+-                    chunkPos.z(),
+-                    this::drainImmediateTasks,
+-                    ca.spottedleaf.concurrentutil.util.Priority.HIGHER
+-                );
++            if (!this.isRetiredOffThread() && !this.immediateTasks.isEmpty()) {
++                this.enqueueImmediateDrainIfAttached(thisEntity);
+             }
+             return;
+         }
+ 
+         ScheduledTask task;
+         while ((task = this.immediateTasks.poll()) != null) {
+-            if (this.tickCount == RETIRED_TICK_COUNT) {
++            final boolean retiredNow;
++            synchronized (this.stateLock) {
++                retiredNow = this.tickCount == RETIRED_TICK_COUNT;
++            }
++            if (retiredNow) {
+                 final Consumer<Entity> retireTask = (Consumer<Entity>)task.retired;
+                 if (retireTask != null) {
+                     retireTask.accept(thisEntity);
+@@ -313,12 +311,15 @@ public final class EntityScheduler {
+             }
+             if (!TickThread.isTickThreadFor(thisEntity)) {
+                 this.immediateTasks.add(task);
++                if (!this.isRetiredOffThread()) {
++                    this.enqueueImmediateDrainIfAttached(thisEntity);
++                }
+                 break;
+             }
+             ((Consumer<Entity>)task.run).accept(thisEntity);
+         }
+     }
+-    // GoldLeaf end - sub-tick immediate entity task scheduling (ADR-002)
++    // Paper end - sub-tick immediate entity task scheduling
+ 
+     /**
+      * Executes a tick for the scheduler.
+@@ -329,9 +330,9 @@ public final class EntityScheduler {
+         final Entity thisEntity = this.entity.getHandleRaw();
+ 
+         TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
+-        // GoldLeaf start - drain any remaining sub-tick immediate tasks at tick boundary (ADR-002)
++        // Paper start - drain any remaining sub-tick immediate tasks at tick boundary
+         this.drainImmediateTasks();
+-        // GoldLeaf end - drain any remaining sub-tick immediate tasks at tick boundary (ADR-002)
++        // Paper end - drain any remaining sub-tick immediate tasks at tick boundary
+ 
+         final List<ScheduledTask> toRun;
+         synchronized (this.stateLock) {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+index da760cd4ed05cd8c809646076eed6b76827559d8..704b681951716763286408cfecb3316e3b19d354 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler.java
+@@ -45,7 +45,7 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+         return this.entity.taskScheduler.schedule(runNMS, runRetired, delay);
+     }
+ 
+-    // GoldLeaf start - sub-tick immediate entity task execution (ADR-002)
++    // Paper start - sub-tick immediate entity task execution
+     @Override
+     public boolean executeImmediate(final Plugin plugin, final Runnable run, final Runnable retired) {
+         final Consumer<? extends Entity> runNMS = wrap(plugin, run);
+@@ -53,7 +53,7 @@ public final class FoliaEntityScheduler implements EntityScheduler {
+ 
+         return this.entity.taskScheduler.scheduleImmediate(runNMS, runRetired);
+     }
+-    // GoldLeaf end - sub-tick immediate entity task execution (ADR-002)
++    // Paper end - sub-tick immediate entity task execution
+ 
+     @Override
+     public @Nullable ScheduledTask run(final Plugin plugin, final Consumer<ScheduledTask> task, final Runnable retired) {
+diff --git a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+index 811dba81649c9ca0a91711b4bde0bfd84b315f83..7def17031595913b25d8ebe53ed6635a1a25535a 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler.java
+@@ -47,7 +47,7 @@ public class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
+         });
+     }
+ 
+-    // GoldLeaf start - sub-tick immediate global region execution (ADR-002)
++    // Paper start - sub-tick immediate global region execution
+     @Override
+     public void executeImmediate(final Plugin plugin, final Runnable run) {
+         Objects.requireNonNull(plugin, "Plugin may not be null");
+@@ -66,7 +66,7 @@ public class FoliaGlobalRegionScheduler implements GlobalRegionScheduler {
+             }
+         });
+     }
+-    // GoldLeaf end - sub-tick immediate global region execution (ADR-002)
++    // Paper end - sub-tick immediate global region execution
+ 
+     @Override
+     public ScheduledTask run(final Plugin plugin, final Consumer<ScheduledTask> task) {

@@ -51,7 +51,7 @@ public final class TickThreadAutoTuner {
     }
 
     static int computeWorkstationAwareThreads(final int totalCores) {
-        if (totalCores <= 2) {
+        if (totalCores <= 3) {
             return 1;
         }
         if (totalCores <= 8) {

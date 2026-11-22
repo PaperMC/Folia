@@ -1,6 +1,6 @@
 # goldleaf-ADR-002 — Sub-Tick Interrupt Scheduling and Latency-Tiered Read/Dispatch Routing
 
-**Status:** Proposed
+**Status:** Accepted (Implemented)
 **Date:** 2026-11-21
 
 ## Context

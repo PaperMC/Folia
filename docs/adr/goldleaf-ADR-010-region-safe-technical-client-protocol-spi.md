@@ -1,6 +1,6 @@
 # goldleaf-ADR-010 — Region-Safe Technical Client Protocol SPI (`Servux`, `Syncmatica`, `Jade`, `AppleSkin`, Map World-ID)
 
-**Status:** Proposed
+**Status:** In Progress
 **Date:** 2026-11-21
 
 ## Context

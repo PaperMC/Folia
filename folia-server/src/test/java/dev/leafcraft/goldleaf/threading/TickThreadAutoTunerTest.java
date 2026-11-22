@@ -24,6 +24,7 @@ class TickThreadAutoTunerTest {
 
         assertEquals(1, TickThreadAutoTuner.resolveTickThreads(-1, config, HardwareEnvelope.of(1, 8L << 30)));
         assertEquals(1, TickThreadAutoTuner.resolveTickThreads(-1, config, HardwareEnvelope.of(2, 8L << 30)));
+        assertEquals(1, TickThreadAutoTuner.resolveTickThreads(-1, config, HardwareEnvelope.of(3, 8L << 30)));
         assertEquals(2, TickThreadAutoTuner.resolveTickThreads(-1, config, HardwareEnvelope.of(4, 8L << 30)));
         assertEquals(3, TickThreadAutoTuner.resolveTickThreads(-1, config, HardwareEnvelope.of(6, 16L << 30)));
         assertEquals(4, TickThreadAutoTuner.resolveTickThreads(-1, config, HardwareEnvelope.of(8, 16L << 30)));

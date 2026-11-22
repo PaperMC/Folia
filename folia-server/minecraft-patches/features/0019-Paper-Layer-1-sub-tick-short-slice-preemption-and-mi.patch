@@ -1,0 +1,325 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 02:54:36 -0600
+Subject: [PATCH] Paper Layer 1 sub-tick short-slice preemption and mid-tick
+ read drain
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/io/papermc/paper/threadedregions/RegionizedServer.java b/io/papermc/paper/threadedregions/RegionizedServer.java
+index ede0e658340698b589a4e3a327fc2b13d9b65ac9..439f60383f3b4899d78a0357879e765d2e432ed3 100644
+--- a/io/papermc/paper/threadedregions/RegionizedServer.java
++++ b/io/papermc/paper/threadedregions/RegionizedServer.java
+@@ -45,9 +45,9 @@ public final class RegionizedServer {
+     private final MultiThreadedQueue<Runnable> globalTickQueue = new MultiThreadedQueue<>();
+ 
+     private final GlobalTickTickHandle tickHandle = new GlobalTickTickHandle(this);
+-    // GoldLeaf start - 0->1 global wakeup coalescer (ADR-002)
++    // Paper start - 0->1 global wakeup coalescer
+     private final io.papermc.paper.threadedregions.spi.WakeupCoalescer globalWakeupCoalescer = new io.papermc.paper.threadedregions.spi.WakeupCoalescer();
+-    // GoldLeaf end - 0->1 global wakeup coalescer (ADR-002)
++    // Paper end - 0->1 global wakeup coalescer
+ 
+     public final PacketProcessor packetProcessor = new PacketProcessor(null);
+ 
+@@ -91,9 +91,9 @@ public final class RegionizedServer {
+     }
+ 
+     public void notifyTasks() {
+-        // GoldLeaf start - 0->1 global wakeup coalescing (ADR-002)
++        // Paper start - 0->1 global wakeup coalescing
+         this.globalWakeupCoalescer.signalAndNotify(() -> TickRegions.getScheduler().setHasTasks(this.tickHandle));
+-        // GoldLeaf end - 0->1 global wakeup coalescing (ADR-002)
++        // Paper end - 0->1 global wakeup coalescing
+     }
+ 
+     private boolean hasAnyGlobalChunkTasks() {
+@@ -221,7 +221,7 @@ public final class RegionizedServer {
+ 
+         @Override
+         protected void runRegionTasks(final BooleanSupplier canContinue) {
+-            // GoldLeaf start - DSN-1 clear-before-drain / re-arm-if-nonempty global wakeup protocol (ADR-002)
++            // Paper start - clear-before-drain / re-arm-if-nonempty global wakeup protocol
+             this.server.globalWakeupCoalescer.drain(
+                 this::hasIntermediateTasks,
+                 () -> {
+diff --git a/io/papermc/paper/threadedregions/RegionizedWorldData.java b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+index fde145390d017e9ef352bda2c0937bf3a6b0bd19..c984ff64e9888a956f656537e7f48ff0d3e7b887 100644
+--- a/io/papermc/paper/threadedregions/RegionizedWorldData.java
++++ b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+@@ -154,6 +154,9 @@ public final class RegionizedWorldData {
+             for (final ChunkHolder chunkHolder : from.chunkHoldersToBroadcast) {
+                 into.chunkHoldersToBroadcast.add(chunkHolder);
+             }
++            // Paper start - migrate pending mid-tick read-only queries on region merge
++            from.midTickReadDrain.migrateAllTo(into.midTickReadDrain);
++            // Paper end - migrate pending mid-tick read-only queries on region merge
+         }
+ 
+         @Override
+@@ -316,6 +319,17 @@ public final class RegionizedWorldData {
+                     into.chunkHoldersToBroadcast.add(chunkHolder);
+                 }
+             }
++            // Paper start - migrate chunk-pinned mid-tick read-only queries on region split
++            from.midTickReadDrain.migrateSplit(entry -> {
++                if (!entry.hasChunkCoords()) {
++                    return null;
++                }
++                final RegionizedWorldData into = regionToData.get(
++                    CoordinateUtils.getChunkKey(entry.chunkX() >> chunkToRegionShift, entry.chunkZ() >> chunkToRegionShift)
++                );
++                return into != null ? into.midTickReadDrain : null;
++            });
++            // Paper end - migrate chunk-pinned mid-tick read-only queries on region split
+         }
+     };
+ 
+@@ -563,7 +577,7 @@ public final class RegionizedWorldData {
+         this.wireHandler = null;
+         this.turbo = null;
+         this.attributeSamplers = null;
+-        this.midTickReadDrain.clear();
++        this.midTickReadDrain.cancelAll();
+         this.telemetryAccumulator.reset();
+         this.dirtyVoxelCount = 0;
+         this.dirtyVoxelChunkKeys = null;
+@@ -587,6 +601,7 @@ public final class RegionizedWorldData {
+ 
+     public void rebind(final TickRegions.TickRegionData newRegionData) {
+         this.regionData = newRegionData;
++        this.midTickReadDrain.reopen();
+         this.updateTickData();
+     }
+     // GoldLeaf end - lazy RegionizedWorldData heavy subsystems and shell reuse (ADR-003)
+diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+index 6ecf91847d36fcb1f5a4ba7e114677ea5908b041..4261e4318c7c800b47fee4efbd278ec89b6170ec 100644
+--- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
++++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+@@ -42,6 +42,9 @@ public final class TickRegionScheduler {
+ 
+     public static final int TICK_RATE = 20;
+     public static final long TIME_BETWEEN_TICKS = 1_000_000_000L / TICK_RATE; // ns
++    // Paper start - bounded short-slice intermediate task preemption budget (500 us)
++    public static final long SHORT_TASK_SLICE_NANOS = TimeUnit.MICROSECONDS.toNanos(500L);
++    // Paper end - bounded short-slice intermediate task preemption budget (500 us)
+     // Folia start - watchdog
+     public static final FoliaWatchdogThread WATCHDOG_THREAD = new FoliaWatchdogThread();
+     static {
+@@ -100,7 +103,7 @@ public final class TickRegionScheduler {
+         if (this.scheduler instanceof StealingScheduledThreadPool stealingScheduledThreadPool) {
+             final Int2IntLinkedOpenHashMap threadAllocation;
+             final long stealThresholdNS = TimeUnit.MILLISECONDS.toNanos(3L);
+-            final long taskTimeSliceNS = TimeUnit.MILLISECONDS.toNanos(2L);
++            final long taskTimeSliceNS = SHORT_TASK_SLICE_NANOS;
+ 
+             if (!MoonriseConstants.NUMA_ENABLE) {
+                 threadAllocation = new Int2IntLinkedOpenHashMap();
+@@ -392,8 +395,11 @@ public final class TickRegionScheduler {
+             final FoliaWatchdogThread.RunningTick runningTick = new FoliaWatchdogThread.RunningTick(tickStart, this, Thread.currentThread()); // Folia - watchdog
+             WATCHDOG_THREAD.addTick(runningTick); // Folia - watchdog
+             try {
++                final long sliceDeadline = tickStart + SHORT_TASK_SLICE_NANOS;
+                 this.runRegionTasks(() -> {
+-                    return !RegionScheduleHandle.this.cancelled.get() && canContinue.getAsBoolean();
++                    return !RegionScheduleHandle.this.cancelled.get()
++                        && canContinue.getAsBoolean()
++                        && (System.nanoTime() - sliceDeadline) < 0L;
+                 });
+             } catch (final Throwable thr) {
+                 this.scheduler.regionFailed(this, true, thr);
+diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
+index 01c03d75c7e9492bc731734eecaae4ea9663c791..486f9c21d6f3d58a4dbc1ac01d399a6e23622ad8 100644
+--- a/io/papermc/paper/threadedregions/TickRegions.java
++++ b/io/papermc/paper/threadedregions/TickRegions.java
+@@ -238,9 +238,9 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         }
+ 
+         public void setHasTasks() {
+-            // GoldLeaf start - 0->1 wakeup coalescing (ADR-002)
++            // Paper start - 0->1 wakeup coalescing
+             this.taskWakeupCoalescer.signalAndNotify(() -> TickRegions.getScheduler().setHasTasks(this.tickHandle));
+-            // GoldLeaf end - 0->1 wakeup coalescing (ADR-002)
++            // Paper end - 0->1 wakeup coalescing
+         }
+ 
+         public void setHasPackets() {
+@@ -307,7 +307,7 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+             return this.holderManagerRegionData;
+         }
+ 
+-        <T> T getRegionizedData(final RegionizedData<T> regionizedData) {
++        public <T> T getRegionizedData(final RegionizedData<T> regionizedData) {
+             return (T)this.regionizedData.get(regionizedData);
+         }
+ 
+@@ -528,7 +528,7 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+         protected void runRegionTasks(final BooleanSupplier canContinue) {
+             final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle profiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler(); // Folia start - profiler
+             profiler.startInBetweenTick(); try { // Folia - profiler
+-            // GoldLeaf start - DSN-1 clear-before-drain / re-arm-if-nonempty wakeup protocol (ADR-002)
++            // Paper start - clear-before-drain / re-arm-if-nonempty wakeup protocol
+             this.region.taskWakeupCoalescer.drain(
+                 this::hasIntermediateTasks,
+                 () -> {
+diff --git a/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java b/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
+index 08e957e5605561f00de81e20646e132bff42996f..34292310f71dc35609d8146a34b2d3b52a00b143 100644
+--- a/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
++++ b/io/papermc/paper/threadedregions/scheduler/FoliaRegionScheduler.java
+@@ -70,6 +70,26 @@ public final class FoliaRegionScheduler implements RegionScheduler {
+         );
+     }
+ 
++    @Override
++    public void executeReadOnlyMidTick(final Plugin plugin, final World world, final int chunkX, final int chunkZ, final Runnable run) {
++        Objects.requireNonNull(plugin, "Plugin may not be null");
++        Objects.requireNonNull(world, "World may not be null");
++        Objects.requireNonNull(run, "Runnable may not be null");
++
++        final ServerLevel serverLevel = ((CraftWorld) world).getHandle();
++        final io.papermc.paper.threadedregions.ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData> region =
++            serverLevel.regioniser.getRegionAtUnsynchronised(chunkX, chunkZ);
++        if (region != null) {
++            final io.papermc.paper.threadedregions.RegionizedWorldData worldData =
++                region.getData().getRegionizedData(serverLevel.worldRegionData);
++            if (worldData != null) {
++                worldData.getMidTickReadDrain().enqueue(chunkX, chunkZ, wrap(plugin, world, chunkX, chunkZ, run));
++                return;
++            }
++        }
++        this.execute(plugin, world, chunkX, chunkZ, run);
++    }
++
+     @Override
+     public ScheduledTask run(final Plugin plugin, final World world, final int chunkX, final int chunkZ, final Consumer<ScheduledTask> task) {
+         return this.runDelayed(plugin, world, chunkX, chunkZ, task, 1);
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index 29ceeaff8ee2b9a6737a278e37fcef97ce308cd5..eccd69a22294fff69089c0ee18b3500d6c9ea281 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -819,6 +819,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+     public void tick(BooleanSupplier haveTime, final io.papermc.paper.threadedregions.TickRegions.TickRegionData region) { // Folia - regionised ticking
+         final io.papermc.paper.threadedregions.RegionizedWorldData regionizedWorldData = this.getCurrentWorldData(); // Folia - regionised ticking
+         final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle foliaProfiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler(); // Folia - profiler
++        final boolean paperTelemetry = io.papermc.paper.spi.PaperTelemetrySpi.isTelemetryActive(); // GoldLeaf - ADR-006 single-volatile idle guard
++        final long paperRegionId = region != null ? region.id : -1L;
++        final String paperWorldName = paperTelemetry ? this.dimension().identifier().toString() : null;
++        final ChunkPos paperCenter = (paperTelemetry && region != null) ? region.region.getCenterChunk() : null;
++        final int paperCenterX = paperCenter != null ? paperCenter.x() : 0;
++        final int paperCenterZ = paperCenter != null ? paperCenter.z() : 0;
+         ProfilerFiller profiler = Profiler.get();
+         regionizedWorldData.setHandlingTick(true); // Folia - regionised ticking
+         this.environmentAttributes().invalidateTickCache();
+@@ -854,6 +860,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+ 
+         profiler.push("tickPending");
+         if (!this.isDebug() && runs) {
++            final long paperSchedStart = paperTelemetry ? System.nanoTime() : 0L;
+             long tick = this.getRedstoneGameTime(); // Folia - region threading
+             profiler.push("blockTicks");
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BLOCK_TICK); try { // Folia - profiler
+@@ -864,6 +871,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+             regionizedWorldData.getFluidLevelTicks().tick(tick, paperConfig().environment.maxFluidTicks, this::tickFluid); // Paper - configurable max fluid ticks // Folia - region threading
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.FLUID_TICK); } // Folia - profiler
+             profiler.pop();
++            if (paperTelemetry) {
++                final long dur = System.nanoTime() - paperSchedStart;
++                regionizedWorldData.getTelemetryAccumulator().addPhaseNanos(io.papermc.paper.spi.PaperTelemetrySpi.PHASE_SCHEDULED_TICK, dur);
++                io.papermc.paper.spi.PaperTelemetrySpi.dispatchPhaseSample(paperRegionId, paperWorldName, paperCenterX, paperCenterZ, io.papermc.paper.spi.PaperTelemetrySpi.PHASE_SCHEDULED_TICK, dur);
++            }
+         }
+ 
+         profiler.popPush("raid");
+@@ -874,9 +886,15 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         }
+ 
+         profiler.popPush("chunkSource");
++        final long paperRandStart = paperTelemetry ? System.nanoTime() : 0L;
+         foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.CHUNK_PROVIDER_TICK); try { // Folia - profiler
+         this.getChunkSource().tick(haveTime, true);
+         } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.CHUNK_PROVIDER_TICK); } // Folia - profiler
++        if (paperTelemetry) {
++            final long dur = System.nanoTime() - paperRandStart;
++            regionizedWorldData.getTelemetryAccumulator().addPhaseNanos(io.papermc.paper.spi.PaperTelemetrySpi.PHASE_RANDOM_TICK, dur);
++            io.papermc.paper.spi.PaperTelemetrySpi.dispatchPhaseSample(paperRegionId, paperWorldName, paperCenterX, paperCenterZ, io.papermc.paper.spi.PaperTelemetrySpi.PHASE_RANDOM_TICK, dur);
++        }
+         profiler.popPush("blockEvents");
+         if (runs) {
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BLOCK_EVENT_TICK); try { // Folia - profiler
+@@ -885,11 +903,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         }
+ 
+         regionizedWorldData.setHandlingTick(false); // Folia - regionised ticking
+-        // GoldLeaf start - mid-tick read-only safe-point drain (ADR-002 §1.3)
++        // Paper start - mid-tick read-only safe-point drain
+         if (!regionizedWorldData.getMidTickReadDrain().isEmpty()) {
+             regionizedWorldData.getMidTickReadDrain().drain();
+         }
+-        // GoldLeaf end - mid-tick read-only safe-point drain (ADR-002 §1.3)
++        // Paper end - mid-tick read-only safe-point drain
+         profiler.pop();
+         boolean isActive = true || !paperConfig().unsupportedSettings.disableWorldTickingWhenEmpty || this.chunkSource.hasActiveTickets(); // CraftBukkit - this prevents entity cleanup, other issues on servers with no players // Paper - restore this // Folia - unrestore this, we always need to tick empty worlds
+         if (isActive) {
+@@ -922,6 +940,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.ACTIVATE_ENTITIES); try { // Folia - profiler
+             io.papermc.paper.entity.activation.ActivationRange.activateEntities(this); // Paper - EAR
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.ACTIVATE_ENTITIES); } // Folia - profiler
++            final long paperEntityStart = paperTelemetry ? System.nanoTime() : 0L;
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.ENTITY_TICK); try { // Folia - profiler
+             regionizedWorldData // Folia - regionised ticking
+                 .forEachTickingEntity( // Folia - regionised ticking
+@@ -951,20 +970,31 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+                     }
+                 );
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.ENTITY_TICK); } // Folia - profiler
++            if (paperTelemetry) {
++                final long dur = System.nanoTime() - paperEntityStart;
++                regionizedWorldData.getTelemetryAccumulator().addPhaseNanos(io.papermc.paper.spi.PaperTelemetrySpi.PHASE_ENTITY, dur);
++                io.papermc.paper.spi.PaperTelemetrySpi.dispatchPhaseSample(paperRegionId, paperWorldName, paperCenterX, paperCenterZ, io.papermc.paper.spi.PaperTelemetrySpi.PHASE_ENTITY, dur);
++            }
+             if (this.paperConfig().unsupportedSettings.ticking.blockEntities) { // Paper - option to disable ticking
+             profiler.popPush("blockEntities");
++            final long paperBeStart = paperTelemetry ? System.nanoTime() : 0L;
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.TILE_ENTITY); try { // Folia - profiler
+             this.tickBlockEntities();
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.TILE_ENTITY); } // Folia - profiler
++            if (paperTelemetry) {
++                final long dur = System.nanoTime() - paperBeStart;
++                regionizedWorldData.getTelemetryAccumulator().addPhaseNanos(io.papermc.paper.spi.PaperTelemetrySpi.PHASE_BLOCK_ENTITY, dur);
++                io.papermc.paper.spi.PaperTelemetrySpi.dispatchPhaseSample(paperRegionId, paperWorldName, paperCenterX, paperCenterZ, io.papermc.paper.spi.PaperTelemetrySpi.PHASE_BLOCK_ENTITY, dur);
++            }
+             profiler.pop();
+             } // Paper - option to disable ticking
+             regionizedWorldData.currentPrimedTnt = 0; // Spigot // Folia - regionised ticking
+         }
+-        // GoldLeaf start - mid-tick read-only safe-point drain (ADR-002 §1.3)
++        // Paper start - mid-tick read-only safe-point drain
+         if (!regionizedWorldData.getMidTickReadDrain().isEmpty()) {
+             regionizedWorldData.getMidTickReadDrain().drain();
+         }
+-        // GoldLeaf end - mid-tick read-only safe-point drain (ADR-002 §1.3)
++        // Paper end - mid-tick read-only safe-point drain
+ 
+         profiler.push("entityManagement");
+         // Paper - rewrite chunk system
+@@ -1499,7 +1529,19 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+         profiler.push(entity.typeHolder()::getRegisteredName);
+         profiler.incrementCounter("tickNonPassenger");
+         entity.commonTick();
+-        final boolean isActive = io.papermc.paper.entity.activation.ActivationRange.checkIfActive(entity); // Paper - EAR 2
++        boolean isActive = io.papermc.paper.entity.activation.ActivationRange.checkIfActive(entity); // Paper - EAR 2
++        // GoldLeaf start - DAMPEN_ENTITY_AI & entityTicks counter hook (ADR-006)
++        final LevelChunk paperEntityChunk = this.getChunkIfLoaded(entity.blockPosition());
++        if (paperEntityChunk != null) {
++            if (isActive && !(entity instanceof Player)
++                && io.papermc.paper.spi.PaperTelemetrySpi.isExecutionSuppressed(paperEntityChunk, io.papermc.paper.spi.PaperTelemetrySpi.DAMPEN_ENTITY_AI)) {
++                isActive = false;
++            }
++            if (io.papermc.paper.spi.PaperTelemetrySpi.isTelemetryActive()) {
++                paperEntityChunk.paper$getOrCreateActivityCounters().recordEntityTick();
++            }
++        }
++        // GoldLeaf end - DAMPEN_ENTITY_AI & entityTicks counter hook (ADR-006)
+         // Folia start - profiler
+         final int timerId = isActive ? entity.getType().tickTimerId : entity.getType().inactiveTickTimerId;
+         final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle foliaProfiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler();
