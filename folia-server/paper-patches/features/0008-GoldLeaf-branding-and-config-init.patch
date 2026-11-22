@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Fri, 20 Nov 2026 19:07:02 -0600
+Subject: [PATCH] GoldLeaf branding and config init
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
+index 30815c8970b1f1c88a3c7bb5fd36efd915f1687d..4a265e328aa0d7f7dc06e3f798fdc45a7f65f382 100644
+--- a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
++++ b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
+@@ -40,10 +40,10 @@ public class PaperVersionFetcher implements VersionFetcher {
+     private static final ComponentLogger COMPONENT_LOGGER = ComponentLogger.logger(LogManager.getRootLogger().getName());
+     private static final int DISTANCE_ERROR = -1;
+     private static final int DISTANCE_UNKNOWN = -2;
+-    private static final String DOWNLOAD_PAGE = "https://papermc.io/downloads/folia"; // Folia
+-    private static final String REPOSITORY = "PaperMC/Folia"; // Folia
++    private static final String DOWNLOAD_PAGE = "https://github.com/LeafCraftDev/GoldLeaf"; // GoldLeaf
++    private static final String REPOSITORY = "LeafCraftDev/GoldLeaf"; // GoldLeaf
+     private static final ServerBuildInfo BUILD_INFO = ServerBuildInfo.buildInfo();
+-    private static final String USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://papermc.io)";
++    private static final String USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://github.com/LeafCraftDev/GoldLeaf)"; // GoldLeaf
+     private static final Gson GSON = new Gson();
+ 
+     @Override
+diff --git a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
+index 10a0be7a4db1a51579d113d279af7a9effe7f438..05d7a43c2611ea2b1f2fba87738447be6aafb3c0 100644
+--- a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
++++ b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
+@@ -31,6 +31,9 @@ public record ServerBuildInfoImpl(
+     private static final String ATTRIBUTE_GIT_COMMIT = "Git-Commit";
+ 
+     private static final String BRAND_PAPER_NAME = "Paper";
++    private static final Key BRAND_FOLIA_ID = Key.key("papermc", "folia"); // GoldLeaf
++    private static final Key BRAND_GOLDLEAF_ID = Key.key("leafcraft", "goldleaf"); // GoldLeaf
++    private static final String BRAND_GOLDLEAF_NAME = "GoldLeaf"; // GoldLeaf
+ 
+     private static final String BUILD_DEV = "DEV";
+ 
+@@ -42,9 +45,9 @@ public record ServerBuildInfoImpl(
+         this(
+             getManifestAttribute(manifest, ATTRIBUTE_BRAND_ID)
+                 .map(Key::key)
+-                .orElse(Key.key("papermc", "folia")), // Folia
++                .orElse(BRAND_GOLDLEAF_ID), // GoldLeaf
+             getManifestAttribute(manifest, ATTRIBUTE_BRAND_NAME)
+-                .orElse("Folia"), // Folia
++                .orElse(BRAND_GOLDLEAF_NAME), // GoldLeaf
+             SharedConstants.getCurrentVersion().id(),
+             SharedConstants.getCurrentVersion().name(),
+             getManifestAttribute(manifest, ATTRIBUTE_BUILD_NUMBER)
+@@ -61,7 +64,7 @@ public record ServerBuildInfoImpl(
+ 
+     @Override
+     public boolean isBrandCompatible(final @NotNull Key brandId) {
+-        return brandId.equals(this.brandId);
++        return brandId.equals(this.brandId) || brandId.equals(BRAND_FOLIA_ID); // GoldLeaf - preserve Folia plugin compatibility
+     }
+ 
+     @Override
+diff --git a/src/main/java/io/papermc/paper/configuration/PaperConfigurations.java b/src/main/java/io/papermc/paper/configuration/PaperConfigurations.java
+index 0b42ade71258a53dcc65dab932cc1a48802135fc..1c8ba5293ebb744d5f4170001546a91e9192538a 100644
+--- a/src/main/java/io/papermc/paper/configuration/PaperConfigurations.java
++++ b/src/main/java/io/papermc/paper/configuration/PaperConfigurations.java
+@@ -224,6 +224,7 @@ public class PaperConfigurations extends Configurations<GlobalConfiguration, Wor
+ 
+     @Override
+     public GlobalConfiguration initializeGlobalConfiguration(final RegistryAccess registryAccess) throws ConfigurateException {
++        dev.leafcraft.goldleaf.config.GoldLeafConfig.init(this.globalFolder); // GoldLeaf - load goldleaf.yml before TickRegions.init
+         GlobalConfiguration configuration = super.initializeGlobalConfiguration(registryAccess);
+         GlobalConfiguration.set(configuration);
+         return configuration;
+@@ -333,6 +334,7 @@ public class PaperConfigurations extends Configurations<GlobalConfiguration, Wor
+ 
+     public void reloadConfigs(MinecraftServer server) {
+         try {
++            dev.leafcraft.goldleaf.config.GoldLeafConfig.init(this.globalFolder); // GoldLeaf - reload goldleaf.yml before GlobalConfiguration
+             this.initializeGlobalConfiguration(server.registryAccess(), reloader(this.globalConfigClass, GlobalConfiguration.get()));
+             this.initializeWorldDefaultsConfiguration(server.registryAccess());
+             for (ServerLevel level : server.getAllLevels()) {

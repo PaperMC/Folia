@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: leaf26 <28832622+DailyStruggle@users.noreply.github.com>
+Date: Fri, 20 Nov 2026 19:07:02 -0600
+Subject: [PATCH] GoldLeaf workstation tick-thread auto-tuner
+
+Co-authored-by: Junie <junie@jetbrains.com>
+
+diff --git a/io/papermc/paper/threadedregions/TickRegions.java b/io/papermc/paper/threadedregions/TickRegions.java
+index a6ab9cb01f4f49f5f44b6ed324fa6d51139aabb6..3148910d65491a460cdce55c3a51705ea01ba1bf 100644
+--- a/io/papermc/paper/threadedregions/TickRegions.java
++++ b/io/papermc/paper/threadedregions/TickRegions.java
+@@ -42,19 +42,13 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+     }
+ 
+     private static int getTickThreads(final GlobalConfiguration.ThreadedRegions config) {
+-        int tickThreads;
+-        if (config.threads <= 0) {
+-            tickThreads = OSNuma.getNativeInstance().getTotalCores() / 2;
+-            if (tickThreads <= 4) {
+-                tickThreads = 1;
+-            } else {
+-                tickThreads =  tickThreads / 4;
+-            }
+-        } else {
+-            tickThreads = config.threads;
+-        }
+-
+-        return tickThreads;
++        // GoldLeaf start - workstation-aware tick-thread auto-tuner
++        return dev.leafcraft.goldleaf.threading.TickThreadAutoTuner.resolveTickThreads(
++            config.threads,
++            dev.leafcraft.goldleaf.config.GoldLeafConfig.get(),
++            dev.leafcraft.goldleaf.config.HardwareEnvelope.detect()
++        );
++        // GoldLeaf end - workstation-aware tick-thread auto-tuner
+     }
+ 
+     public static void init(final GlobalConfiguration.ThreadedRegions config) {

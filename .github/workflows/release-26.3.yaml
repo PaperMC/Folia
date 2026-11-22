@@ -2,12 +2,18 @@ name: Release 26.3
 
 on:
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Mark the versioned GitHub Release as a pre-release"
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - ver/26.3.x
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   cancel-in-progress: false
@@ -15,42 +21,197 @@ concurrency:
 
 jobs:
   release:
-    # guard for manual dispatch
+    # Guard for manual dispatch so non-release branches cannot publish 26.3 releases
     if: ${{ github.ref == 'refs/heads/ver/26.3.x' }}
-    runs-on: namespace-profile-linux-default
-    timeout-minutes: 30
-    #env:
-    #  BUILD_NUMBER: ${{ github.run_number }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - name: "environment"
-        run: |
-          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-          echo "BUILD_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-
-      - name: "git / checkout"
-        uses: namespacelabs/nscloud-checkout-action@66f2dc6f6c42a8ac6c4e53473c4840006822831e # v9.0.1
+      - name: Checkout Git Repository
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: papermc/ci/setup-gradle@main
-
-      - uses: papermc/ci/build-folia@main
-
-      - if: ${{ !cancelled() }}
-        uses: papermc/ci/upload-event-data@main
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
         with:
-          path: ${{ github.event_path }}
+          java-version: 25
+          distribution: 'zulu'
 
-      - if: ${{ !cancelled() }}
-        uses: papermc/ci/upload-test-results@main
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
 
-      - uses: papermc/ci/publish-fill@main
+      - name: Resolve Build Metadata
+        run: |
+          set -euo pipefail
+          MC_VERSION="$(awk -F= '$1=="mcVersion"{print $2}' gradle.properties | tail -n 1 | tr -d '[:space:]')"
+          if [[ -z "$MC_VERSION" ]]; then
+            echo "ERROR: Failed to resolve mcVersion from gradle.properties" >&2
+            exit 1
+          fi
+          BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+          BUILD_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          RELEASE_TAG="v${MC_VERSION}-b${BUILD_NUMBER}"
+          LATEST_TAG="latest-${MC_VERSION}"
+          ARTIFACT_NAME="goldleaf-${MC_VERSION}-${BUILD_NUMBER}.jar"
+          LATEST_ARTIFACT_NAME="goldleaf-${MC_VERSION}.jar"
+          {
+            echo "MC_VERSION=$MC_VERSION"
+            echo "BUILD_NUMBER=$BUILD_NUMBER"
+            echo "BUILD_STARTED_AT=$BUILD_STARTED_AT"
+            echo "RELEASE_TAG=$RELEASE_TAG"
+            echo "LATEST_TAG=$LATEST_TAG"
+            echo "ARTIFACT_NAME=$ARTIFACT_NAME"
+            echo "LATEST_ARTIFACT_NAME=$LATEST_ARTIFACT_NAME"
+          } >> "$GITHUB_ENV"
+
+      - name: Apply Patches
+        run: |
+          set -euo pipefail
+          git config --global user.email "no-reply@github.com"
+          git config --global user.name "GitHub Actions"
+          ./gradlew applyAllPatches --console=plain --stacktrace
+
+      - name: Test and Build Paperclip JAR
+        run: |
+          set -euo pipefail
+          ./gradlew test :folia-server:createPaperclipJar --console=plain --stacktrace
+
+      - name: Package Release Artifacts and Checksums
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          JARS=(folia-server/build/libs/*paperclip*.jar)
+          if [[ "${#JARS[@]}" -ne 1 ]]; then
+            echo "ERROR: Expected exactly 1 paperclip JAR in folia-server/build/libs/, found ${#JARS[@]}" >&2
+            ls -la folia-server/build/libs/ >&2 || true
+            exit 1
+          fi
+
+          rm -rf dist
+          mkdir -p dist
+          cp "${JARS[0]}" "dist/${ARTIFACT_NAME}"
+          cp "${JARS[0]}" "dist/${LATEST_ARTIFACT_NAME}"
+
+          (
+            cd dist
+            sha256sum "${ARTIFACT_NAME}" > "${ARTIFACT_NAME}.sha256"
+            sha256sum "${LATEST_ARTIFACT_NAME}" > "${LATEST_ARTIFACT_NAME}.sha256"
+          )
+
+          SHA256="$(awk '{print $1}' "dist/${ARTIFACT_NAME}.sha256")"
+          export ARTIFACT_SHA256="$SHA256"
+          echo "ARTIFACT_SHA256=$SHA256" >> "$GITHUB_ENV"
+
+          python3 - <<'PY' > dist/build-metadata.json
+          import json
+          import os
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          mc = os.environ["MC_VERSION"]
+          build = int(os.environ["BUILD_NUMBER"])
+          tag = os.environ["RELEASE_TAG"]
+          latest_tag = os.environ["LATEST_TAG"]
+          artifact = os.environ["ARTIFACT_NAME"]
+          latest_artifact = os.environ["LATEST_ARTIFACT_NAME"]
+
+          metadata = {
+              "project": "goldleaf",
+              "mc_version": mc,
+              "build": build,
+              "tag": tag,
+              "commit": os.environ["GITHUB_SHA"],
+              "built_at": os.environ["BUILD_STARTED_AT"],
+              "file": artifact,
+              "sha256": os.environ["ARTIFACT_SHA256"],
+              "url": f"https://github.com/{repo}/releases/download/{tag}/{artifact}",
+              "latest_url": f"https://github.com/{repo}/releases/download/{latest_tag}/{latest_artifact}",
+          }
+          print(json.dumps(metadata, indent=2))
+          PY
+
+      - name: Upload Workflow Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          fill_api_url: ${{ secrets.FILL_API_URL }}
-          fill_api_key: ${{ secrets.FILL_API_KEY }}
+          name: goldleaf-${{ env.MC_VERSION }}-b${{ env.BUILD_NUMBER }}
+          path: dist/
+          retention-days: 14
 
-      - uses: papermc/ci/publish-maven@main
-        with:
-          maven_username: ${{ secrets.ARTIFACTORY_USERNAME }}
-          maven_password: ${{ secrets.ARTIFACTORY_PASSWORD }}
-          maven_tasks: -PpublishDevBundle :folia-api:publish publishDevBundlePublicationToPaperReleasesRepository
+      - name: Publish Versioned GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_PRERELEASE: ${{ inputs.prerelease || false }}
+        run: |
+          set -euo pipefail
+          EXTRA_ARGS=()
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            EXTRA_ARGS+=(--prerelease)
+          fi
+
+          NOTES_FILE="dist/release-notes.md"
+          cat > "$NOTES_FILE" <<EOF
+          ### GoldLeaf ${MC_VERSION} (Build ${BUILD_NUMBER})
+
+          - **Minecraft Version:** \`${MC_VERSION}\` (Java 25 required)
+          - **Commit:** \`${GITHUB_SHA}\`
+          - **SHA-256 (\`${ARTIFACT_NAME}\`):** \`${ARTIFACT_SHA256}\`
+
+          #### Quick Start
+          \`\`\`bash
+          java -Xms4G -Xmx4G -jar ${ARTIFACT_NAME} --nogui
+          \`\`\`
+          EOF
+
+          gh release create "$RELEASE_TAG" \
+            "dist/${ARTIFACT_NAME}" \
+            "dist/${ARTIFACT_NAME}.sha256" \
+            "dist/build-metadata.json" \
+            --target "$GITHUB_SHA" \
+            --title "GoldLeaf ${MC_VERSION} (Build ${BUILD_NUMBER})" \
+            --notes-file "$NOTES_FILE" \
+            --generate-notes \
+            ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+
+      - name: Update Rolling Latest GitHub Release
+        if: ${{ !inputs.prerelease }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LATEST_NOTES="dist/latest-notes.md"
+          cat > "$LATEST_NOTES" <<EOF
+          Rolling latest build for **GoldLeaf ${MC_VERSION}** — currently tracks [${RELEASE_TAG}](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}).
+
+          - **Build:** \`${BUILD_NUMBER}\`
+          - **Commit:** \`${GITHUB_SHA}\`
+          - **SHA-256 (\`${LATEST_ARTIFACT_NAME}\`):** \`${ARTIFACT_SHA256}\`
+
+          #### Direct Download
+          \`\`\`bash
+          curl -fsSL -o goldleaf.jar "https://github.com/${GITHUB_REPOSITORY}/releases/download/${LATEST_TAG}/${LATEST_ARTIFACT_NAME}"
+          java -Xms4G -Xmx4G -jar goldleaf.jar --nogui
+          \`\`\`
+          EOF
+
+          git tag -f "$LATEST_TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/${LATEST_TAG}"
+
+          if gh release view "$LATEST_TAG" >/dev/null 2>&1; then
+            gh release edit "$LATEST_TAG" \
+              --title "GoldLeaf ${MC_VERSION} (Latest - Build ${BUILD_NUMBER})" \
+              --notes-file "$LATEST_NOTES" \
+              --latest
+            gh release upload "$LATEST_TAG" \
+              "dist/${LATEST_ARTIFACT_NAME}" \
+              "dist/${LATEST_ARTIFACT_NAME}.sha256" \
+              "dist/build-metadata.json" \
+              --clobber
+          else
+            gh release create "$LATEST_TAG" \
+              "dist/${LATEST_ARTIFACT_NAME}" \
+              "dist/${LATEST_ARTIFACT_NAME}.sha256" \
+              "dist/build-metadata.json" \
+              --target "$GITHUB_SHA" \
+              --title "GoldLeaf ${MC_VERSION} (Latest - Build ${BUILD_NUMBER})" \
+              --notes-file "$LATEST_NOTES" \
+              --latest
+          fi
