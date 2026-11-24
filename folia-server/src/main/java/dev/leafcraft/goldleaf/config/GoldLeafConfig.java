@@ -71,6 +71,10 @@ public final class GoldLeafConfig {
     @Comment("Opt-in chat-signing disable and security settings (default false; ADR-018).")
     public Security security = new Security();
 
+    @Setting("compute")
+    @Comment("Public ComputeService off-tick GPU/CPU compute SPI settings (ADR-004, ADR-017).")
+    public Compute compute = new Compute();
+
     @ConfigSerializable
     public static final class Threading {
 
@@ -286,12 +290,12 @@ public final class GoldLeafConfig {
         public String format = "lca";
 
         @Setting("lca-mode")
-        @Comment("LCA-ICD-3.0 compression profile: 'mode-b' (default LCD2 fast-greedy), 'mode-a' (uncompressed/minimal CPU), or 'archival' (max compression).")
-        public String lcaMode = "mode-b";
+        @Comment("LCA-ICD-3.0 storage profile: 'mode-a' (default unified disk=memory columnar format with cached region dictionaries and zero outer decompression), 'mode-b' (opt-in LCD2 compression), or 'archival' (max compression).")
+        public String lcaMode = "mode-a";
 
         @Setting("lca-mode-b-lcd2")
-        @Comment("Enables Mode B LCD2 fast-greedy compression for .lca regions (v3-Columnar default).")
-        public boolean lcaModeBLcd2 = true;
+        @Comment("Opt-in legacy Mode B LCD2 compression for .lca regions (false by default; unified Mode A is the default).")
+        public boolean lcaModeBLcd2 = false;
 
         @Setting("auto-migrate-mca")
         @Comment("When format is 'lca', transparently reads and migrates legacy .mca region files on demand.")
@@ -334,16 +338,32 @@ public final class GoldLeafConfig {
         public double lcaCompactHeapPressureRatio = 0.70;
 
         @Setting("lca-compact-generated-chunks")
-        @Comment("Schedules off-tick compaction of freshly generated non-uniform LevelChunkSections into COLD_LCA at ChunkFullTask handoff (ADR-005 Stage 4).")
-        public boolean lcaCompactGeneratedChunks = true;
+        @Comment("When true, eagerly snapshots and compacts freshly generated LevelChunkSections into COLD_LCA at ChunkFullTask handoff (default false: avoids tick-thread voxel snapshotting during active generation and spawn boot; sections still compact on downgrade or disk reload).")
+        public boolean lcaCompactGeneratedChunks = false;
+
+        @Setting("skip-save-unmodified-cold-chunks")
+        @Comment("Opt-in: skips saving freshly generated, unmodified, consistently unvisited chunks to disk so GPU regeneration replaces cold exploration storage (default false; disk-loaded, modified, warm, or revisited chunks always save normally).")
+        public boolean skipSaveUnmodifiedColdChunks = false;
+
+        @Setting("cold-chunk-min-inhabited-ticks")
+        @Comment("Minimum player inhabitedTime ticks before a freshly generated unmodified chunk graduates to persistent storage (0 = persist on any visit, default 200 = 10s).")
+        public long coldChunkMinInhabitedTicks = 200L;
+
+        @Setting("cold-chunk-min-revisits")
+        @Comment("Number of fresh generations of the same coordinates before an unvisited chunk graduates to persistent storage as statistically warm (0 disables revisit promotion, default 2).")
+        public int coldChunkMinRevisits = 2;
+
+        @Setting("cold-chunk-ignore-natural-ticks")
+        @Comment("Opt-in: ignores natural fluid/block settling ticks on unvisited chunks (inhabitedTime == 0) when skip-save-unmodified-cold-chunks is enabled (default false).")
+        public boolean coldChunkIgnoreNaturalTicks = false;
     }
 
     @ConfigSerializable
     public static final class Network {
 
         @Setting("lca-net-v1-enabled")
-        @Comment("Enables Layer 2 LCA_NET_V1 negotiated chunk streaming on PlayerChunkSender SPI (ADR-005 Stage 3).")
-        public boolean lcaNetV1Enabled = false;
+        @Comment("Enables native Layer 2 LCA_NET_V1 negotiated chunk streaming on PlayerChunkSender SPI (default true; unnegotiated vanilla clients fall back with zero overhead; ADR-005 Stage 3).")
+        public boolean lcaNetV1Enabled = true;
 
         @Setting("require-lca-client")
         @Comment("When true, rejects non-LCA_NET_V1 clients instead of falling back to vanilla chunk packets (default false; ADR-005).")
@@ -402,7 +422,7 @@ public final class GoldLeafConfig {
         public boolean sectionBatchedDoFill = true;
 
         @Setting("parity-mode")
-        @Comment("Terrain accelerator parity contract: 'vanilla-exact' (FP64 default) or 'fast' (opt-in relaxed FP32).")
+        @Comment("Terrain accelerator arithmetic contract: 'vanilla-exact' (INT64_Q32_FP32 default, zero FP64), 'fast' (relaxed FP32), or 'vanilla-exact-fp64' (opt-in diagnostic FP64).")
         public String parityMode = "vanilla-exact";
 
         @Setting("require-accelerator")
@@ -420,6 +440,78 @@ public final class GoldLeafConfig {
         @Setting("auto-pace-generation-workers")
         @Comment("Coordinates Moonrise generation worker count with GoldLeaf's hardware-envelope curve (ADR-003/ADR-004).")
         public boolean autoPaceGenerationWorkers = true;
+
+        @Setting("apply-pool-threads")
+        @Comment("Bounded CPU worker count for parallel GPU wave hostApply writeback (0 = auto max(2, cores/2), range 0..64).")
+        public int applyPoolThreads = 0;
+
+        @Setting("gpu-surface-enabled")
+        @Comment("Opt-in fused GPU 4-bit TERRAIN+SURFACE stratification (auto-active in parity-mode 'fast'; disabled by default in 'vanilla-exact' to preserve vanilla SurfaceRules).")
+        public boolean gpuSurfaceEnabled = false;
+
+        @Setting("hilbert-ore-veins")
+        @Comment("Opt-in O(size) 3D Hilbert-curve ore-vein placer replacing vanilla multi-sphere ore rasterization with contiguous veiny blobs (default false to preserve vanilla-exact ore geometry).")
+        public boolean hilbertOreVeins = false;
+
+        @Setting("gpu-light-enabled")
+        @Comment("Opt-in vanilla-exact OpenCL GPU Sky+Block lighting offload (default false on single-GPU servers to avoid OpenCL driver contention with concurrent TERRAIN waves).")
+        public boolean gpuLightEnabled = false;
+
+        @Setting("gpu-carver-mask")
+        @Comment("Vanilla-exact OpenCL GPU CaveWorldCarver + CanyonWorldCarver 9x9 mask generation (eliminates CPU CARVER_MASK and mask PCIe upload; default true).")
+        public boolean gpuCarverMask = true;
+
+        @Setting("macro-noise-octaves")
+        @Comment("Opt-in Macro-13 BlendedNoise octave pruning (>98% terrain energy, 97.5%+ same-coordinate parity, ~2.5x faster GPU terrain density; default false).")
+        public boolean macroNoiseOctaves = false;
+
+        @Setting("gpu-in-vram-features")
+        @Comment("Opt-in in-VRAM GPU Pass 4 features (3D Hilbert ores, FreezeTopLayer snow/ice, springs, and intra-chunk ground-cover vegetation; default false).")
+        public boolean gpuInVramFeatures = false;
+
+        @Setting("secure-seed")
+        @Comment("Opt-in 1024-bit cryptographic secure-seed protection against seedcrackers (default disabled; immutable per world; ADR-018).")
+        public SecureSeed secureSeed = new SecureSeed();
+
+        @Setting("directional-chunk-priority")
+        @Comment("Velocity and facing-direction elliptical focal chunk prioritization for RegionizedPlayerChunkLoader (ADR-020).")
+        public DirectionalChunkPriority directionalChunkPriority = new DirectionalChunkPriority();
+    }
+
+    @ConfigSerializable
+    public static final class DirectionalChunkPriority {
+
+        @Setting("enabled")
+        @Comment("Prioritizes chunks ahead of player facing direction and movement velocity without changing the radial view-distance footprint (default true; ADR-020).")
+        public boolean enabled = true;
+
+        @Setting("look-bias")
+        @Comment("Base elliptical eccentricity along player facing yaw when standing or walking slowly (0.0..0.85, default 0.45).")
+        public double lookBias = ca.spottedleaf.moonrise.spi.PlayerChunkPrioritySpi.DEFAULT_LOOK_BIAS;
+
+        @Setting("velocity-bias")
+        @Comment("Maximum elliptical eccentricity blended toward player horizontal movement velocity during high-speed travel (0.0..0.90, default 0.75).")
+        public double velocityBias = ca.spottedleaf.moonrise.spi.PlayerChunkPrioritySpi.DEFAULT_VELOCITY_BIAS;
+
+        @Setting("inner-radial-radius")
+        @Comment("Inner isotropic safety ring radius in chunks around the player that always loads first (0..8, default 2).")
+        public int innerRadialRadius = ca.spottedleaf.moonrise.spi.PlayerChunkPrioritySpi.DEFAULT_INNER_RADIAL_RADIUS;
+
+        @Setting("yaw-reprioritize-degrees")
+        @Comment("Minimum yaw rotation in degrees before re-sorting non-empty queues while stationary in the same chunk (5.0..180.0, default 25.0).")
+        public double yawReprioritizeDegrees = ca.spottedleaf.moonrise.spi.PlayerChunkPrioritySpi.DEFAULT_YAW_REPRIORITIZE_DEGREES;
+    }
+
+    @ConfigSerializable
+    public static final class SecureSeed {
+
+        @Setting("enabled")
+        @Comment("Enables 1024-bit SHA-512 domain-separated secure seed derivation across structures, features, slime chunks, End spikes, biomeZoomSeed, and terrain/bedrock noise (default false; immutable per world; ADR-018).")
+        public boolean enabled = false;
+
+        @Setting("allow-unsafe-migration")
+        @Comment("Dangerous override: allows booting an existing world when worldgen.secure-seed.enabled disagrees with the world's persisted secure-seed mode (may cause chunk-border discontinuities; default false; S-004).")
+        public boolean allowUnsafeMigration = false;
     }
 
     @ConfigSerializable
@@ -430,6 +522,38 @@ public final class GoldLeafConfig {
         public boolean disableChatSigning = false;
     }
 
+    @ConfigSerializable
+    public static final class Compute {
+
+        @Setting("enabled")
+        @Comment("Exposes ComputeService for built-in audited kernels and allowlisted plugin compute offload.")
+        public boolean enabled = true;
+
+        @Setting("allow-custom-opencl")
+        @Comment("Allows plugins listed in custom-kernel-allowlist to submit custom OpenCL C99 kernels (default false).")
+        public boolean allowCustomOpenCl = false;
+
+        @Setting("custom-kernel-allowlist")
+        @Comment("Explicit owner/plugin IDs permitted to register custom OpenCL C99 kernels when allow-custom-opencl is true.")
+        public java.util.List<String> customKernelAllowlist = new java.util.ArrayList<>();
+
+        @Setting("max-vram-bytes-per-owner")
+        @Comment("Maximum reserved compute VRAM (input + output + persistent state) per owning plugin in bytes (default 64 MiB).")
+        public long maxVramBytesPerOwner = 64L * 1024L * 1024L;
+
+        @Setting("max-total-vram-bytes")
+        @Comment("Maximum total reserved compute VRAM across all owners in bytes (default 256 MiB).")
+        public long maxTotalVramBytes = 256L * 1024L * 1024L;
+
+        @Setting("max-gpu-budget-ms-per-tick")
+        @Comment("Per-tick compute budget in milliseconds before PacedSession automatically steps down cadence (1..40).")
+        public int maxGpuBudgetMsPerTick = 6;
+
+        @Setting("worker-threads")
+        @Comment("Dedicated off-tick worker threads for ComputeService dispatch (1..16).")
+        public int workerThreads = 2;
+    }
+
     public static GoldLeafConfig defaults() {
         return new GoldLeafConfig();
     }
@@ -438,11 +562,23 @@ public final class GoldLeafConfig {
         return instance;
     }
 
+    private record ActiveOpenClKey(
+        Path cacheDir,
+        int applyPoolThreads,
+        int waveMaxSize,
+        int waveFlushDeadlineMs
+    ) {
+    }
+
+    private static volatile @org.jspecify.annotations.Nullable ActiveOpenClKey activeOpenClKey;
+    private static volatile boolean hardwareEnvelopeLogged;
+
     public static GoldLeafConfig init(final Path configDirectory) throws ConfigurateException {
         final GoldLeafConfig loaded = load(configDirectory.resolve(FILE_NAME));
         instance = loaded;
         dev.leafcraft.goldleaf.diagnostics.TickHazardMonitor.refreshFromConfig();
-        if (loaded.diagnostics.logHardwareEnvelopeOnStartup) {
+        if (loaded.diagnostics.logHardwareEnvelopeOnStartup && !hardwareEnvelopeLogged) {
+            hardwareEnvelopeLogged = true;
             LOGGER.info("GoldLeaf hardware envelope detected: {}", HardwareEnvelope.detect().describe());
         }
         refreshTerrainAccelerator(configDirectory, loaded);
@@ -453,6 +589,7 @@ public final class GoldLeafConfig {
         final dev.leafcraft.goldleaf.worldgen.TerrainGenerationAccelerator current =
             dev.leafcraft.goldleaf.worldgen.TerrainGenerationAccelerator.get();
         if (!loaded.worldgen.openclGpuEnabled) {
+            activeOpenClKey = null;
             if (current instanceof dev.leafcraft.goldleaf.worldgen.IrOpenClTerrainAccelerator existing) {
                 dev.leafcraft.goldleaf.worldgen.TerrainGenerationAccelerator.resetDefault();
                 existing.close();
@@ -460,6 +597,7 @@ public final class GoldLeafConfig {
             return;
         }
         if (!dev.leafcraft.goldleaf.worldgen.GoldLeafOpenClBridge.isAvailable()) {
+            activeOpenClKey = null;
             if (loaded.worldgen.requireAccelerator) {
                 throw new ConfigurateException(
                     "goldleaf.yml worldgen.opencl-gpu-enabled and worldgen.require-accelerator are true, "
@@ -471,16 +609,28 @@ public final class GoldLeafConfig {
             );
             return;
         }
+        final Path cacheDir = configDirectory.toAbsolutePath().normalize().getParent() != null
+            ? configDirectory.toAbsolutePath().normalize().getParent().resolve("cache").resolve("goldleaf-opencl")
+            : configDirectory.resolve("cache").resolve("goldleaf-opencl");
+        final ActiveOpenClKey desiredKey = new ActiveOpenClKey(
+            cacheDir,
+            loaded.worldgen.applyPoolThreads,
+            loaded.worldgen.waveMaxSize,
+            loaded.worldgen.waveFlushDeadlineMs
+        );
+        if (current instanceof dev.leafcraft.goldleaf.worldgen.IrOpenClTerrainAccelerator existing
+            && existing.isGpuReady()
+            && desiredKey.equals(activeOpenClKey)) {
+            return;
+        }
         if (current instanceof dev.leafcraft.goldleaf.worldgen.IrOpenClTerrainAccelerator existing) {
             dev.leafcraft.goldleaf.worldgen.TerrainGenerationAccelerator.resetDefault();
             existing.close();
         }
-        final Path cacheDir = configDirectory.toAbsolutePath().normalize().getParent() != null
-            ? configDirectory.toAbsolutePath().normalize().getParent().resolve("cache").resolve("goldleaf-opencl")
-            : configDirectory.resolve("cache").resolve("goldleaf-opencl");
         final dev.leafcraft.goldleaf.worldgen.IrOpenClTerrainAccelerator accel =
             new dev.leafcraft.goldleaf.worldgen.IrOpenClTerrainAccelerator(cacheDir);
         dev.leafcraft.goldleaf.worldgen.TerrainGenerationAccelerator.register(accel);
+        activeOpenClKey = desiredKey;
         LOGGER.info(
             "[GoldLeaf-OpenCL] Registered native IR-OpenCL TerrainGenerationAccelerator (device='{}', parityMode={}, waveMaxSize={}, waveFlushDeadlineMs={}ms, cacheDir={})",
             dev.leafcraft.goldleaf.worldgen.GoldLeafOpenClBridge.deviceName(0),
@@ -538,6 +688,12 @@ public final class GoldLeafConfig {
         if (this.worldgen == null) {
             this.worldgen = new Worldgen();
         }
+        if (this.worldgen.secureSeed == null) {
+            this.worldgen.secureSeed = new SecureSeed();
+        }
+        if (this.worldgen.directionalChunkPriority == null) {
+            this.worldgen.directionalChunkPriority = new DirectionalChunkPriority();
+        }
         if (this.protocols == null) {
             this.protocols = new Protocols();
         }
@@ -549,6 +705,12 @@ public final class GoldLeafConfig {
         }
         if (this.security == null) {
             this.security = new Security();
+        }
+        if (this.compute == null) {
+            this.compute = new Compute();
+        }
+        if (this.compute.customKernelAllowlist == null) {
+            this.compute.customKernelAllowlist = new java.util.ArrayList<>();
         }
         if (this.storage.format == null) {
             throw new ConfigurateException("goldleaf.yml storage.format must not be null (expected 'mca' or 'lca')");
@@ -573,6 +735,18 @@ public final class GoldLeafConfig {
         if (this.storage.maxOpenRegions < 1) {
             throw new ConfigurateException(
                 "goldleaf.yml storage.max-open-regions must be >= 1, got " + this.storage.maxOpenRegions
+            );
+        }
+        if (this.storage.coldChunkMinInhabitedTicks < 0L) {
+            throw new ConfigurateException(
+                "goldleaf.yml storage.cold-chunk-min-inhabited-ticks must be >= 0, got "
+                    + this.storage.coldChunkMinInhabitedTicks
+            );
+        }
+        if (this.storage.coldChunkMinRevisits < 0) {
+            throw new ConfigurateException(
+                "goldleaf.yml storage.cold-chunk-min-revisits must be >= 0, got "
+                    + this.storage.coldChunkMinRevisits
             );
         }
         if (this.threading.minAutoThreads < 1) {
@@ -600,13 +774,15 @@ public final class GoldLeafConfig {
         }
         if (this.worldgen.parityMode == null) {
             throw new ConfigurateException(
-                "goldleaf.yml worldgen.parity-mode must not be null (expected 'vanilla-exact' or 'fast')"
+                "goldleaf.yml worldgen.parity-mode must not be null (expected 'vanilla-exact', 'vanilla-exact-fp64', or 'fast')"
             );
         }
         final String normalizedParity = this.worldgen.parityMode.trim().toLowerCase(java.util.Locale.ROOT);
-        if (!"vanilla-exact".equals(normalizedParity) && !"fast".equals(normalizedParity)) {
+        if (!"vanilla-exact".equals(normalizedParity)
+            && !"vanilla-exact-fp64".equals(normalizedParity)
+            && !"fast".equals(normalizedParity)) {
             throw new ConfigurateException(
-                "goldleaf.yml worldgen.parity-mode must be 'vanilla-exact' or 'fast', got '"
+                "goldleaf.yml worldgen.parity-mode must be 'vanilla-exact', 'vanilla-exact-fp64', or 'fast', got '"
                     + this.worldgen.parityMode + "'"
             );
         }
@@ -620,6 +796,37 @@ public final class GoldLeafConfig {
             throw new ConfigurateException(
                 "goldleaf.yml worldgen.wave-flush-deadline-ms must be in [1, 10], got "
                     + this.worldgen.waveFlushDeadlineMs
+            );
+        }
+        if (this.worldgen.applyPoolThreads < 0 || this.worldgen.applyPoolThreads > 64) {
+            throw new ConfigurateException(
+                "goldleaf.yml worldgen.apply-pool-threads must be in [0, 64], got "
+                    + this.worldgen.applyPoolThreads
+            );
+        }
+        final DirectionalChunkPriority dcp = this.worldgen.directionalChunkPriority;
+        if (!Double.isFinite(dcp.lookBias) || dcp.lookBias < 0.0D || dcp.lookBias > 0.85D) {
+            throw new ConfigurateException(
+                "goldleaf.yml worldgen.directional-chunk-priority.look-bias must be in [0.0, 0.85], got "
+                    + dcp.lookBias
+            );
+        }
+        if (!Double.isFinite(dcp.velocityBias) || dcp.velocityBias < 0.0D || dcp.velocityBias > 0.90D) {
+            throw new ConfigurateException(
+                "goldleaf.yml worldgen.directional-chunk-priority.velocity-bias must be in [0.0, 0.90], got "
+                    + dcp.velocityBias
+            );
+        }
+        if (dcp.innerRadialRadius < 0 || dcp.innerRadialRadius > 8) {
+            throw new ConfigurateException(
+                "goldleaf.yml worldgen.directional-chunk-priority.inner-radial-radius must be in [0, 8], got "
+                    + dcp.innerRadialRadius
+            );
+        }
+        if (!Double.isFinite(dcp.yawReprioritizeDegrees) || dcp.yawReprioritizeDegrees < 5.0D || dcp.yawReprioritizeDegrees > 180.0D) {
+            throw new ConfigurateException(
+                "goldleaf.yml worldgen.directional-chunk-priority.yaw-reprioritize-degrees must be in [5.0, 180.0], got "
+                    + dcp.yawReprioritizeDegrees
             );
         }
         if (this.network.lcaNetMaxSessionCacheChunks < 64) {
@@ -777,6 +984,30 @@ public final class GoldLeafConfig {
             throw new ConfigurateException(
                 "goldleaf.yml bots.max-per-player (" + this.bots.maxPerPlayer
                     + ") must be <= bots.max-total (" + this.bots.maxTotal + ")"
+            );
+        }
+        if (this.compute.maxVramBytesPerOwner < 1024L * 1024L) {
+            throw new ConfigurateException(
+                "goldleaf.yml compute.max-vram-bytes-per-owner must be >= 1048576, got "
+                    + this.compute.maxVramBytesPerOwner
+            );
+        }
+        if (this.compute.maxTotalVramBytes < this.compute.maxVramBytesPerOwner) {
+            throw new ConfigurateException(
+                "goldleaf.yml compute.max-total-vram-bytes (" + this.compute.maxTotalVramBytes
+                    + ") must be >= compute.max-vram-bytes-per-owner (" + this.compute.maxVramBytesPerOwner + ")"
+            );
+        }
+        if (this.compute.maxGpuBudgetMsPerTick < 1 || this.compute.maxGpuBudgetMsPerTick > 40) {
+            throw new ConfigurateException(
+                "goldleaf.yml compute.max-gpu-budget-ms-per-tick must be in [1, 40], got "
+                    + this.compute.maxGpuBudgetMsPerTick
+            );
+        }
+        if (this.compute.workerThreads < 1 || this.compute.workerThreads > 16) {
+            throw new ConfigurateException(
+                "goldleaf.yml compute.worker-threads must be in [1, 16], got "
+                    + this.compute.workerThreads
             );
         }
         this.configVersion = CURRENT_VERSION;

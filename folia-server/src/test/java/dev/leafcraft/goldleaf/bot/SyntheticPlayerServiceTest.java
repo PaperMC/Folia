@@ -155,4 +155,33 @@ class SyntheticPlayerServiceTest {
         cfg.bots.maxPerPlayer = 4;
         assertThrows(ConfigurateException.class, cfg::validate);
     }
+
+    @Test
+    void foliaBridgeTracksAttachTeleportDetachAndRejectsNullTask() {
+        final FoliaSyntheticPlayerBridge bridge = new FoliaSyntheticPlayerBridge();
+        assertThrows(NullPointerException.class, () -> bridge.executeOnRegion("world", 0, 0, null));
+
+        final AtomicInteger ran = new AtomicInteger();
+        bridge.executeOnRegion("world", 1, 2, ran::incrementAndGet);
+        assertEquals(1, ran.get(), "Headless test mode executes region task directly");
+
+        final SyntheticPlayerHandle.PositionSnapshot start =
+            new SyntheticPlayerHandle.PositionSnapshot("world", 8.0, 64.0, 8.0, 0.0f, 0.0f);
+        final SyntheticPlayerHandle.PositionSnapshot dest =
+            new SyntheticPlayerHandle.PositionSnapshot("world", 64.0, 64.0, 64.0, 0.0f, 0.0f);
+        final SyntheticPlayerHandle handle = new SyntheticPlayerHandle(
+            SyntheticPlayerService.deterministicUuid("bridge_test_bot"),
+            "bridge_test_bot",
+            UUID.randomUUID(),
+            false,
+            start
+        );
+
+        bridge.onAttach(handle);
+        assertEquals(1, bridge.attachedCount());
+        bridge.onTeleport(handle, dest);
+        assertEquals(1, bridge.attachedCount());
+        bridge.onDetach(handle);
+        assertEquals(0, bridge.attachedCount());
+    }
 }

@@ -26,6 +26,7 @@ public final class LcaResidencyManager implements ChunkResidencySpi {
     private final int maxResidentChunksPerWorld;
     private final ConcurrentHashMap<String, LcaChunkResidencyCache> worldCaches = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, LcaRegionStorageProvider> storageProviders = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String[]> worldgenBlockDictionaries = new ConcurrentHashMap<>();
     private final AtomicLong totalBaseFramesInstalled = new AtomicLong();
     private final AtomicLong totalDirtyVoxelsRecorded = new AtomicLong();
     private final AtomicLong totalChunksEvicted = new AtomicLong();
@@ -92,6 +93,14 @@ public final class LcaResidencyManager implements ChunkResidencySpi {
 
     @Override
     public void onChunkUnloaded(final String worldId, final int chunkX, final int chunkZ) {
+        evictResidencyCacheOnly(worldId, chunkX, chunkZ);
+    }
+
+    /**
+     * Evicts only the cached disk {@link RawChunkFrameSnapshot} without releasing a live chunk's
+     * {@link WaveChunkArena} slot (used when saving pre-FULL chunks that remain loaded in memory).
+     */
+    public void evictResidencyCacheOnly(final String worldId, final int chunkX, final int chunkZ) {
         final LcaChunkResidencyCache cache = this.worldCaches.get(worldId);
         if (cache == null) {
             return;
@@ -117,6 +126,27 @@ public final class LcaResidencyManager implements ChunkResidencySpi {
         Objects.requireNonNull(worldId, "worldId");
         Objects.requireNonNull(provider, "provider");
         this.storageProviders.put(worldId, provider);
+        final String[] wgDict = this.worldgenBlockDictionaries.get(worldId);
+        if (wgDict != null) {
+            provider.delegate().setWorldgenBlockDictionary(wgDict);
+        }
+    }
+
+    /**
+     * Registers a world's canonical GPU worldgen block-state palette and binds it immediately to
+     * any active {@link LcaRegionStorageProvider} for {@code worldId} (and to future providers on
+     * registration), enabling O(1) DMA-resolved dictionary IDs on fresh `.lca` saves.
+     */
+    public void registerWorldgenBlockDictionary(final String worldId, final String[] canonicalPalette) {
+        if (worldId == null || canonicalPalette == null || canonicalPalette.length == 0) {
+            return;
+        }
+        final String[] copy = canonicalPalette.clone();
+        this.worldgenBlockDictionaries.put(worldId, copy);
+        final LcaRegionStorageProvider provider = this.storageProviders.get(worldId);
+        if (provider != null) {
+            provider.delegate().setWorldgenBlockDictionary(copy);
+        }
     }
 
     public void unregisterStorageProvider(final String worldId, final LcaRegionStorageProvider provider) {

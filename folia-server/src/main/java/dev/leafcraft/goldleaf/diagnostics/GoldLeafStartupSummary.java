@@ -50,7 +50,7 @@ public final class GoldLeafStartupSummary {
         sb.append(String.format(
             "  Storage   (ADR-005): format=%s%s (reversible MIT .lca <-> .mca CLI converter available)\n",
             input.activeStorageFormat(),
-            isLca ? (input.lcaModeBEnabled() ? " [v3-Columnar Mode B LCD2]" : " [v3-Columnar]") : " [Vanilla Anvil]"
+            isLca ? (input.lcaModeBEnabled() ? " [v3-Columnar Mode B LCD2]" : " [v3-Columnar Mode A]") : " [Vanilla Anvil]"
         ));
 
         sb.append(String.format(

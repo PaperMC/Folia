@@ -1,6 +1,6 @@
 # goldleaf-ADR-013 — Vanilla-Faithful Micro-Optimization Boundary, `sectionEpoch` Reuse, and Non-Goal Guardrails
 
-**Status:** In Progress
+**Status:** Accepted (v0.1 Scope Implemented)
 **Date:** 2026-11-21
 
 ## Context

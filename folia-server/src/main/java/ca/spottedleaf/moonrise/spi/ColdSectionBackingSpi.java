@@ -6,6 +6,7 @@ import java.util.function.Predicate;
 import net.minecraft.core.IdMap;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.level.chunk.PalettedContainer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Layer 1 upstream-candidate immutable cold-section backing SPI for {@link PalettedContainer}.
@@ -78,5 +79,14 @@ public interface ColdSectionBackingSpi<T> {
      */
     default boolean tryDemoteCleanToCold() {
         return false;
+    }
+
+    /**
+     * Returns an isolated lightweight snapshot of this cold backing for {@link PalettedContainer#copy()}
+     * (e.g., {@code SerializableChunkData.copyOf} during {@code /stop} or {@code save-all}), or
+     * {@code null} to fall back to ephemeral {@code SimpleBitStorage} materialization.
+     */
+    default @Nullable ColdSectionBackingSpi<T> snapshotCopy() {
+        return null;
     }
 }

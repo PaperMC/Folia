@@ -77,7 +77,8 @@ public final class RegionProximityView {
     /**
      * Counts entities currently tracked in {@code regionData} that reside in chunk
      * {@code (chunkX, chunkZ)}, categorized into {@code ITEM}, {@code LIVING}, and
-     * {@code PROJECTILE}.
+     * {@code PROJECTILE}. Uses Moonrise's O(1) per-chunk {@code ChunkEntitySlices} lookup when
+     * available, falling back to {@code regionData.getLoadedEntities()} if lookup is unavailable.
      */
     public static ChunkEntityCounts countChunkEntities(
         final RegionizedWorldData regionData,
@@ -89,6 +90,31 @@ public final class RegionProximityView {
         int living = 0;
         int projectiles = 0;
         int total = 0;
+        if (regionData.world != null) {
+            final ca.spottedleaf.moonrise.patches.chunk_system.level.entity.EntityLookup lookup =
+                ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel) regionData.world).moonrise$getEntityLookup();
+            if (lookup != null) {
+                final ca.spottedleaf.moonrise.patches.chunk_system.level.entity.ChunkEntitySlices slices =
+                    lookup.getChunk(chunkX, chunkZ);
+                if (slices == null || slices.isEmpty()) {
+                    return ChunkEntityCounts.EMPTY;
+                }
+                for (final Entity entity : slices.getAllEntities()) {
+                    if (entity == null || entity.isRemoved()) {
+                        continue;
+                    }
+                    total++;
+                    if (entity instanceof ItemEntity) {
+                        items++;
+                    } else if (entity instanceof LivingEntity) {
+                        living++;
+                    } else if (entity instanceof Projectile) {
+                        projectiles++;
+                    }
+                }
+                return total == 0 ? ChunkEntityCounts.EMPTY : new ChunkEntityCounts(items, living, projectiles, total);
+            }
+        }
         for (final Entity entity : regionData.getLoadedEntities()) {
             if (entity == null || entity.isRemoved()) {
                 continue;

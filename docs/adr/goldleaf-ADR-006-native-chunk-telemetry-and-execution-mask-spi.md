@@ -1,6 +1,6 @@
 # goldleaf-ADR-006 — Native Chunk Telemetry, Primitive Activity Counters, and `ChunkExecutionMask` SPI
 
-**Status:** In Progress
+**Status:** Accepted (v0.1 Scope Implemented)
 **Date:** 2026-11-21
 
 ## Context

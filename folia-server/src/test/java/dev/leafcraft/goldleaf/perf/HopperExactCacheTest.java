@@ -1,12 +1,13 @@
 package dev.leafcraft.goldleaf.perf;
 
+import io.papermc.paper.spi.HopperExactCache;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for {@link HopperExactCache} ({@code goldleaf-ADR-013}).
+ * Unit tests for Layer 1 {@link HopperExactCache} ({@code goldleaf-ADR-013}).
  */
 class HopperExactCacheTest {
 

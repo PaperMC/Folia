@@ -2,7 +2,9 @@ package dev.leafcraft.goldleaf.network;
 
 import dev.leafcraft.goldleaf.config.GoldLeafConfig;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -67,6 +69,31 @@ public final class DefaultOffTickChunkPacketController implements OffTickChunkPa
         }
 
         return this.dispatchPreparedPacket(connection, chunk, plan, packet);
+    }
+
+    /**
+     * Runs off-tick packet preparation on {@link OffTickChunkPacketController#submitOffTick}
+     * daemon workers ({@code S-005}) and dispatches the resulting packet only if the captured
+     * {@code sectionEpoch} snapshot is still fresh ({@code S-004}).
+     */
+    CompletableFuture<Boolean> prepareAndDispatchAsync(
+        final ServerGamePacketListenerImpl connection,
+        final LevelChunk chunk,
+        final ChunkPacketPlan plan,
+        final Function<ChunkPacketPlan, ClientboundLevelChunkWithLightPacket> packetEncoder
+    ) {
+        Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(chunk, "chunk");
+        Objects.requireNonNull(plan, "plan");
+        Objects.requireNonNull(packetEncoder, "packetEncoder");
+        return OffTickChunkPacketController.submitOffTick(plan, packetEncoder)
+            .handle((packet, err) -> {
+                if (err != null || packet == null) {
+                    this.staleFallbackCount.incrementAndGet();
+                    return false;
+                }
+                return this.dispatchPreparedPacket(connection, chunk, plan, packet);
+            });
     }
 
     boolean dispatchPreparedPacket(

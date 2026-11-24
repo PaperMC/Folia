@@ -125,12 +125,13 @@ public interface OffTickChunkPacketController {
             final SectionSnapshot[] snaps = new SectionSnapshot[live.length];
             for (int i = 0; i < live.length; i++) {
                 final LevelChunkSection sec = live[i];
+                final boolean onlyAir = sec.hasOnlyAir();
                 snaps[i] = new SectionSnapshot(
                     i,
                     sec.paper$getSectionEpoch(),
-                    sec.hasOnlyAir(),
+                    onlyAir,
                     sec.getStates().data.palette().getSize(),
-                    0L
+                    onlyAir ? 0L : ~0L
                 );
             }
             return new ChunkPacketPlan(chunk.getPos().x(), chunk.getPos().z(), shouldModifyAntiXray, snaps);

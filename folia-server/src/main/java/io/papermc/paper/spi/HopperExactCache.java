@@ -1,5 +1,7 @@
 package io.papermc.paper.spi;
 
+import java.lang.ref.WeakReference;
+
 /**
  * Vanilla-exact container mutation epoch and {@code LevelChunkSection#paper$getSectionEpoch()}
  * invalidation cache for idle hoppers ({@code goldleaf-ADR-013}).
@@ -9,7 +11,7 @@ package io.papermc.paper.spi;
  * <ol>
  *   <li>the hopper's own container change count has not changed,</li>
  *   <li>the neighbor container's change count has not changed,</li>
- *   <li>the neighbor container identity matches, and</li>
+ *   <li>the neighbor container reference identity ({@code ==}) matches via {@link WeakReference}, and</li>
  *   <li>the neighbor chunk section's {@code sectionEpoch} has not changed.</li>
  * </ol>
  * Any inventory mutation ({@code setChanged()}), block-state change, container replacement,
@@ -22,13 +24,13 @@ public final class HopperExactCache {
     private int pushHopperChangeCount;
     private int pushDestChangeCount;
     private int pushDestSectionEpoch;
-    private int pushDestIdentityHash;
+    private WeakReference<Object> pushDestRef;
 
     private boolean pullNoOpValid;
     private int pullHopperChangeCount;
     private int pullSourceChangeCount;
     private int pullSourceSectionEpoch;
-    private int pullSourceIdentityHash;
+    private WeakReference<Object> pullSourceRef;
 
     /**
      * Returns {@code true} if a previous push attempt failed (e.g. destination full or
@@ -41,13 +43,13 @@ public final class HopperExactCache {
         final int destSectionEpoch,
         final Object destContainer
     ) {
-        if (!this.pushNoOpValid || destContainer == null) {
+        if (!this.pushNoOpValid || destContainer == null || this.pushDestRef == null) {
             return false;
         }
         return this.pushHopperChangeCount == hopperChangeCount
             && this.pushDestChangeCount == destChangeCount
             && this.pushDestSectionEpoch == destSectionEpoch
-            && this.pushDestIdentityHash == System.identityHashCode(destContainer);
+            && this.pushDestRef.get() == destContainer;
     }
 
     /**
@@ -67,7 +69,9 @@ public final class HopperExactCache {
         this.pushHopperChangeCount = hopperChangeCount;
         this.pushDestChangeCount = destChangeCount;
         this.pushDestSectionEpoch = destSectionEpoch;
-        this.pushDestIdentityHash = System.identityHashCode(destContainer);
+        if (this.pushDestRef == null || this.pushDestRef.get() != destContainer) {
+            this.pushDestRef = new WeakReference<>(destContainer);
+        }
         this.pushNoOpValid = true;
     }
 
@@ -81,13 +85,13 @@ public final class HopperExactCache {
         final int sourceSectionEpoch,
         final Object sourceContainer
     ) {
-        if (!this.pullNoOpValid || sourceContainer == null) {
+        if (!this.pullNoOpValid || sourceContainer == null || this.pullSourceRef == null) {
             return false;
         }
         return this.pullHopperChangeCount == hopperChangeCount
             && this.pullSourceChangeCount == sourceChangeCount
             && this.pullSourceSectionEpoch == sourceSectionEpoch
-            && this.pullSourceIdentityHash == System.identityHashCode(sourceContainer);
+            && this.pullSourceRef.get() == sourceContainer;
     }
 
     /**
@@ -107,18 +111,20 @@ public final class HopperExactCache {
         this.pullHopperChangeCount = hopperChangeCount;
         this.pullSourceChangeCount = sourceChangeCount;
         this.pullSourceSectionEpoch = sourceSectionEpoch;
-        this.pullSourceIdentityHash = System.identityHashCode(sourceContainer);
+        if (this.pullSourceRef == null || this.pullSourceRef.get() != sourceContainer) {
+            this.pullSourceRef = new WeakReference<>(sourceContainer);
+        }
         this.pullNoOpValid = true;
     }
 
     public void invalidatePush() {
         this.pushNoOpValid = false;
-        this.pushDestIdentityHash = 0;
+        this.pushDestRef = null;
     }
 
     public void invalidatePull() {
         this.pullNoOpValid = false;
-        this.pullSourceIdentityHash = 0;
+        this.pullSourceRef = null;
     }
 
     /**

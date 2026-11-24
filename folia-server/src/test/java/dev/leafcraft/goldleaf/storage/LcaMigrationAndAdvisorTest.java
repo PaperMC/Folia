@@ -62,6 +62,7 @@ class LcaMigrationAndAdvisorTest {
         assertEquals(0, dryRun.exitCode());
         assertEquals(1, dryRun.regionsScanned());
         assertEquals(2, dryRun.chunksConverted());
+        assertTrue(dryRun.estimatedWallTimeMs() >= 1L, "Dry-run must report projected conversion wall time");
         assertFalse(Files.exists(lcaWorld));
         assertEquals(originalMcaBytes.length, Files.readAllBytes(srcMca).length);
 
@@ -136,6 +137,8 @@ class LcaMigrationAndAdvisorTest {
     void paperUnsupportedSettingsDefaultsRemainIntact() throws Exception {
         // Verify Paper's technical-vanilla UnsupportedSettings fields exist on GlobalConfiguration
         // and default to false with zero hidden overrides (ADR-014 §3).
+        final GlobalConfiguration globalConfig = new GlobalConfiguration();
+        final GlobalConfiguration.UnsupportedSettings unsupportedInstance = globalConfig.new UnsupportedSettings();
         final Class<?> unsupportedClass = GlobalConfiguration.UnsupportedSettings.class;
         final List<String> requiredFields = List.of(
             "allowPistonDuplication",
@@ -146,12 +149,34 @@ class LcaMigrationAndAdvisorTest {
         );
         for (final String fieldName : requiredFields) {
             final Field field = unsupportedClass.getDeclaredField(fieldName);
+            field.setAccessible(true);
             assertEquals(boolean.class, field.getType(), "Expected boolean field " + fieldName);
+            assertFalse(field.getBoolean(unsupportedInstance), "Expected default false for " + fieldName);
         }
         final GoldLeafConfig defaults = new GoldLeafConfig();
         assertEquals("lca", defaults.storage.format);
-        assertEquals("mode-b", defaults.storage.lcaMode);
+        assertEquals("mode-a", defaults.storage.lcaMode);
+        assertFalse(defaults.storage.lcaModeBLcd2);
         assertFalse(defaults.storage.autoMigrateMca);
         assertTrue(defaults.storage.backupMigratedMca);
+    }
+
+    @Test
+    void dropInExistingMcaWorldReadsWithoutMutationWhenAutoMigrateDisabled(@TempDir final Path tempDir) throws Exception {
+        final Path regionDir = tempDir.resolve("world").resolve("region");
+        final Path srcMca = regionDir.resolve("r.0.0.mca");
+        final Map<Integer, byte[]> regionChunks = new LinkedHashMap<>();
+        regionChunks.put(0, sampleChunkNbt(0, 0, "dropin-parity"));
+        LcaMigrationCli.writeMcaRegionAtomic(srcMca, regionChunks);
+        final byte[] beforeBytes = Files.readAllBytes(srcMca);
+
+        final GoldLeafConfig.Storage storageCfg = new GoldLeafConfig.Storage();
+        storageCfg.autoMigrateMca = false;
+        try (LcaRegionStorageProvider provider = LcaRegionStorageProvider.open(regionDir, storageCfg)) {
+            // With autoMigrateMca=false, LcaRegionStorageProvider must not silently migrate or mutate .mca on read
+            assertEquals(null, provider.read(0, 0));
+        }
+        assertFalse(Files.exists(regionDir.resolve("r.0.0.lca")), "Read-only drop-in must not mutate world into .lca");
+        assertEquals(beforeBytes.length, Files.readAllBytes(srcMca).length, "Original .mca bytes must remain untouched");
     }
 }

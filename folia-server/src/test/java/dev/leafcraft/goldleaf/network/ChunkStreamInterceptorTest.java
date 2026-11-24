@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkStreamInterceptorTest {
 
+    @org.junit.jupiter.api.BeforeEach
     @AfterEach
     void resetRegistries() {
         ChunkStreamInterceptor.resetDefault();

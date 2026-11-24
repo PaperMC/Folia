@@ -59,7 +59,8 @@ class LcaRegionStorageProviderTest {
     void roundTripsRegionEntitiesAndPoiLosslesslyAcrossColdReopen(@TempDir final Path worldDir) throws Exception {
         final GoldLeafConfig.Storage cfg = new GoldLeafConfig.Storage();
         cfg.format = "lca";
-        cfg.lcaModeBLcd2 = true;
+        cfg.lcaMode = "mode-a";
+        cfg.lcaModeBLcd2 = false;
         cfg.autoMigrateMca = false;
 
         final String[] folders = {"region", "entities", "poi"};
@@ -176,5 +177,34 @@ class LcaRegionStorageProviderTest {
         // Enabling auto-migrate-mca switches legacy folder to .lca provider
         cfg.autoMigrateMca = true;
         assertTrue(RegionStorageProvider.shouldUseLcaForFolder(legacyRegion, cfg));
+    }
+
+    @Test
+    void modeAAndModeBKeepStandardLcaCompressionWithoutForcingFlatBitPack(@TempDir final Path worldDir) throws Exception {
+        final Path regionDirA = worldDir.resolve("mode_a").resolve("region");
+        final Path regionDirB = worldDir.resolve("mode_b").resolve("region");
+        final Path entitiesDirA = worldDir.resolve("mode_a").resolve("entities");
+        Files.createDirectories(regionDirA);
+        Files.createDirectories(regionDirB);
+        Files.createDirectories(entitiesDirA);
+
+        final GoldLeafConfig.Storage cfgA = new GoldLeafConfig.Storage();
+        cfgA.format = "lca";
+        cfgA.lcaMode = "mode-a";
+        cfgA.lcaModeBLcd2 = false;
+        try (LcaRegionStorageProvider providerA = LcaRegionStorageProvider.open(regionDirA, cfgA)) {
+            assertFalse(providerA.delegate().isDirectFlatBitPack(), "Standard Mode A must preserve Delta-Roaring/H3/v3 disk compression");
+        }
+        try (LcaRegionStorageProvider entitiesA = LcaRegionStorageProvider.open(entitiesDirA, cfgA)) {
+            assertFalse(entitiesA.delegate().isDirectFlatBitPack(), "Entities folder must not enable voxel directFlatBitPack");
+        }
+
+        final GoldLeafConfig.Storage cfgB = new GoldLeafConfig.Storage();
+        cfgB.format = "lca";
+        cfgB.lcaMode = "mode-b";
+        cfgB.lcaModeBLcd2 = true;
+        try (LcaRegionStorageProvider providerB = LcaRegionStorageProvider.open(regionDirB, cfgB)) {
+            assertFalse(providerB.delegate().isDirectFlatBitPack(), "Mode B region storage must keep directFlatBitPack disabled");
+        }
     }
 }

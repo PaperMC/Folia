@@ -74,8 +74,8 @@ GoldLeaf adopts **`.lca` (`LCA-ICD-3.0`, `formatVersion = 0x0003`)** as its nati
 
 1. **Default `.lca` v3 Profile (`goldleaf.yml`):**
    - `storage.format: lca` (with `mca` opt-in fallback and automatic non-destructive detection of existing `.mca` / `0x0002` `.lca` worlds).
-   - Default live write profile: `formatVersion = 0x0003` (`LCA-ICD-3.0`), **Mode B `FastGreedy` (`lcd2Level = 1`)**, **columnar ticks & block entities (`v3-Columnar`)**, `SEC-DED` enabled, Eikonal light + `SEC_EXT_GRAY_BITPLANES` + `FEATURE_RANK_EXCL` disabled on live writes and enabled only for explicit offline/archival compaction (`lcd2Level = 3`).
-   - `storage.lca.mode: mode-a` available as an explicit pre-generation / NVMe-scratch profile.
+   - Default live write profile: `formatVersion = 0x0003` (`LCA-ICD-3.0`), **Mode A (`codec1 = 0`, unified disk = memory columnar format with cached Layer 2 region dictionaries and zero outer LZ/Huffman decompression)**, **columnar ticks & block entities (`v3-Columnar`)**, `SEC-DED` enabled, Eikonal light + `SEC_EXT_GRAY_BITPLANES` + `FEATURE_RANK_EXCL` disabled on live writes.
+   - `storage.lca-mode: mode-b` / `archival` (`LCD2`) remains supported as an explicit opt-in archival/back-compat profile, and existing Mode B `.lca` archives read transparently without migration.
    - Atomic `0x0002 -> 0x0003` upgrade on writable open via `LcaRegionWriter.upgradeLegacyArchiveAtomically` (`.v3upgrade.tmp` + `force(true)` + `ATOMIC_MOVE`).
 2. **Open Interoperability & Tooling:**
    - Expose MIT `api/anvil-api` conversion and self-healing utilities (`transcodeFromMca`, `transcodeToMca`, `healRegionBitRot`, `AnvilRegionInspectorCli`) directly via GoldLeaf CLI/admin commands so operators can convert worlds in either direction at any time.
@@ -100,7 +100,14 @@ GoldLeaf adopts **`.lca` (`LCA-ICD-3.0`, `formatVersion = 0x0003`)** as its nati
 
 1. **Bit-Exact Lossless Round-Trip (`L_inf = 0`):** Every `.mca -> .lca -> .mca` and live-save round-trip must preserve 100% of block states, biomes, Starlight `BLOCKLIGHT_STATE_TAG`/`SKYLIGHT_STATE_TAG`, Folia `redstoneGameTime` scheduled ticks, block entities, entities, structures, and CraftBukkit `persistentDataContainer` (including `DataVersion` upgrades and custom datapack namespaces).
 2. **Safety & Concurrency Invariants (`S-002`, `S-004`, `S-005`):** Zero synchronous chunk/disk I/O on Folia region tick threads; deterministic unload fencing (`UNLOADED_BIT` + `EpochCommitFence`) with zero leaked `FileChannel` handles or `DirtyChunkLruCache` entries; fail-closed `CBIT T1–T8` validation with `SEC-DED` recovery tests.
-3. **Performance & Mixed-Client Gates:** Verify single-pass `Mode B` saves stay faster than `.mca` Zlib (`anvil-api-ADR-005`), verify zero vanilla redstone/farm timing regressions, and verify simultaneous `LCA_NET_V1` + unmodified vanilla clients (both direct and behind Velocity) with zero protocol errors or anti-xray bypasses.
+3. **Performance & Mixed-Client Gates:** Verify single-pass `Mode A` saves stay faster than `.mca` Zlib (`anvil-api-ADR-005`), verify zero vanilla redstone/farm timing regressions, and verify simultaneous `LCA_NET_V1` + unmodified vanilla clients (both direct and behind Velocity) with zero protocol errors or anti-xray bypasses.
+
+### 5. Future Improvements (Post-Mode-A Centralization)
+
+1. **Zero-Decode GPU DMA → Unified Mode A `.lca` Format (`goldleaf-ADR-017` Phase D):** Emit Mode A `SectionFrame`s (plus precomputed section summary counts) directly from OpenCL kernels into pinned DMA buffers so the host skips any secondary `hostApply` decode/unpack pass between GPU DMA, live memory, and disk.
+2. **`8 B`-Aligned `SectionFrame`s + `4 KiB`-Aligned Spatial Chunk Clustering (`2×2` / `4×4`):** Word-aligning `SectionFrame`s inside `ChunkFrame` enables zero-copy `VarHandle`/`MemorySegment` slicing, while clustering adjacent chunks into `4 KiB`-aligned extents aligns NVMe/OS page-cache reads without paying `.mca`'s `4 KiB` per-chunk internal padding waste.
+3. **Precomputed `16 B` Per-Section Summary Counts (`nonEmpty`, `fluid`, `tickingCount`, `specialColliding`):** Storing precomputed `LevelChunkSection` counts in `.lca` eliminates the remaining inner 4,096-voxel decode pass on warm reload so outer-ring `FULL` chunks stay pure `COLD_LCA` (`0` voxel decode on load) until promoted to `ENTITY_TICKING`.
+4. **Optional Per-Section `dictPatternArena`-Only Framing (Zero LZ Backreferences):** If an extra `~10%` disk/cold-RAM reduction is ever desired without breaking $O(1)$ per-section random access or introducing LZ backreferences, frame dictionary pattern references strictly per-section against the cached Layer 2 region dictionary.
 
 ## Alternatives Considered
 

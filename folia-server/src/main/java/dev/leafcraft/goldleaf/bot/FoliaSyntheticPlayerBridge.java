@@ -41,25 +41,38 @@ public final class FoliaSyntheticPlayerBridge implements SyntheticPlayerService.
         final Runnable task
     ) {
         Objects.requireNonNull(task, "task");
-        try {
-            final MinecraftServer server = MinecraftServer.getServer();
-            if (server != null && Bukkit.getServer() != null) {
-                final World world = Bukkit.getWorld(worldName);
-                if (world != null) {
-                    io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueChunkTask(
-                        ((org.bukkit.craftbukkit.CraftWorld) world).getHandle(),
-                        chunkX,
-                        chunkZ,
-                        task
-                    );
-                    return;
-                }
-            }
-        } catch (final Throwable t) {
-            LOGGER.warn("Falling back to direct execution for synthetic player task in {} ({}, {})",
-                worldName, chunkX, chunkZ, t);
+        final MinecraftServer server = MinecraftServer.getServer();
+        if (server == null || Bukkit.getServer() == null) {
+            // Headless unit-test mode (no live Folia server booted).
+            task.run();
+            return;
         }
-        task.run();
+        final World world = Bukkit.getWorld(worldName);
+        if (world == null) {
+            LOGGER.warn("Rejecting synthetic player task for unknown world {} ({}, {}) (fail-closed, ADR-015)",
+                worldName, chunkX, chunkZ);
+            throw new IllegalStateException("Unknown world for synthetic player task: " + worldName);
+        }
+        final ServerLevel level = ((org.bukkit.craftbukkit.CraftWorld) world).getHandle();
+        if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, chunkX, chunkZ)) {
+            task.run();
+            return;
+        }
+        try {
+            io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueChunkTask(
+                level,
+                chunkX,
+                chunkZ,
+                task
+            );
+        } catch (final Throwable t) {
+            LOGGER.warn("Failed scheduling synthetic player task onto owning region for {} ({}, {}); failing closed",
+                worldName, chunkX, chunkZ, t);
+            throw new IllegalStateException(
+                "Failed scheduling synthetic player task for " + worldName + " (" + chunkX + ", " + chunkZ + ")",
+                t
+            );
+        }
     }
 
     @Override

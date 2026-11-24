@@ -168,14 +168,30 @@ final class Wave2AdrCompletionTest {
         );
         assertEquals(1, failResult.exitCode());
         assertTrue(failResult.report().hasCriticalFindings());
+
+        // Missing target directory must fail closed with exit code 2 (ADR-018, S-004)
+        final Path missingDir = tempDir.resolve("does-not-exist");
+        final OfflinePluginAuditCli.Options parsedStrict = OfflinePluginAuditCli.parseArgs(new String[] {
+            missingDir.toString(),
+            "--format", "json",
+            "--strict"
+        });
+        assertTrue(parsedStrict.failOnWarn());
+        assertEquals(OfflinePluginAuditCli.OutputFormat.JSON, parsedStrict.format());
+        final OfflinePluginAuditCli.AuditResult missingResult = OfflinePluginAuditCli.run(parsedStrict);
+        assertEquals(2, missingResult.exitCode());
+        assertTrue(missingResult.report().hasCriticalFindings());
     }
 
     @Test
     void chatSigningDisableDefaultsFalseAndReflectsConfig() {
+        assertFalse(GoldLeafConfig.defaults().security.disableChatSigning, "Chat signing disable must default off (ADR-018)");
         GoldLeafBootstrap.registerAllLayer2Providers(GoldLeafConfig.get());
         assertFalse(PaperNetworkSpi.isChatSigningDisabled());
         GoldLeafConfig.get().security.disableChatSigning = true;
         assertTrue(PaperNetworkSpi.isChatSigningDisabled());
+        GoldLeafConfig.get().security.disableChatSigning = false;
+        assertFalse(PaperNetworkSpi.isChatSigningDisabled(), "Disabling toggle must restore signed chat path");
     }
 
     @Test

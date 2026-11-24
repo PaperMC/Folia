@@ -52,10 +52,10 @@ class GoldLeafBootstrapTest {
         assertNotNull(RegionStorageSpi.getFactory());
         assertNotNull(ChunkLoadBackpressureSpi.get());
 
-        // Default format=lca registers Tier 2 direct-section/residency; LCA_NET_V1 stays opt-in
+        // Default format=lca registers Tier 2 direct-section/residency and native LCA_NET_V1 wire engine
         assertNotNull(DirectSectionSerializationSpi.get());
         assertNotNull(ChunkResidencySpi.get());
-        assertNull(ChunkStreamInterceptor.get());
+        assertInstanceOf(LcaNetWireEngine.class, ChunkStreamInterceptor.get());
     }
 
     @Test

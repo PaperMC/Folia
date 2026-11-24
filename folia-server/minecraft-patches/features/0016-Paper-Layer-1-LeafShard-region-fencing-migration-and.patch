@@ -389,21 +389,19 @@ index a6ab9cb01f4f49f5f44b6ed324fa6d51139aabb6..01c03d75c7e9492bc731734eecaae4ea
      }
  
      @Override
-@@ -108,6 +100,17 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
+@@ -108,6 +100,15 @@ public final class TickRegions implements ThreadedRegionizer.RegionCallbacks<Tic
              region.getData().profiler.stopProfiler();
          }
          // Folia end - profiler
-+        // GoldLeaf start - bounded RegionizedWorldData shell reuse on destroy (ADR-003)
++        // GoldLeaf start - region migration lifecycle hook on destroy
 +        final TickRegionData data = region.getData();
 +        final io.papermc.paper.threadedregions.spi.RegionMigrationHook migrationHook = io.papermc.paper.threadedregions.spi.RegionMigrationHook.get();
 +        if (migrationHook != null) {
 +            migrationHook.onRegionDestroy(data.world, data.id);
 +        }
-+        final Object removed = data.regionizedData.remove(data.world.worldRegionData);
-+        if (removed instanceof RegionizedWorldData worldData) {
-+            io.papermc.paper.spi.PaperThreadingSpi.releaseRegionShell(worldData);
-+        }
-+        // GoldLeaf end - bounded RegionizedWorldData shell reuse on destroy (ADR-003)
++        // NOTE: Do NOT remove worldRegionData here — ThreadedRegionizer invokes onRegionDestroy
++        // BEFORE mergeInto() and split(), which iterate data.regionizedData to transfer entities/chunks/ticks.
++        // GoldLeaf end - region migration lifecycle hook on destroy
      }
  
      @Override

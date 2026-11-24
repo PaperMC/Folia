@@ -5,6 +5,7 @@ import ca.spottedleaf.moonrise.patches.nbt_rw.FastNBTParser;
 import ca.spottedleaf.moonrise.spi.ChunkResidencySpi;
 import ca.spottedleaf.moonrise.spi.DirectSectionSerializationSpi;
 import dev.leafcraft.goldleaf.config.GoldLeafConfig;
+import io.github.dailystruggle.anvil.LcaDecodedChunkMeta;
 import io.github.dailystruggle.anvil.LcaRegionFileStorage;
 import io.github.dailystruggle.anvil.LcaRegionReader;
 import io.github.dailystruggle.anvil.RawChunkFrameSnapshot;
@@ -84,8 +85,9 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
         Objects.requireNonNull(folder, "folder");
         Objects.requireNonNull(storageConfig, "storageConfig");
         final int storageKind = LcaRegionFileStorage.inferStorageKindFromPath(folder);
-        final boolean useLcd2 = !"mode-a".equalsIgnoreCase(storageConfig.lcaMode)
-            && (storageConfig.lcaModeBLcd2 || "archival".equalsIgnoreCase(storageConfig.lcaMode));
+        final boolean useLcd2 = "mode-b".equalsIgnoreCase(storageConfig.lcaMode)
+            || "archival".equalsIgnoreCase(storageConfig.lcaMode)
+            || storageConfig.lcaModeBLcd2;
         final LcaRegionFileStorage lca = new LcaRegionFileStorage(
             folder,
             storageKind,
@@ -98,6 +100,17 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
             Math.max(1, storageConfig.maxOpenRegions),
             DEFAULT_COMPACT_THRESHOLD
         );
+        try {
+            // Commit each chunk immediately to the OS page cache via CoW positional FileChannel.write
+            // (matching vanilla .mca durability and preventing data loss when Folia's RegionShutdownThread
+            // exits with 0 active regions), while avoiding 6+ MiB G1GC humongous read-ahead arrays.
+            lca.configureBufferedIo(false, 1, 4096, false, 4);
+        } catch (final IOException ex) {
+            LOGGER.warn("Failed to configure buffered I/O on .lca storage {}", folder, ex);
+        }
+        // Match vanilla Paper/Folia .mca shutdown behavior: flush all pending writes to OS page cache
+        // on close, and only issue per-file channel.force(false) fdatasync when explicitly requested.
+        lca.setForceSyncOnClose(Boolean.getBoolean("leafanvil.fsync.onClose"));
         return new LcaRegionStorageProvider(folder, lca, worldId, storageKind == 0);
     }
 
@@ -173,19 +186,77 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
             );
         }
 
+        final Object directAttachment = compound.paper$getDirectLoadAttachment();
+        if (directAttachment instanceof LcaDirectSectionSerializer.DirectFreshLcaWritePayload freshPayload) {
+            final boolean isFullStatus = isFullChunkStatus(freshPayload.statusName());
+            return new MoonriseRegionFileIO.RegionDataController.WriteData(
+                compound,
+                MoonriseRegionFileIO.RegionDataController.WriteData.WriteResult.WRITE,
+                null,
+                ignoredRegionFile -> {
+                    try {
+                        this.storage.writeFreshChunkDirectModeA(
+                            chunkX,
+                            chunkZ,
+                            freshPayload.dataVersion(),
+                            freshPayload.lastUpdate(),
+                            freshPayload.inhabitedTime(),
+                            freshPayload.statusName(),
+                            freshPayload.blockPalettes(),
+                            freshPayload.preEncodedModeA(),
+                            freshPayload.preEncodedFlatBytes(),
+                            freshPayload.preEncodedFlatBits(),
+                            freshPayload.preResolvedDictIds(),
+                            freshPayload.precomputedOctreeMasks(),
+                            freshPayload.hasPrecomputedOctreeMask(),
+                            freshPayload.blockData(),
+                            freshPayload.biomePalettes(),
+                            freshPayload.biomeData(),
+                            freshPayload.skyLights(),
+                            freshPayload.blockLights(),
+                            freshPayload.residualTail()
+                        );
+                        this.directCoWWriteBypasses.incrementAndGet();
+                        final GoldLeafConfig cfg = GoldLeafConfig.get();
+                        if (!isFullStatus
+                            || (cfg != null && cfg.storage != null && cfg.storage.lcaNativeSectionBacking
+                                && (cfg.network == null || !cfg.network.lcaNetV1Enabled))) {
+                            LcaResidencyManager.global().evictResidencyCacheOnly(this.worldId, chunkX, chunkZ);
+                        } else {
+                            installColdFrameIfResidencyActive(chunkX, chunkZ);
+                        }
+                    } finally {
+                        if (freshPayload.waveSlotId() >= 0) {
+                            WaveChunkArena.global().completeSave(freshPayload.waveSlotId());
+                        }
+                    }
+                }
+            );
+        }
+
         final ByteArrayOutputStream rawOut = new ByteArrayOutputStream(8192);
         try (DataOutputStream dataOut = new DataOutputStream(rawOut)) {
             NbtIo.write(compound, dataOut);
         }
         final byte[] nbtBytes = rawOut.toByteArray();
 
+        final boolean isFullStatus = isFullChunkStatus(compound.getStringOr("Status", ""));
         return new MoonriseRegionFileIO.RegionDataController.WriteData(
             compound,
             MoonriseRegionFileIO.RegionDataController.WriteData.WriteResult.WRITE,
             null,
             ignoredRegionFile -> {
                 this.storage.writeChunkNbtBytes(chunkX, chunkZ, nbtBytes, 0, nbtBytes.length);
-                installColdFrameIfResidencyActive(chunkX, chunkZ);
+                final GoldLeafConfig cfg = GoldLeafConfig.get();
+                if (!isFullStatus
+                    || (cfg != null && cfg.storage != null && cfg.storage.lcaNativeSectionBacking
+                        && (cfg.network == null || !cfg.network.lcaNetV1Enabled))) {
+                    // Never pin incomplete ProtoChunk (EMPTY/STRUCTURE_STARTS/BIOMES) frames into residency,
+                    // and evict stale residency on async saves when native cold backing is active without LCA_NET_V1.
+                    LcaResidencyManager.global().evictResidencyCacheOnly(this.worldId, chunkX, chunkZ);
+                } else {
+                    installColdFrameIfResidencyActive(chunkX, chunkZ);
+                }
             }
         );
     }
@@ -198,7 +269,7 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
     ) throws IOException {
         if (writeData.result() == MoonriseRegionFileIO.RegionDataController.WriteData.WriteResult.DELETE) {
             this.storage.removeChunk(chunkX, chunkZ);
-            LcaResidencyManager.global().onChunkUnloaded(worldId(), chunkX, chunkZ);
+            LcaResidencyManager.global().evictResidencyCacheOnly(worldId(), chunkX, chunkZ);
             return;
         }
         writeData.write().run(null);
@@ -210,12 +281,12 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
         final int chunkZ
     ) throws IOException {
         if (isNativeColdBackingReadEligible()) {
-            final LcaRegionReader.RawChunkFrameWithMetadata paired = this.storage.readRawChunkFrameWithMetadata(
+            final LcaRegionReader.DeferredChunkSlab deferred = this.storage.readDeferredChunkSlab(
                 chunkX,
                 chunkZ,
                 LcaDirectSectionSerializer.canonicalToRuntimeStateLookup()
             );
-            if (paired == null) {
+            if (deferred == null) {
                 return new MoonriseRegionFileIO.RegionDataController.ReadData(
                     MoonriseRegionFileIO.RegionDataController.ReadData.ReadResult.NO_DATA,
                     null,
@@ -223,21 +294,12 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
                     0
                 );
             }
-            final RawChunkFrameSnapshot frame = paired.frame();
-            if (frame != null) {
-                LcaResidencyManager.global().installBaseFrame(this.worldId, chunkX, chunkZ, frame);
-                final byte[] metadataNbt = paired.metadataNbtBytes();
-                if (metadataNbt != null
-                    && isFrameDirectDeserializeReady(frame)
-                    && LcaResidencyManager.global().getCacheIfPresent(this.worldId) != null) {
-                    return new MoonriseRegionFileIO.RegionDataController.ReadData(
-                        MoonriseRegionFileIO.RegionDataController.ReadData.ReadResult.HAS_DATA,
-                        new PreInstalledFrameDataInputStream(new ByteArrayInputStream(metadataNbt)),
-                        null,
-                        0
-                    );
-                }
-            }
+            return new MoonriseRegionFileIO.RegionDataController.ReadData(
+                MoonriseRegionFileIO.RegionDataController.ReadData.ReadResult.HAS_DATA,
+                new DeferredSlabReadStream(deferred),
+                null,
+                0
+            );
         }
         final DataInputStream input = this.storage.getChunkDataInputStream(chunkX, chunkZ);
         if (input == null) {
@@ -265,11 +327,52 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
         if (readData.input() == null) {
             return null;
         }
+        if (readData.input() instanceof DeferredSlabReadStream deferredStream) {
+            LcaRegionReader.RawChunkFrameWithDirectMeta paired;
+            try {
+                paired = deferredStream.slab.decodeToDirectMeta();
+            } catch (final io.github.dailystruggle.anvil.CorruptRegionEntryException raceOrCorrupt) {
+                paired = this.storage.readRawChunkFrameWithDirectMeta(
+                    chunkX,
+                    chunkZ,
+                    LcaDirectSectionSerializer.canonicalToRuntimeStateLookup()
+                );
+            }
+            if (paired != null) {
+                final RawChunkFrameSnapshot frame = paired.frame();
+                final LcaDecodedChunkMeta directMeta = paired.directMeta();
+                if (frame != null && directMeta != null && isFrameDirectDeserializeReady(frame)) {
+                    final GoldLeafConfig cfg = GoldLeafConfig.get();
+                    if (cfg != null && cfg.network != null && cfg.network.lcaNetV1Enabled) {
+                        if (isFullChunkStatus(directMeta.statusName())) {
+                            LcaResidencyManager.global().installBaseFrame(this.worldId, chunkX, chunkZ, frame);
+                        } else {
+                            // Never cache incomplete ProtoChunk frames into residency; they would shadow promoted LevelChunks.
+                            LcaResidencyManager.global().evictResidencyCacheOnly(this.worldId, chunkX, chunkZ);
+                        }
+                    }
+                    return buildDirectLoadCompoundTag(chunkX, chunkZ, frame, directMeta);
+                }
+            }
+            try (DataInputStream fallbackIn = this.storage.getChunkDataInputStream(chunkX, chunkZ)) {
+                if (fallbackIn == null) {
+                    return null;
+                }
+                final CompoundTag tag = FastNBTParser.nbtIoRead(fallbackIn);
+                if (tag != null) {
+                    installOrEvictColdFrameForStatus(chunkX, chunkZ, tag);
+                }
+                return tag;
+            }
+        }
+        if (readData.input() instanceof DirectMetaReadStream directStream) {
+            return buildDirectLoadCompoundTag(chunkX, chunkZ, directStream.frame, directStream.directMeta);
+        }
         final boolean alreadyInstalled = readData.input() instanceof PreInstalledFrameDataInputStream;
         try (DataInputStream input = readData.input()) {
             final CompoundTag tag = FastNBTParser.nbtIoRead(input);
             if (tag != null && !alreadyInstalled) {
-                installColdFrameIfResidencyActive(chunkX, chunkZ);
+                installOrEvictColdFrameForStatus(chunkX, chunkZ, tag);
             }
             return tag;
         }
@@ -283,7 +386,7 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
             }
             final CompoundTag tag = FastNBTParser.nbtIoRead(input);
             if (tag != null) {
-                installColdFrameIfResidencyActive(chunkX, chunkZ);
+                installOrEvictColdFrameForStatus(chunkX, chunkZ, tag);
             }
             return tag;
         }
@@ -322,6 +425,68 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
         }
     }
 
+    private CompoundTag buildDirectLoadCompoundTag(
+        final int chunkX,
+        final int chunkZ,
+        final RawChunkFrameSnapshot frame,
+        final LcaDecodedChunkMeta meta
+    ) throws IOException {
+        final CompoundTag tag;
+        if (meta.hasResidualNbt()) {
+            try (DataInputStream residualIn = new DataInputStream(new ByteArrayInputStream(meta.residualNbtBytes()))) {
+                final CompoundTag parsed = FastNBTParser.nbtIoRead(residualIn);
+                tag = parsed != null ? parsed : new CompoundTag();
+            }
+        } else {
+            tag = new CompoundTag();
+        }
+        tag.putInt("DataVersion", meta.dataVersion());
+        tag.putInt("xPos", chunkX);
+        tag.putInt("zPos", chunkZ);
+        if (meta.statusName() != null && !meta.statusName().isEmpty()) {
+            tag.putString("Status", meta.statusName());
+        }
+        tag.paper$setDirectLoadAttachment(new DirectLcaLoadPayload(
+            frame,
+            meta,
+            this.storage,
+            chunkX,
+            chunkZ
+        ));
+        return tag;
+    }
+
+    private static final class DeferredSlabReadStream extends DataInputStream {
+        private static final InputStream EMPTY = InputStream.nullInputStream();
+        final LcaRegionReader.DeferredChunkSlab slab;
+
+        DeferredSlabReadStream(final LcaRegionReader.DeferredChunkSlab slab) {
+            super(EMPTY);
+            this.slab = slab;
+        }
+    }
+
+    private static final class DirectMetaReadStream extends DataInputStream {
+        private static final InputStream EMPTY = InputStream.nullInputStream();
+        final RawChunkFrameSnapshot frame;
+        final LcaDecodedChunkMeta directMeta;
+
+        DirectMetaReadStream(final RawChunkFrameSnapshot frame, final LcaDecodedChunkMeta directMeta) {
+            super(EMPTY);
+            this.frame = frame;
+            this.directMeta = directMeta;
+        }
+    }
+
+    record DirectLcaLoadPayload(
+        RawChunkFrameSnapshot frame,
+        LcaDecodedChunkMeta directMeta,
+        LcaRegionFileStorage storage,
+        int chunkX,
+        int chunkZ
+    ) {
+    }
+
     @Override
     public void scanChunk(
         final int chunkX,
@@ -346,11 +511,44 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
         }
         if (compound == null) {
             this.storage.removeChunk(chunkX, chunkZ);
-            LcaResidencyManager.global().onChunkUnloaded(this.worldId, chunkX, chunkZ);
+            LcaResidencyManager.global().evictResidencyCacheOnly(this.worldId, chunkX, chunkZ);
             return;
         }
         if (compound.getBooleanOr(LcaRegionFileStorage.DIRECT_COW_COMMITTED_TAG, false)) {
             this.directCoWWriteBypasses.incrementAndGet();
+            return;
+        }
+        final Object directAttachment = compound.paper$getDirectLoadAttachment();
+        if (directAttachment instanceof LcaDirectSectionSerializer.DirectFreshLcaWritePayload freshPayload) {
+            try {
+                this.storage.writeFreshChunkDirectModeA(
+                    chunkX,
+                    chunkZ,
+                    freshPayload.dataVersion(),
+                    freshPayload.lastUpdate(),
+                    freshPayload.inhabitedTime(),
+                    freshPayload.statusName(),
+                    freshPayload.blockPalettes(),
+                    freshPayload.preEncodedModeA(),
+                    freshPayload.preEncodedFlatBytes(),
+                    freshPayload.preEncodedFlatBits(),
+                    freshPayload.preResolvedDictIds(),
+                    freshPayload.precomputedOctreeMasks(),
+                    freshPayload.hasPrecomputedOctreeMask(),
+                    freshPayload.blockData(),
+                    freshPayload.biomePalettes(),
+                    freshPayload.biomeData(),
+                    freshPayload.skyLights(),
+                    freshPayload.blockLights(),
+                    freshPayload.residualTail()
+                );
+                this.directCoWWriteBypasses.incrementAndGet();
+                installOrEvictColdFrameForStatus(chunkX, chunkZ, compound);
+            } finally {
+                if (freshPayload.waveSlotId() >= 0) {
+                    WaveChunkArena.global().completeSave(freshPayload.waveSlotId());
+                }
+            }
             return;
         }
         final ByteArrayOutputStream rawOut = new ByteArrayOutputStream(8192);
@@ -359,7 +557,19 @@ public final class LcaRegionStorageProvider implements RegionStorageProvider {
         }
         final byte[] nbtBytes = rawOut.toByteArray();
         this.storage.writeChunkNbtBytes(chunkX, chunkZ, nbtBytes, 0, nbtBytes.length);
-        installColdFrameIfResidencyActive(chunkX, chunkZ);
+        installOrEvictColdFrameForStatus(chunkX, chunkZ, compound);
+    }
+
+    public static boolean isFullChunkStatus(final @Nullable String statusName) {
+        return "minecraft:full".equals(statusName) || "full".equals(statusName);
+    }
+
+    private void installOrEvictColdFrameForStatus(final int chunkX, final int chunkZ, final CompoundTag tag) {
+        if (isFullChunkStatus(tag.getStringOr("Status", ""))) {
+            installColdFrameIfResidencyActive(chunkX, chunkZ);
+        } else {
+            LcaResidencyManager.global().evictResidencyCacheOnly(this.worldId, chunkX, chunkZ);
+        }
     }
 
     private void installColdFrameIfResidencyActive(final int chunkX, final int chunkZ) {

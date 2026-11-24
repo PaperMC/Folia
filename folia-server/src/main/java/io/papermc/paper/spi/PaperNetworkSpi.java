@@ -56,6 +56,14 @@ public final class PaperNetworkSpi {
         ) {
         }
 
+        default boolean tryHandleCustomPayload(
+            final ServerGamePacketListenerImpl connection,
+            final String channel,
+            final byte[] data
+        ) {
+            return false;
+        }
+
         default void onPlayerJoin(final UUID playerId) {
         }
 
@@ -74,6 +82,15 @@ public final class PaperNetworkSpi {
          * @return {@code 0} if accepted, {@code 1} if rejected (drop), {@code 2} if rejected (disconnect)
          */
         default int validateBookEdit(final UUID playerId, final List<String> pages) {
+            return 0;
+        }
+
+        /**
+         * Enforces per-connection packet-burst rate limiting on untrusted serverbound packets.
+         *
+         * @return {@code 0} if accepted, {@code 1} if rejected (drop), {@code 2} if rejected (disconnect)
+         */
+        default int validatePacketBurst(final UUID playerId, final String packetType) {
             return 0;
         }
 
@@ -140,6 +157,15 @@ public final class PaperNetworkSpi {
         }
     }
 
+    public static boolean tryHandleCustomPayload(
+        final ServerGamePacketListenerImpl connection,
+        final String channel,
+        final byte[] data
+    ) {
+        final Provider p = provider;
+        return p != null && p.tryHandleCustomPayload(connection, channel, data);
+    }
+
     public static void onPlayerJoin(final UUID playerId) {
         final Provider p = provider;
         if (p != null) {
@@ -171,6 +197,11 @@ public final class PaperNetworkSpi {
     public static int validateBookEdit(final UUID playerId, final List<String> pages) {
         final Provider p = provider;
         return p != null ? p.validateBookEdit(playerId, pages) : 0;
+    }
+
+    public static int validatePacketBurst(final UUID playerId, final String packetType) {
+        final Provider p = provider;
+        return p != null ? p.validatePacketBurst(playerId, packetType) : 0;
     }
 
     public static boolean isChatSigningDisabled() {

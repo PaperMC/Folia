@@ -63,6 +63,12 @@ class LcaNetWireEngineTest {
             assertTrue(engine.isNegotiated(playerId));
             assertEquals(1, engine.activeSessionCount());
 
+            final byte[] ackBytes = LcaNetWireEngine.buildHandshakeAckBytes(session);
+            final LcaNetWireEngine.HandshakePayload ack = LcaNetWireEngine.HandshakePayload.fromBytes(ackBytes);
+            assertEquals(LcaNetWireEngine.PROTOCOL_VERSION, ack.protocolVersion());
+            assertEquals(session.activeCapabilities(), ack.capabilityFlags());
+            assertEquals(REGISTRY_HASH, ack.registryParityHash64());
+
             // Registry parity mismatch must fall back to vanilla and evict prior session (S-004)
             final LcaNetWireEngine.HandshakePayload wrongHash = new LcaNetWireEngine.HandshakePayload(
                 LcaNetWireEngine.PROTOCOL_VERSION,
@@ -228,5 +234,59 @@ class LcaNetWireEngineTest {
         final byte[] wrapped = LcaNetWireEngine.wrapProxySafeStoredZlib(raw);
         assertArrayEquals(raw, LcaNetWireEngine.unwrapProxySafeStoredZlib(wrapped, 1024));
         assertThrows(IOException.class, () -> LcaNetWireEngine.unwrapProxySafeStoredZlib(wrapped, 4));
+    }
+
+    @Test
+    void residencyOnlyCachesFullChunksAndRejectsIncompleteProtoChunkStatuses() {
+        assertTrue(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:full"));
+        assertTrue(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("full"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:empty"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:structure_starts"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:biomes"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:noise"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:features"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus("minecraft:light"));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus(""));
+        assertFalse(dev.leafcraft.goldleaf.storage.LcaRegionStorageProvider.isFullChunkStatus(null));
+    }
+
+    @Test
+    void orderlessDictNegotiationAndFullDictionaryResyncSnapshotWork() throws Exception {
+        final LcaChunkResidencyCache cache = new LcaChunkResidencyCache();
+        final dev.leafcraft.goldleaf.config.GoldLeafConfig.Network netCfg =
+            new dev.leafcraft.goldleaf.config.GoldLeafConfig.Network();
+        try (LcaNetWireEngine engine = LcaNetWireEngine.fromConfig(cache, netCfg, REGISTRY_HASH, null, null)) {
+            final UUID playerId = UUID.randomUUID();
+            final LcaNetWireEngine.HandshakePayload hs = new LcaNetWireEngine.HandshakePayload(
+                LcaNetWireEngine.PROTOCOL_VERSION,
+                LcaNetWireEngine.ALL_CAPABILITIES,
+                4096,
+                REGISTRY_HASH
+            );
+            final LcaNetWireEngine.NegotiatedSession negotiated = engine.handleClientHandshake(playerId, hs.toBytes());
+            assertTrue(negotiated.lcaStreamActive());
+            assertTrue(negotiated.isOrderlessDictAndMulticastEnabled(),
+                "fromConfig must negotiate CAP_ORDERLESS_DICT_AND_MULTICAST");
+
+            final byte[] samplePattern = new byte[]{1, 2, 3, 4, 5, 6, 7, 8};
+            engine.orderlessDict().observeOrLookup(
+                io.github.dailystruggle.anvil.stream.LcaOrderlessDictWireTable.KIND_SECTION_SLICE_OR_PALETTE,
+                samplePattern
+            );
+            engine.orderlessDict().observeOrLookup(
+                io.github.dailystruggle.anvil.stream.LcaOrderlessDictWireTable.KIND_SECTION_SLICE_OR_PALETTE,
+                samplePattern
+            );
+            assertEquals(1, engine.orderlessDict().populatedSlotCount());
+
+            final byte[] fullDict = engine.resetAndBuildFullDictionarySnapshot(playerId);
+            assertNotNull(fullDict);
+            assertTrue(fullDict.length > 12);
+            // Must begin with ODCT magic 0x4F444354
+            assertEquals(0x4F, fullDict[0] & 0xFF);
+            assertEquals(0x44, fullDict[1] & 0xFF);
+            assertEquals(0x43, fullDict[2] & 0xFF);
+            assertEquals(0x54, fullDict[3] & 0xFF);
+        }
     }
 }

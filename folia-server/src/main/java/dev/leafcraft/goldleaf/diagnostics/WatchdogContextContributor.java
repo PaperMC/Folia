@@ -26,8 +26,37 @@ public interface WatchdogContextContributor {
         double elapsedSeconds,
         String threadName,
         boolean globalRegion,
-        @Nullable StackTraceElement[] stackTrace
+        @Nullable StackTraceElement[] stackTrace,
+        int minChunkX,
+        int maxChunkX,
+        int minChunkZ,
+        int maxChunkZ,
+        int loadedChunkCount
     ) {
+        public StalledTickContext(
+            final String worldName,
+            final int centerChunkX,
+            final int centerChunkZ,
+            final double elapsedSeconds,
+            final String threadName,
+            final boolean globalRegion,
+            final @Nullable StackTraceElement[] stackTrace
+        ) {
+            this(
+                worldName,
+                centerChunkX,
+                centerChunkZ,
+                elapsedSeconds,
+                threadName,
+                globalRegion,
+                stackTrace,
+                centerChunkX,
+                centerChunkX,
+                centerChunkZ,
+                centerChunkZ,
+                -1
+            );
+        }
     }
 
     /**

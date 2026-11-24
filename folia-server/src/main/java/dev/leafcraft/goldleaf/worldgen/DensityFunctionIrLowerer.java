@@ -113,9 +113,20 @@ public final class DensityFunctionIrLowerer {
         final String moduleName,
         final boolean assumeAlignedCoarseGrid
     ) {
+        return lower(root, compileContext, moduleName, assumeAlignedCoarseGrid, false);
+    }
+
+    public static LoweringResult lower(
+        final DensityFunction root,
+        final DensityFunction.@Nullable CompileContext compileContext,
+        final String moduleName,
+        final boolean assumeAlignedCoarseGrid,
+        final boolean macroNoiseOctaves
+    ) {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(moduleName, "moduleName");
-        final LoweringContext ctx = new LoweringContext(compileContext, assumeAlignedCoarseGrid);
+        final SharedLutState sharedLuts = new SharedLutState(macroNoiseOctaves);
+        final LoweringContext ctx = new LoweringContext(compileContext, assumeAlignedCoarseGrid, sharedLuts, null);
         try {
             final ConceptExpr resultExpr = ctx.lowerNode(
                 root,
@@ -206,12 +217,21 @@ public final class DensityFunctionIrLowerer {
         final DensityFunction.@Nullable CompileContext compileContext,
         final String moduleName
     ) {
+        return lowerSplitForSectionFill(root, compileContext, moduleName, false);
+    }
+
+    public static SplitLoweringResult lowerSplitForSectionFill(
+        final DensityFunction root,
+        final DensityFunction.@Nullable CompileContext compileContext,
+        final String moduleName,
+        final boolean macroNoiseOctaves
+    ) {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(moduleName, "moduleName");
         final CoarseChannelDiscovery discovery = new CoarseChannelDiscovery();
         discovery.visit(root);
         if (!discovery.compatible || discovery.channels.isEmpty()) {
-            final LoweringResult dense = lower(root, compileContext, moduleName, true);
+            final LoweringResult dense = lower(root, compileContext, moduleName, true, macroNoiseOctaves);
             return new SplitLoweringResult(
                 dense.module(),
                 null,
@@ -222,7 +242,7 @@ public final class DensityFunctionIrLowerer {
             );
         }
 
-        final SharedLutState sharedLuts = new SharedLutState();
+        final SharedLutState sharedLuts = new SharedLutState(macroNoiseOctaves);
         final List<ConceptFunction> helpers = new ArrayList<>();
         final List<String> coarseFnNames = new ArrayList<>(discovery.channels.size());
         final IdentityHashMap<InterpolatedFunction, String> channelParams = new IdentityHashMap<>();
@@ -407,9 +427,18 @@ public final class DensityFunctionIrLowerer {
     private static final class SharedLutState {
         final IdentityHashMap<Noise, List<PerlinLayerSpec>> compiledNoiseCache = new IdentityHashMap<>();
         final List<Number> packedPAdjWords = new ArrayList<>();
+        final boolean macroNoiseOctaves;
         int noiseOctaves;
         boolean usesPlainPerlin;
         boolean usesSmearedPerlin;
+
+        SharedLutState() {
+            this(false);
+        }
+
+        SharedLutState(final boolean macroNoiseOctaves) {
+            this.macroNoiseOctaves = macroNoiseOctaves;
+        }
     }
 
     private static final class UnsupportedNodeException extends RuntimeException {
@@ -940,12 +969,22 @@ public final class DensityFunctionIrLowerer {
             final double xzMultiplier = 684.412 * blendedNoise.xzScale();
             final double yMultiplier = 684.412 * blendedNoise.yScale();
 
-            final List<PerlinLayerSpec> minLayers = new ArrayList<>();
-            collectPerlinLayers(fbms.minLimitNoise(), 1.0, 1.0f, minLayers);
-            final List<PerlinLayerSpec> maxLayers = new ArrayList<>();
-            collectPerlinLayers(fbms.maxLimitNoise(), 1.0, 1.0f, maxLayers);
-            final List<PerlinLayerSpec> mainLayers = new ArrayList<>();
-            collectPerlinLayers(fbms.mainNoise(), 1.0, 1.0f, mainLayers);
+            final List<PerlinLayerSpec> rawMinLayers = new ArrayList<>();
+            collectPerlinLayers(fbms.minLimitNoise(), 1.0, 1.0f, rawMinLayers);
+            final List<PerlinLayerSpec> rawMaxLayers = new ArrayList<>();
+            collectPerlinLayers(fbms.maxLimitNoise(), 1.0, 1.0f, rawMaxLayers);
+            final List<PerlinLayerSpec> rawMainLayers = new ArrayList<>();
+            collectPerlinLayers(fbms.mainNoise(), 1.0, 1.0f, rawMainLayers);
+
+            final List<PerlinLayerSpec> minLayers = this.sharedLuts.macroNoiseOctaves
+                ? pruneTopOctaves(rawMinLayers, 5)
+                : rawMinLayers;
+            final List<PerlinLayerSpec> maxLayers = this.sharedLuts.macroNoiseOctaves
+                ? pruneTopOctaves(rawMaxLayers, 5)
+                : rawMaxLayers;
+            final List<PerlinLayerSpec> mainLayers = this.sharedLuts.macroNoiseOctaves
+                ? pruneTopOctaves(rawMainLayers, 3)
+                : rawMainLayers;
 
             final ConceptExpr xD = castF64(xExpr);
             final ConceptExpr yD = castF64(yExpr);
@@ -1034,6 +1073,18 @@ public final class DensityFunctionIrLowerer {
                 )
             );
             return new ConceptExpr.Ternary(inBounds, v, wrapped, ConceptType.F64);
+        }
+
+        private static List<PerlinLayerSpec> pruneTopOctaves(
+            final List<PerlinLayerSpec> layers,
+            final int keepCount
+        ) {
+            if (layers.size() <= keepCount) {
+                return layers;
+            }
+            final List<PerlinLayerSpec> sorted = new ArrayList<>(layers);
+            sorted.sort((a, b) -> Float.compare(Math.abs(b.amplitude), Math.abs(a.amplitude)));
+            return new ArrayList<>(sorted.subList(0, keepCount));
         }
 
         private List<PerlinLayerSpec> resolveNoiseLayers(final Holder<NormalNoise> holder) {

@@ -6,6 +6,303 @@ Subject: [PATCH] Paper Layer 1 worldgen acceleration and SIMD density SPI
 
 Co-authored-by: Junie <junie@jetbrains.com>
 
+diff --git a/ca/spottedleaf/moonrise/patches/starlight/light/SkyStarLightEngine.java b/ca/spottedleaf/moonrise/patches/starlight/light/SkyStarLightEngine.java
+index d3d1831ff4fabd87d4b18da0b28a0d75d82dfbc7..220b6f9ed1fe296c981fe73ddcbf782b7f5e0db8 100644
+--- a/ca/spottedleaf/moonrise/patches/starlight/light/SkyStarLightEngine.java
++++ b/ca/spottedleaf/moonrise/patches/starlight/light/SkyStarLightEngine.java
+@@ -535,15 +535,54 @@ public final class SkyStarLightEngine extends StarLightEngine {
+         if (highestNonEmptySection >= this.minSection) {
+             // fill out our other sources
+             final int minX = chunkPos.x() << 4;
+-            final int maxX = chunkPos.x() << 4 | 15;
+             final int minZ = chunkPos.z() << 4;
+-            final int maxZ = chunkPos.z() << 4 | 15;
+             final int startY = highestNonEmptySection << 4 | 15;
+-            for (int currZ = minZ; currZ <= maxZ; ++currZ) {
+-                for (int currX = minX; currX <= maxX; ++currX) {
+-                    this.tryPropagateSkylight(world, currX, startY + 1, currZ, false, false);
++            // GoldLeaf start - Wave 4 WORLD_SURFACE-guided skylight fast-path skipping open-air getBlockState & redundant BFS
++            final net.minecraft.world.level.levelgen.Heightmap worldSurface = chunk.hasPrimedHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE)
++                ? chunk.getOrCreateHeightmapUnprimed(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE)
++                : null;
++            if (worldSurface != null) {
++                final int[] surfaceY = new int[256];
++                for (int lz = 0; lz < 16; ++lz) {
++                    for (int lx = 0; lx < 16; ++lx) {
++                        surfaceY[(lz << 4) | lx] = worldSurface.getFirstAvailable(lx, lz);
++                    }
++                }
++                for (int lz = 0; lz < 16; ++lz) {
++                    final int currZ = minZ | lz;
++                    for (int lx = 0; lx < 16; ++lx) {
++                        final int currX = minX | lx;
++                        final int colSurface = surfaceY[(lz << 4) | lx];
++                        if (colSurface > startY) {
++                            this.tryPropagateSkylight(world, currX, startY + 1, currZ, false, false);
++                        } else {
++                            int safeSkipAbove = startY + 1;
++                            if (lx >= 1 && lx <= 14 && lz >= 1 && lz <= 14) {
++                                int maxNeigh = colSurface;
++                                final int sW = surfaceY[(lz << 4) | (lx - 1)];
++                                final int sE = surfaceY[(lz << 4) | (lx + 1)];
++                                final int sN = surfaceY[((lz - 1) << 4) | lx];
++                                final int sS = surfaceY[((lz + 1) << 4) | lx];
++                                if (sW > maxNeigh) maxNeigh = sW;
++                                if (sE > maxNeigh) maxNeigh = sE;
++                                if (sN > maxNeigh) maxNeigh = sN;
++                                if (sS > maxNeigh) maxNeigh = sS;
++                                safeSkipAbove = maxNeigh;
++                            }
++                            this.tryPropagateSkylightFromSurface(world, currX, startY + 1, currZ, colSurface, safeSkipAbove);
++                        }
++                    }
++                }
++            } else {
++                final int maxX = minX | 15;
++                final int maxZ = minZ | 15;
++                for (int currZ = minZ; currZ <= maxZ; ++currZ) {
++                    for (int currX = minX; currX <= maxX; ++currX) {
++                        this.tryPropagateSkylight(world, currX, startY + 1, currZ, false, false);
++                    }
+                 }
+             }
++            // GoldLeaf end - Wave 4 WORLD_SURFACE-guided skylight fast-path skipping open-air getBlockState & redundant BFS
+         } // else: apparently the chunk is empty
+ 
+         if (needsEdgeChecks) {
+@@ -686,4 +725,51 @@ public final class SkyStarLightEngine extends StarLightEngine {
+ 
+         return startY;
+     }
++
++    // GoldLeaf start - Wave 4 heightmap-guided skylight column propagator
++    private void tryPropagateSkylightFromSurface(
++        final BlockGetter world,
++        final int worldX,
++        final int startY,
++        final int worldZ,
++        final int surfaceFirstAirY,
++        final int safeSkipAboveY
++    ) {
++        final int encodeOffset = this.coordinateOffset;
++        final long propagateDirection = AxisDirection.POSITIVE_Y.everythingButThisDirection;
++        final int chunkX = worldX >> 4;
++        final int chunkZ = worldZ >> 4;
++        final int minY = this.minLightSection << 4;
++        final int airFloor = Math.max(surfaceFirstAirY, minY);
++
++        int y = startY;
++        while (y >= airFloor) {
++            final int sectionY = y >> 4;
++            this.checkNullSection(chunkX, sectionY, chunkZ, false);
++            final SWMRNibbleArray nibble = this.getNibbleFromCache(chunkX, sectionY, chunkZ);
++            final int sectionBottom = Math.max(sectionY << 4, airFloor);
++            if (nibble == null) {
++                y = (sectionY << 4) - 1;
++                continue;
++            }
++            final int lx = worldX & 15;
++            final int lz = worldZ & 15;
++            final int localIndexBase = lx | (lz << 4);
++            for (int cy = y; cy >= sectionBottom; --cy) {
++                nibble.set(localIndexBase | ((cy & 15) << 8), 15);
++                if (cy <= safeSkipAboveY) {
++                    this.appendToIncreaseQueue(
++                        ((worldX + (worldZ << 6) + (cy << (6 + 6)) + encodeOffset) & ((1L << (6 + 6 + 16)) - 1))
++                            | (15L << (6 + 6 + 16))
++                            | (propagateDirection << (6 + 6 + 16 + 4))
++                    );
++                }
++            }
++            y = sectionBottom - 1;
++        }
++        if (y >= minY) {
++            this.tryPropagateSkylight(world, worldX, y, worldZ, false, false);
++        }
++    }
++    // GoldLeaf end - Wave 4 heightmap-guided skylight column propagator
+ }
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index 29ceeaff8ee2b9a6737a278e37fcef97ce308cd5..b100da2af7d487ab195a1290bf3cea2eb5731bcf 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -2787,26 +2787,37 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+ 
+     @Override
+     public void updatePOIOnBlockStateChange(final BlockPos pos, final BlockState oldState, final BlockState newState) {
+-        Optional<Holder<PoiType>> oldType = PoiTypes.forState(oldState);
+-        Optional<Holder<PoiType>> newType = PoiTypes.forState(newState);
+-        if (!Objects.equals(oldType, newType)) {
+-            BlockPos immutable = pos.immutable();
+-            oldType.ifPresent(poiType -> io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueOrExecuteTickTask(this, immutable.getX() >> 4, immutable.getZ() >> 4, () -> { // Folia - region threading
++        // GoldLeaf start - Wave 4 zero-alloc POI fast-path on unchanged / non-POI states
++        if (oldState == newState) {
++            return;
++        }
++        final Holder<PoiType> oldType = PoiTypes.forStateOrNull(oldState);
++        final Holder<PoiType> newType = PoiTypes.forStateOrNull(newState);
++        if (oldType == newType || Objects.equals(oldType, newType)) {
++            return;
++        }
++        final BlockPos immutable = pos.immutable();
++        if (oldType != null) {
++            io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueOrExecuteTickTask(this, immutable.getX() >> 4, immutable.getZ() >> 4, () -> { // Folia - region threading
+                 this.getPoiManager().remove(immutable);
+                 this.debugSynchronizers.dropPoi(immutable);
+-            }));
+-            newType.ifPresent(poiType -> io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueOrExecuteTickTask(this, immutable.getX() >> 4, immutable.getZ() >> 4, () -> { // Folia - region threading
++            });
++        }
++        if (newType != null) {
++            final boolean hadOldType = oldType != null;
++            io.papermc.paper.threadedregions.RegionizedServer.getInstance().taskQueue.queueOrExecuteTickTask(this, immutable.getX() >> 4, immutable.getZ() >> 4, () -> { // Folia - region threading
+                 // Paper start - Remove stale POIs
+-                if (oldType.isEmpty() && this.getPoiManager().exists(immutable, _ -> true)) {
++                if (!hadOldType && this.getPoiManager().exists(immutable, _ -> true)) {
+                     this.getPoiManager().remove(immutable);
+                 }
+                 // Paper end - Remove stale POIs
+-                PoiRecord record = this.getPoiManager().add(immutable, (Holder<PoiType>)poiType);
++                PoiRecord record = this.getPoiManager().add(immutable, newType);
+                 if (record != null) {
+                     this.debugSynchronizers.registerPoi(record);
+                 }
+-            }));
++            });
+         }
++        // GoldLeaf end - Wave 4 zero-alloc POI fast-path on unchanged / non-POI states
+     }
+ 
+     public PoiManager getPoiManager() {
+diff --git a/net/minecraft/server/level/WorldGenRegion.java b/net/minecraft/server/level/WorldGenRegion.java
+index 5f9dbdc854296041d19566ec48ab9f8ac2e3ae4b..69a84b3d7615dfdb7ab0ba772b6d34f8563bf236 100644
+--- a/net/minecraft/server/level/WorldGenRegion.java
++++ b/net/minecraft/server/level/WorldGenRegion.java
+@@ -85,6 +85,9 @@ public class WorldGenRegion implements WorldGenLevel {
+     private final int centerChunkX;
+     private final int centerChunkZ;
+     private final int writeRadius;
++    // GoldLeaf start - Wave 4 flat 3x3 ChunkAccess[9] cache for center/neighbor fast-path during FEATURES
++    private final ChunkAccess @Nullable [] fastChunks3x3;
++    // GoldLeaf end - Wave 4 flat 3x3 ChunkAccess[9] cache for center/neighbor fast-path during FEATURES
+ 
+     // Paper start - rewrite chunk system
+     /**
+@@ -143,6 +146,19 @@ public class WorldGenRegion implements WorldGenLevel {
+         this.centerChunkX = centerPos.x();
+         this.centerChunkZ = centerPos.z();
+         this.writeRadius = generatingStep.blockStateWriteRadius();
++        // GoldLeaf start - Wave 4 populate flat 3x3 ChunkAccess[9] cache
++        if (this.writeRadius >= 1) {
++            final ChunkAccess[] flat = new ChunkAccess[9];
++            for (int dz = -1; dz <= 1; dz++) {
++                for (int dx = -1; dx <= 1; dx++) {
++                    flat[(dz + 1) * 3 + (dx + 1)] = this.cache.get(this.centerChunkX + dx, this.centerChunkZ + dz);
++                }
++            }
++            this.fastChunks3x3 = flat;
++        } else {
++            this.fastChunks3x3 = null;
++        }
++        // GoldLeaf end - Wave 4 populate flat 3x3 ChunkAccess[9] cache
+         this.environmentAttributes = EnvironmentAttributeSystem.builder().addStaticLayers(this).build();
+         this.structureManager = level.structureManager().forWorldGenRegion(this); // Folia - region threading
+     }
+@@ -178,6 +194,22 @@ public class WorldGenRegion implements WorldGenLevel {
+ 
+     @Override
+     public ChunkAccess getChunk(final int chunkX, final int chunkZ) {
++        // GoldLeaf start - Wave 4 center & 3x3 flat-array fast-path
++        if (chunkX == this.centerChunkX && chunkZ == this.centerChunkZ) {
++            return this.center;
++        }
++        final ChunkAccess[] flat = this.fastChunks3x3;
++        if (flat != null) {
++            final int dx = chunkX - this.centerChunkX + 1;
++            final int dz = chunkZ - this.centerChunkZ + 1;
++            if ((dx | dz) >= 0 && dx <= 2 && dz <= 2) {
++                final ChunkAccess cached = flat[dz * 3 + dx];
++                if (cached != null) {
++                    return cached;
++                }
++            }
++        }
++        // GoldLeaf end - Wave 4 center & 3x3 flat-array fast-path
+         // Paper start - optimise chunk generation
+         // We can skip the status checking logic, as it will never fail when status = EMPTY
+         final ChunkAccess ret = this.cache.get(chunkX, chunkZ);
+@@ -250,16 +282,48 @@ public class WorldGenRegion implements WorldGenLevel {
+ 
+     @Override
+     public BlockState getBlockState(final BlockPos pos) {
+-        int chunkX = SectionPos.blockToSectionCoord(pos.getX());
+-        int chunkZ = SectionPos.blockToSectionCoord(pos.getZ());
++        final int chunkX = pos.getX() >> 4;
++        final int chunkZ = pos.getZ() >> 4;
++        // GoldLeaf start - Wave 4 center & 3x3 fast-path bypassing StaticCache2D + warnIfReadOutsideWriteZone
++        if (chunkX == this.centerChunkX && chunkZ == this.centerChunkZ) {
++            return this.center.getBlockState(pos);
++        }
++        final ChunkAccess[] flat = this.fastChunks3x3;
++        if (flat != null) {
++            final int dx = chunkX - this.centerChunkX + 1;
++            final int dz = chunkZ - this.centerChunkZ + 1;
++            if ((dx | dz) >= 0 && dx <= 2 && dz <= 2) {
++                final ChunkAccess cached = flat[dz * 3 + dx];
++                if (cached != null) {
++                    return cached.getBlockState(pos);
++                }
++            }
++        }
++        // GoldLeaf end - Wave 4 center & 3x3 fast-path bypassing StaticCache2D + warnIfReadOutsideWriteZone
+         this.warnIfReadOutsideWriteZone(chunkX, chunkZ);
+         return this.getChunk(chunkX, chunkZ).getBlockState(pos);
+     }
+ 
+     @Override
+     public FluidState getFluidState(final BlockPos pos) {
+-        int chunkX = SectionPos.blockToSectionCoord(pos.getX());
+-        int chunkZ = SectionPos.blockToSectionCoord(pos.getZ());
++        final int chunkX = pos.getX() >> 4;
++        final int chunkZ = pos.getZ() >> 4;
++        // GoldLeaf start - Wave 4 center & 3x3 fast-path
++        if (chunkX == this.centerChunkX && chunkZ == this.centerChunkZ) {
++            return this.center.getFluidState(pos);
++        }
++        final ChunkAccess[] flat = this.fastChunks3x3;
++        if (flat != null) {
++            final int dx = chunkX - this.centerChunkX + 1;
++            final int dz = chunkZ - this.centerChunkZ + 1;
++            if ((dx | dz) >= 0 && dx <= 2 && dz <= 2) {
++                final ChunkAccess cached = flat[dz * 3 + dx];
++                if (cached != null) {
++                    return cached.getFluidState(pos);
++                }
++            }
++        }
++        // GoldLeaf end - Wave 4 center & 3x3 fast-path
+         this.warnIfReadOutsideWriteZone(chunkX, chunkZ);
+         return this.getChunk(chunkX, chunkZ).getFluidState(pos);
+     }
+diff --git a/net/minecraft/world/entity/ai/village/poi/PoiTypes.java b/net/minecraft/world/entity/ai/village/poi/PoiTypes.java
+index beb5d9d960239ff8001ad98b68b3106f2f0fe971..223f9e94fa08cde613832c7d4dbabe8397d04399 100644
+--- a/net/minecraft/world/entity/ai/village/poi/PoiTypes.java
++++ b/net/minecraft/world/entity/ai/village/poi/PoiTypes.java
+@@ -56,7 +56,13 @@ public class PoiTypes {
+         .stream()
+         .flatMap(block -> block.getStateDefinition().getPossibleStates().stream())
+         .collect(ImmutableSet.toImmutableSet());
+-    private static final Map<BlockState, Holder<PoiType>> TYPE_BY_STATE = Maps.newHashMap();
++    // GoldLeaf start - Wave 4 identity-hashed POI map & zero-Optional lookup
++    private static final it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap<BlockState, Holder<PoiType>> TYPE_BY_STATE = new it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap<>();
++
++    public static @org.jspecify.annotations.Nullable Holder<PoiType> forStateOrNull(final BlockState state) {
++        return TYPE_BY_STATE.get(state);
++    }
++    // GoldLeaf end - Wave 4 identity-hashed POI map & zero-Optional lookup
+ 
+     private static Set<BlockState> getBlockStates(final Block block) {
+         return ImmutableSet.copyOf(block.getStateDefinition().getPossibleStates());
 diff --git a/net/minecraft/world/level/biome/Climate.java b/net/minecraft/world/level/biome/Climate.java
 index 54b608c5d2e36c5dec0fc2cbb1c074da946f6d7a..16bc0388811a49a44e6f51ce7b8c457c15db1cb7 100644
 --- a/net/minecraft/world/level/biome/Climate.java
@@ -299,6 +596,349 @@ index 7cbc170c4184ec7289bc1a52ceb9152c9fac267a..ddb34204431520b50bc22a4c5c9f8682
      }
  
      @VisibleForDebug
+diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
+index 51de0e755660678892a1243ae31b9eb874b80716..cffc5dff41113f88e3575911ad774b7994300253 100644
+--- a/net/minecraft/world/level/chunk/ChunkGenerator.java
++++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
+@@ -93,6 +93,11 @@ public abstract class ChunkGenerator {
+     protected final BiomeSource biomeSource;
+     private final Supplier<List<FeatureSorter.StepFeatureData>> featuresPerStep;
+     public final Function<Holder<Biome>, BiomeGenerationSettings> generationSettingsGetter;
++    // GoldLeaf start - Wave 4 cached structuresByStep & per-biome sorted feature indices for zero-alloc addVanillaDecorations
++    private volatile @Nullable Registry<Structure> cachedStructuresRegistry;
++    private volatile List<Structure> @Nullable [] cachedStructuresByStep;
++    private volatile java.util.@Nullable IdentityHashMap<Biome, int[][]> cachedBiomeFeatureIndices;
++    // GoldLeaf end - Wave 4 cached structuresByStep & per-biome sorted feature indices for zero-alloc addVanillaDecorations
+ 
+     public ChunkGenerator(final BiomeSource biomeSource) {
+         this(biomeSource, biome -> biome.value().getGenerationSettings());
+@@ -380,38 +385,103 @@ public abstract class ChunkGenerator {
+         }
+     }
+ 
++    // GoldLeaf start - Wave 4 cached structuresByStep & per-biome sorted feature indices
++    @SuppressWarnings("unchecked")
++    private List<Structure>[] getOrBuildStructuresByStep(final Registry<Structure> structuresRegistry) {
++        if (this.cachedStructuresRegistry == structuresRegistry && this.cachedStructuresByStep != null) {
++            return this.cachedStructuresByStep;
++        }
++        final int stepCount = GenerationStep.Decoration.values().length;
++        final List<Structure>[] byStep = new List[stepCount];
++        for (final Structure structure : structuresRegistry) {
++            final int ordinal = structure.step().ordinal();
++            if (byStep[ordinal] == null) {
++                byStep[ordinal] = new java.util.ArrayList<>();
++            }
++            byStep[ordinal].add(structure);
++        }
++        for (int i = 0; i < stepCount; i++) {
++            if (byStep[i] == null) {
++                byStep[i] = Collections.emptyList();
++            }
++        }
++        this.cachedStructuresByStep = byStep;
++        this.cachedStructuresRegistry = structuresRegistry;
++        return byStep;
++    }
++
++    private java.util.IdentityHashMap<Biome, int[][]> getOrBuildBiomeFeatureIndices(final List<FeatureSorter.StepFeatureData> featureList) {
++        java.util.IdentityHashMap<Biome, int[][]> cached = this.cachedBiomeFeatureIndices;
++        if (cached != null) {
++            return cached;
++        }
++        final int stepCount = featureList.size();
++        final java.util.IdentityHashMap<Biome, int[][]> built = new java.util.IdentityHashMap<>();
++        for (final Holder<Biome> biomeHolder : this.biomeSource.possibleBiomes()) {
++            final Biome biome = biomeHolder.value();
++            if (built.containsKey(biome)) {
++                continue;
++            }
++            final List<HolderSet<PlacedFeature>> featuresInBiome = this.generationSettingsGetter.apply(biomeHolder).features();
++            final int[][] perStep = new int[stepCount][];
++            for (int stepIndex = 0; stepIndex < stepCount; stepIndex++) {
++                if (stepIndex < featuresInBiome.size()) {
++                    final HolderSet<PlacedFeature> set = featuresInBiome.get(stepIndex);
++                    final FeatureSorter.StepFeatureData stepData = featureList.get(stepIndex);
++                    final int size = set.size();
++                    if (size > 0) {
++                        final int[] indices = new int[size];
++                        int out = 0;
++                        for (int k = 0; k < size; k++) {
++                            indices[out++] = stepData.indexMapping().applyAsInt(set.get(k).value());
++                        }
++                        Arrays.sort(indices, 0, out);
++                        perStep[stepIndex] = indices;
++                    }
++                }
++            }
++            built.put(biome, perStep);
++        }
++        this.cachedBiomeFeatureIndices = built;
++        return built;
++    }
++    // GoldLeaf end - Wave 4 cached structuresByStep & per-biome sorted feature indices
++
+     public void addVanillaDecorations(final WorldGenLevel level, final ChunkAccess chunk, final StructureManager structureManager) { // CraftBukkit - rename
+         ChunkPos centerPos = chunk.getPos();
+         if (!SharedConstants.debugVoidTerrain(centerPos)) {
+             SectionPos sectionPos = SectionPos.of(centerPos, level.getMinSectionY());
+             BlockPos origin = sectionPos.origin();
+             Registry<Structure> structuresRegistry = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+-            Map<Integer, List<Structure>> structuresByStep = structuresRegistry.stream()
+-                .collect(Collectors.groupingBy(structure -> structure.step().ordinal()));
++            // GoldLeaf start - Wave 4 zero-alloc cached structuresByStep, flat 3x3 biome scan & BitSet feature merge
++            final List<Structure>[] structuresByStep = this.getOrBuildStructuresByStep(structuresRegistry);
+             List<FeatureSorter.StepFeatureData> featureList = this.featuresPerStep.get();
++            final java.util.IdentityHashMap<Biome, int[][]> biomeFeatureIndices = this.getOrBuildBiomeFeatureIndices(featureList);
+             WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
+             long decorationSeed = random.setDecorationSeed(level.getSeed(), origin.getX(), origin.getZ());
+             Set<Holder<Biome>> possibleBiomes = new ObjectArraySet<>();
+-            ChunkPos.rangeClosed(sectionPos.chunk(), 1).forEach(chunkPos -> {
+-                ChunkAccess chunkInRange = level.getChunk(chunkPos.x(), chunkPos.z());
+-
+-                for (LevelChunkSection section : chunkInRange.getSections()) {
+-                    // Paper start - optimise chunk generation
+-                    // We do not need to search the entire biome section, as the biome section is never
+-                    // modified after being created - meaning that the palette only contains entries
+-                    // that are present in the section (provided that the palette is NOT global).
+-                    final PalettedContainerRO<Holder<Biome>> biomes = section.getBiomes();
+-                    if (((PalettedContainer<Holder<Biome>>)biomes).data.palette() instanceof GlobalPalette<Holder<Biome>>) {
+-                        biomes.getAll(possibleBiomes::add);
+-                    } else {
+-                        biomes.forEachInPalette(possibleBiomes::add);
++            final int centerChunkX = centerPos.x();
++            final int centerChunkZ = centerPos.z();
++            for (int dz = -1; dz <= 1; dz++) {
++                for (int dx = -1; dx <= 1; dx++) {
++                    final ChunkAccess chunkInRange = level.getChunk(centerChunkX + dx, centerChunkZ + dz);
++                    for (final LevelChunkSection section : chunkInRange.getSections()) {
++                        final PalettedContainerRO<Holder<Biome>> biomes = section.getBiomes();
++                        if (((PalettedContainer<Holder<Biome>>)biomes).data.palette() instanceof GlobalPalette<Holder<Biome>>) {
++                            biomes.getAll(possibleBiomes::add);
++                        } else {
++                            biomes.forEachInPalette(possibleBiomes::add);
++                        }
+                     }
+-                    // Paper end - optimise chunk generation
+                 }
+-            });
++            }
+             possibleBiomes.retainAll(this.biomeSource.possibleBiomes());
+-            int featureStepCount = featureList.size();
+-            FeaturePlacer placer = new FeaturePlacer(level, this);
++            final int featureStepCount = featureList.size();
++            final FeaturePlacer placer = new FeaturePlacer(level, this);
++            final java.util.BitSet activeFeatureMask = new java.util.BitSet();
++            final var configuredFeatureSeeds =
++                level.getMinecraftWorld().paperConfig().featureSeeds.features;
++            final boolean hasConfiguredFeatureSeeds = !configuredFeatureSeeds.isEmpty();
+ 
+             try {
+                 Registry<PlacedFeature> featureRegistry = level.registryAccess().lookupOrThrow(Registries.PLACED_FEATURE);
+@@ -419,21 +489,25 @@ public abstract class ChunkGenerator {
+ 
+                 for (int stepIndex = 0; stepIndex < generationSteps; stepIndex++) {
+                     int index = 0;
+-                    if (structureManager.shouldGenerateStructures()) {
+-                        for (Structure structure : structuresByStep.getOrDefault(stepIndex, Collections.emptyList())) {
++                    if (structureManager.shouldGenerateStructures() && stepIndex < structuresByStep.length) {
++                        final List<Structure> stepStructures = structuresByStep[stepIndex];
++                        for (int si = 0, sLen = stepStructures.size(); si < sLen; si++) {
++                            final Structure structure = stepStructures.get(si);
+                             random.setFeatureSeed(decorationSeed, index, stepIndex);
+-                            Supplier<String> currentlyGenerating = () -> structuresRegistry.getResourceKey(structure)
+-                                .map(Object::toString)
+-                                .orElseGet(structure::toString);
+-
+-                            try {
+-                                level.setCurrentlyGenerating(currentlyGenerating);
+-                                structureManager.startsForStructure(sectionPos.x(), sectionPos.z(), structure)
+-                                    .forEach(start -> start.placeInChunk(level, structureManager, this, random, getWritableArea(chunk), centerPos));
+-                            } catch (Exception e) {
+-                                CrashReport report = CrashReport.forThrowable(e, "Feature placement");
+-                                report.addCategory("Feature").setDetail("Description", currentlyGenerating::get);
+-                                throw new ReportedException(report);
++                            final List<StructureStart> starts = structureManager.startsForStructure(sectionPos.x(), sectionPos.z(), structure);
++                            if (!starts.isEmpty()) {
++                                try {
++                                    for (int stIdx = 0, stLen = starts.size(); stIdx < stLen; stIdx++) {
++                                        starts.get(stIdx).placeInChunk(level, structureManager, this, random, getWritableArea(chunk), centerPos);
++                                    }
++                                } catch (Exception e) {
++                                    final String desc = structuresRegistry.getResourceKey(structure)
++                                        .map(Object::toString)
++                                        .orElseGet(structure::toString);
++                                    CrashReport report = CrashReport.forThrowable(e, "Feature placement");
++                                    report.addCategory("Feature").setDetail("Description", desc);
++                                    throw new ReportedException(report);
++                                }
+                             }
+ 
+                             index++;
+@@ -441,50 +515,59 @@ public abstract class ChunkGenerator {
+                     }
+ 
+                     if (stepIndex < featureStepCount) {
+-                        IntSet possibleFeaturesThisStep = new IntArraySet();
+-
+-                        for (Holder<Biome> biome : possibleBiomes) {
+-                            List<HolderSet<PlacedFeature>> featuresInBiome = this.generationSettingsGetter.apply(biome).features();
+-                            if (stepIndex < featuresInBiome.size()) {
+-                                HolderSet<PlacedFeature> featuresInBiomeThisStep = featuresInBiome.get(stepIndex);
+-                                FeatureSorter.StepFeatureData stepFeatureData = featureList.get(stepIndex);
+-                                featuresInBiomeThisStep.stream()
+-                                    .map(Holder::value)
+-                                    .forEach(featurex -> possibleFeaturesThisStep.add(stepFeatureData.indexMapping().applyAsInt(featurex)));
++                        activeFeatureMask.clear();
++                        final FeatureSorter.StepFeatureData stepFeatureData = featureList.get(stepIndex);
++
++                        for (final Holder<Biome> biome : possibleBiomes) {
++                            final int[][] perStep = biomeFeatureIndices.get(biome.value());
++                            if (perStep != null) {
++                                final int[] stepIndices = perStep[stepIndex];
++                                if (stepIndices != null) {
++                                    for (int k = 0, kLen = stepIndices.length; k < kLen; k++) {
++                                        activeFeatureMask.set(stepIndices[k]);
++                                    }
++                                }
++                            } else {
++                                final List<HolderSet<PlacedFeature>> featuresInBiome = this.generationSettingsGetter.apply(biome).features();
++                                if (stepIndex < featuresInBiome.size()) {
++                                    final HolderSet<PlacedFeature> featuresInBiomeThisStep = featuresInBiome.get(stepIndex);
++                                    for (int k = 0, kLen = featuresInBiomeThisStep.size(); k < kLen; k++) {
++                                        activeFeatureMask.set(stepFeatureData.indexMapping().applyAsInt(featuresInBiomeThisStep.get(k).value()));
++                                    }
++                                }
+                             }
+                         }
+ 
+-                        int numberOfFeaturesInStep = possibleFeaturesThisStep.size();
+-                        int[] indexArray = possibleFeaturesThisStep.toIntArray();
+-                        Arrays.sort(indexArray);
+-                        FeatureSorter.StepFeatureData stepFeatureData = featureList.get(stepIndex);
+-
+-                        for (int featureIndex = 0; featureIndex < numberOfFeaturesInStep; featureIndex++) {
+-                            int globalIndexOfFeature = indexArray[featureIndex];
+-                            PlacedFeature feature = stepFeatureData.features().get(globalIndexOfFeature);
+-                            Supplier<String> currentlyGenerating = () -> featureRegistry.getResourceKey(feature)
+-                                .map(Object::toString)
+-                                .orElseGet(feature::toString);
++                        final List<PlacedFeature> stepFeatures = stepFeatureData.features();
++                        for (int globalIndexOfFeature = activeFeatureMask.nextSetBit(0);
++                             globalIndexOfFeature >= 0;
++                             globalIndexOfFeature = activeFeatureMask.nextSetBit(globalIndexOfFeature + 1)) {
++                            final PlacedFeature feature = stepFeatures.get(globalIndexOfFeature);
+                             // Paper start - Configurable feature seeds; change populationSeed used in random
+                             long featurePopulationSeed = decorationSeed;
+-                            final long configFeatureSeed = level.getMinecraftWorld().paperConfig().featureSeeds.features.getLong(feature.feature());
+-                            if (configFeatureSeed != -1) {
+-                                featurePopulationSeed = random.setDecorationSeed(configFeatureSeed, origin.getX(), origin.getZ()); // See WorldgenRandom.setDecorationSeed from above
++                            if (hasConfiguredFeatureSeeds) {
++                                final long configFeatureSeed = configuredFeatureSeeds.getLong(feature.feature());
++                                if (configFeatureSeed != -1) {
++                                    featurePopulationSeed = random.setDecorationSeed(configFeatureSeed, origin.getX(), origin.getZ());
++                                }
+                             }
+                             random.setFeatureSeed(featurePopulationSeed, globalIndexOfFeature, stepIndex);
+                             // Paper end - Configurable feature seeds
+ 
+                             try {
+-                                level.setCurrentlyGenerating(currentlyGenerating);
+                                 placer.placeWithBiomeCheck(feature, random, origin);
+                             } catch (Exception e) {
++                                final String desc = featureRegistry.getResourceKey(feature)
++                                    .map(Object::toString)
++                                    .orElseGet(feature::toString);
+                                 CrashReport report = CrashReport.forThrowable(e, "Feature placement");
+-                                report.addCategory("Feature").setDetail("Description", currentlyGenerating::get);
++                                report.addCategory("Feature").setDetail("Description", desc);
+                                 throw new ReportedException(report);
+                             }
+                         }
+                     }
+                 }
++                // GoldLeaf end - Wave 4 zero-alloc cached structuresByStep, flat 3x3 biome scan & BitSet feature merge
+ 
+                 level.setCurrentlyGenerating(null);
+                 if (SharedConstants.DEBUG_FEATURE_COUNT) {
+diff --git a/net/minecraft/world/level/chunk/ProtoChunk.java b/net/minecraft/world/level/chunk/ProtoChunk.java
+index d3afcaa32dc9b46147c99972fbcca84be2a8e54d..887190e9b8a42d620440f94ea2636f0df168673f 100644
+--- a/net/minecraft/world/level/chunk/ProtoChunk.java
++++ b/net/minecraft/world/level/chunk/ProtoChunk.java
+@@ -44,6 +44,10 @@ public class ProtoChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private volatile @Nullable LevelLightEngine lightEngine;
+     private volatile ChunkStatus status = ChunkStatus.EMPTY;
++    // GoldLeaf start - Wave 4 cached Heightmap[] per persisted status for zero-EnumSet ProtoChunk#setBlockState
++    private @Nullable ChunkStatus cachedHeightmapsStatus;
++    private Heightmap @Nullable [] cachedHeightmaps;
++    // GoldLeaf end - Wave 4 cached Heightmap[] per persisted status for zero-EnumSet ProtoChunk#setBlockState
+     private final List<CompoundTag> entities = Lists.newArrayList();
+     private @Nullable BelowZeroRetrogen belowZeroRetrogen;
+     private final ProtoChunkTicks<Block> blockTicks;
+@@ -198,25 +202,38 @@ public class ProtoChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+             }
+         }
+ 
+-        EnumSet<Heightmap.Types> heightmapsAfter = this.getPersistedStatus().heightmapsAfter();
+-        EnumSet<Heightmap.Types> toPrime = null;
+-
+-        for (Heightmap.Types type : heightmapsAfter) {
+-            Heightmap heightmap = this.heightmaps.get(type);
+-            if (heightmap == null) {
+-                if (toPrime == null) {
+-                    toPrime = EnumSet.noneOf(Heightmap.Types.class);
++        // GoldLeaf start - Wave 4 cached Heightmap[] array avoiding per-block EnumSet/EnumMap lookup
++        final ChunkStatus persistedStatus = this.getPersistedStatus();
++        Heightmap[] activeHeightmaps = this.cachedHeightmaps;
++        if (activeHeightmaps == null || this.cachedHeightmapsStatus != persistedStatus) {
++            final EnumSet<Heightmap.Types> heightmapsAfter = persistedStatus.heightmapsAfter();
++            EnumSet<Heightmap.Types> toPrime = null;
++            for (final Heightmap.Types type : heightmapsAfter) {
++                if (this.heightmaps.get(type) == null) {
++                    if (toPrime == null) {
++                        toPrime = EnumSet.noneOf(Heightmap.Types.class);
++                    }
++                    toPrime.add(type);
+                 }
+-
+-                toPrime.add(type);
+-            } else {
+-                heightmap.update(localX, y, localZ, state);
+             }
++            if (toPrime != null) {
++                Heightmap.primeHeightmaps(this, toPrime);
++            }
++            activeHeightmaps = new Heightmap[heightmapsAfter.size()];
++            int hmIdx = 0;
++            for (final Heightmap.Types type : heightmapsAfter) {
++                activeHeightmaps[hmIdx++] = this.heightmaps.get(type);
++            }
++            this.cachedHeightmaps = activeHeightmaps;
++            this.cachedHeightmapsStatus = persistedStatus;
+         }
+-
+-        if (toPrime != null) {
+-            Heightmap.primeHeightmaps(this, toPrime);
++        for (int i = 0, len = activeHeightmaps.length; i < len; i++) {
++            final Heightmap heightmap = activeHeightmaps[i];
++            if (heightmap != null) {
++                heightmap.update(localX, y, localZ, state);
++            }
+         }
++        // GoldLeaf end - Wave 4 cached Heightmap[] array avoiding per-block EnumSet/EnumMap lookup
+ 
+         return oldState;
+     }
+@@ -276,6 +293,8 @@ public class ProtoChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+ 
+     public void setPersistedStatus(final ChunkStatus status) {
+         this.status = status;
++        this.cachedHeightmapsStatus = null; // GoldLeaf - Wave 4 invalidate cached Heightmap[]
++        this.cachedHeightmaps = null;
+         if (this.belowZeroRetrogen != null && status.isOrAfter(this.belowZeroRetrogen.targetStatus())) {
+             this.setBelowZeroRetrogen(null);
+         }
 diff --git a/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java b/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java
 index 55e242900224d0a117fb2045b863c122404b8301..9dfb74ce4d4e8ead0702830ed2ad923ace0696b8 100644
 --- a/net/minecraft/world/level/chunk/status/ChunkStatusTasks.java
@@ -1119,7 +1759,7 @@ index 45a42f68a2aff0f2dae5c7a1abca8c8c1ff81639..628fd50de45bd0b5f7b7913cde087ff6
                  this.lastUpdate = lastContextUpdate;
                  this.result = this.compute();
 diff --git a/net/minecraft/world/level/levelgen/material/MaterialSystem.java b/net/minecraft/world/level/levelgen/material/MaterialSystem.java
-index b339467cb268a023dd160d011bcc9ee94875fe01..d9152bf7bea8109641f50193e7fd5bb723dd37fc 100644
+index b339467cb268a023dd160d011bcc9ee94875fe01..a5c5a7faa110cf0c1ba1f6c2c184c26cb0795ad6 100644
 --- a/net/minecraft/world/level/levelgen/material/MaterialSystem.java
 +++ b/net/minecraft/world/level/levelgen/material/MaterialSystem.java
 @@ -108,10 +108,25 @@ public class MaterialSystem {
@@ -1148,6 +1788,126 @@ index b339467cb268a023dd160d011bcc9ee94875fe01..d9152bf7bea8109641f50193e7fd5bb7
              }
  
              @Override
+@@ -147,28 +162,64 @@ public class MaterialSystem {
+         RuleEvaluator rule = ruleSource.compile(context);
+         BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
+ 
++        // GoldLeaf start - Wave 4 cached heightmap, section-hoisted air skip & direct solid section writes
++        final int[] worldSurfaceHeights = new int[256];
++        final Heightmap worldSurfaceWg = protoChunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG);
++        for (int hx = 0; hx < 16; hx++) {
++            for (int hz = 0; hz < 16; hz++) {
++                worldSurfaceHeights[(hz << 4) | hx] = worldSurfaceWg.getFirstAvailable(hx, hz);
++            }
++        }
++        final boolean canDirectWriteSections = !protoChunk.getPersistedStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.INITIALIZE_LIGHT);
++        // GoldLeaf end - Wave 4 cached heightmap, section-hoisted air skip & direct solid section writes
++
+         for (int x = 0; x < 16; x++) {
+             for (int z = 0; z < 16; z++) {
+                 int blockX = minBlockX + x;
+                 int blockZ = minBlockZ + z;
+-                int startingHeight = protoChunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) + 1;
++                int colIdx = (z << 4) | x;
++                int startingHeight = worldSurfaceHeights[colIdx];
+                 columnPos.setX(blockX).setZ(blockZ);
+                 Holder<Biome> surfaceBiome = biomeManager.getBiome(blockPos.set(blockX, startingHeight, blockZ));
+                 if (surfaceBiome.is(Biomes.ERODED_BADLANDS)) {
+                     this.erodedBadlandsExtension(column, blockX, blockZ, startingHeight, protoChunk);
++                    worldSurfaceHeights[colIdx] = worldSurfaceWg.getFirstAvailable(x, z);
+                 }
+ 
+-                int height = protoChunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) + 1;
+-                int gradientX = getSurfaceGradientX(protoChunk, x, z);
+-                int gradientZ = getSurfaceGradientZ(protoChunk, x, z);
++                int height = worldSurfaceHeights[colIdx];
++                int gradientX = worldSurfaceHeights[(z << 4) | Math.min(x + 1, 15)] - worldSurfaceHeights[(z << 4) | Math.max(x - 1, 0)];
++                int gradientZ = worldSurfaceHeights[(Math.min(z + 1, 15) << 4) | x] - worldSurfaceHeights[(Math.max(z - 1, 0) << 4) | x];
+                 context.updateXZ(blockX, blockZ, gradientX, gradientZ);
+                 int stoneAboveDepth = 0;
+                 int waterHeight = Integer.MIN_VALUE;
+                 int nextCeilingStoneY = Integer.MAX_VALUE;
+                 int endY = protoChunk.getMinY();
+ 
++                int cachedSectionIdx = Integer.MIN_VALUE;
++                net.minecraft.world.level.chunk.LevelChunkSection cachedSection = null;
++                boolean cachedSectionAir = false;
++
+                 for (int y = height; y >= endY; y--) {
+-                    BlockState old = column.getBlock(y);
++                    final int sectionIdx = (y >> 4) - minSection;
++                    if (sectionIdx != cachedSectionIdx) {
++                        cachedSectionIdx = sectionIdx;
++                        if (sectionIdx >= 0 && sectionIdx < sections.length) {
++                            cachedSection = sections[sectionIdx];
++                            cachedSectionAir = cachedSection.hasOnlyAir();
++                        } else {
++                            cachedSection = null;
++                            cachedSectionAir = false;
++                        }
++                    }
++                    if (cachedSectionAir) {
++                        stoneAboveDepth = 0;
++                        waterHeight = Integer.MIN_VALUE;
++                        y = (sectionIdx + minSection) << 4;
++                        continue;
++                    }
++                    final BlockState old = cachedSection != null
++                        ? cachedSection.getBlockState(x, y & 15, z)
++                        : column.getBlock(y);
+                     if (old.isAir()) {
+                         stoneAboveDepth = 0;
+                         waterHeight = Integer.MIN_VALUE;
+@@ -179,9 +230,26 @@ public class MaterialSystem {
+                     } else {
+                         if (nextCeilingStoneY >= y) {
+                             nextCeilingStoneY = DimensionType.WAY_BELOW_MIN_Y;
++                            int lookSectionIdx = sectionIdx;
++                            net.minecraft.world.level.chunk.LevelChunkSection lookSection = cachedSection;
+ 
+                             for (int lookaheadY = y - 1; lookaheadY >= endY - 1; lookaheadY--) {
+-                                BlockState nextState = column.getBlock(lookaheadY);
++                                final int nextLookIdx = (lookaheadY >> 4) - minSection;
++                                if (nextLookIdx != lookSectionIdx) {
++                                    lookSectionIdx = nextLookIdx;
++                                    if (nextLookIdx >= 0 && nextLookIdx < sections.length) {
++                                        lookSection = sections[nextLookIdx];
++                                        if (lookSection.hasOnlyAir()) {
++                                            nextCeilingStoneY = lookaheadY + 1;
++                                            break;
++                                        }
++                                    } else {
++                                        lookSection = null;
++                                    }
++                                }
++                                final BlockState nextState = lookSection != null
++                                    ? lookSection.getBlockState(x, lookaheadY & 15, z)
++                                    : column.getBlock(lookaheadY);
+                                 if (!this.isStone(nextState)) {
+                                     nextCeilingStoneY = lookaheadY + 1;
+                                     break;
+@@ -194,8 +262,19 @@ public class MaterialSystem {
+                         context.updateY(stoneAboveDepth, stoneBelowDepth, waterHeight, y);
+                         if (y >= minY && y <= maxY) {
+                             BlockState state = rule.tryApply(blockX, y, blockZ);
+-                            if (state != null) {
+-                                column.setBlock(y, state);
++                            if (state != null && state != old) {
++                                if (canDirectWriteSections
++                                    && cachedSection != null
++                                    && !state.isAir()
++                                    && state.getFluidState().isEmpty()
++                                    && Heightmap.Types.OCEAN_FLOOR_WG.isOpaque().test(state) == Heightmap.Types.OCEAN_FLOOR_WG.isOpaque().test(old)) {
++                                    cachedSection.setBlockState(x, y & 15, z, state, false);
++                                } else {
++                                    column.setBlock(y, state);
++                                    if (cachedSection != null) {
++                                        cachedSectionAir = cachedSection.hasOnlyAir();
++                                    }
++                                }
+                             }
+                         }
+                     }
 diff --git a/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java b/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java
 index 8da4604be7c0715fee6eaeb5e39a12393c70890c..ee629f9271a786a8ca7c98a70fae50cd665c45c8 100644
 --- a/net/minecraft/world/level/levelgen/material/condition/BiomeCondition.java
@@ -1340,6 +2100,155 @@ index a9cee750a9df27ba1a773445cd105a76c731d03b..24d626084457d7a98fe5d6bdad0860c4
 +        // GoldLeaf end - Wave 1 flatten nested SequenceRules and prune NEVER branches
      }
  }
+diff --git a/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java b/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
+index bc519bd6472959addac4d66a35c1a92a7fadc780..8927df5505e501bfa27fef057cb138c4b0452bfb 100644
+--- a/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
++++ b/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
+@@ -144,7 +144,9 @@ public class JigsawPlacement {
+                                 Math.min(centerY + maxDistanceFromCenter.vertical() + 1, heightAccessor.getMaxY() + 1 - dimensionPadding.top()),
+                                 centerZ + maxDistanceFromCenter.horizontal() + 1
+                             );
+-                            VoxelShape shape = Shapes.join(Shapes.create(aabb), Shapes.create(AABB.of(box)), BooleanOp.ONLY_FIRST);
++                            // GoldLeaf start - Wave 4 JigsawBoxOctree replacing VoxelShape boolean ops
++                            final dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree freeOctree = new dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree(aabb);
++                            freeOctree.addBox(AABB.of(box));
+                             addPieces(
+                                 context.randomState(),
+                                 maxDepth,
+@@ -156,10 +158,11 @@ public class JigsawPlacement {
+                                 pools,
+                                 centerPiece,
+                                 pieces,
+-                                shape,
++                                freeOctree,
+                                 poolAliasLookup,
+                                 liquidSettings
+                             );
++                            // GoldLeaf end - Wave 4 JigsawBoxOctree replacing VoxelShape boolean ops
+                             pieces.forEach(builder::addPiece);
+                         }
+                     }
+@@ -208,12 +211,12 @@ public class JigsawPlacement {
+         final Registry<StructureTemplatePool> pools,
+         final PoolElementStructurePiece centerPiece,
+         final List<PoolElementStructurePiece> pieces,
+-        final VoxelShape shape,
++        final dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree freeOctree, // GoldLeaf - Wave 4 JigsawBoxOctree
+         final PoolAliasLookup poolAliasLookup,
+         final LiquidSettings liquidSettings
+     ) {
+         JigsawPlacement.Placer placer = new JigsawPlacement.Placer(pools, maxDepth, chunkGenerator, structureTemplateManager, pieces, random);
+-        placer.tryPlacingChildren(centerPiece, new MutableObject<>(shape), 0, doExpansionHack, heightAccessor, randomState, poolAliasLookup, liquidSettings);
++        placer.tryPlacingChildren(centerPiece, freeOctree, 0, doExpansionHack, heightAccessor, randomState, poolAliasLookup, liquidSettings);
+ 
+         while (placer.placing.hasNext()) {
+             JigsawPlacement.PieceState state = placer.placing.next();
+@@ -274,7 +277,7 @@ public class JigsawPlacement {
+         }
+     }
+ 
+-    private record PieceState(PoolElementStructurePiece piece, MutableObject<VoxelShape> free, int depth) {
++    private record PieceState(PoolElementStructurePiece piece, dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree free, int depth) {
+     }
+ 
+     private static final class Placer {
+@@ -304,7 +307,7 @@ public class JigsawPlacement {
+ 
+         private void tryPlacingChildren(
+             final PoolElementStructurePiece sourcePiece,
+-            final MutableObject<VoxelShape> contextFree,
++            final dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree contextFree,
+             final int depth,
+             final boolean doExpansionHack,
+             final LevelHeightAccessor heightAccessor,
+@@ -317,7 +320,7 @@ public class JigsawPlacement {
+             Rotation sourceRotation = sourcePiece.getRotation();
+             StructureTemplatePool.Projection sourceProjection = sourceElement.getProjection();
+             boolean sourceRigid = sourceProjection == StructureTemplatePool.Projection.RIGID;
+-            MutableObject<VoxelShape> sourceFree = new MutableObject<>();
++            dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree sourceFree = null;
+             BoundingBox sourceBB = sourcePiece.getBoundingBox();
+             int sourceBoxY = sourceBB.minY();
+ 
+@@ -348,12 +351,12 @@ public class JigsawPlacement {
+                                 );
+                         } else {
+                             boolean attachInsideSource = sourceBB.isInside(targetJigsawPos);
+-                            MutableObject<VoxelShape> childrenFree;
++                            dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree childrenFree;
+                             if (attachInsideSource) {
+-                                childrenFree = sourceFree;
+-                                if (sourceFree.get() == null) {
+-                                    sourceFree.setValue(Shapes.create(AABB.of(sourceBB)));
++                                if (sourceFree == null) {
++                                    sourceFree = new dev.leafcraft.goldleaf.worldgen.JigsawBoxOctree(AABB.of(sourceBB));
+                                 }
++                                childrenFree = sourceFree;
+                             } else {
+                                 childrenFree = contextFree;
+                             }
+@@ -378,27 +381,25 @@ public class JigsawPlacement {
+                                     BoundingBox hackBox = targetElement.getBoundingBox(this.structureTemplateManager, BlockPos.ZERO, targetRotation);
+                                     int expandTo;
+                                     if (doExpansionHack && hackBox.getYSpan() <= 16) {
+-                                        expandTo = targetJigsaws.stream()
+-                                            .mapToInt(
+-                                                targetJigsawx -> {
+-                                                    if (!hackBox.isInside(targetJigsawx.pos().relative(JigsawBlock.getFrontFacing(targetJigsawx.state())))) {
+-                                                        return 0;
+-                                                    }
+-
+-                                                    ResourceKey<StructureTemplatePool> childPoolName = poolAliasLookup.lookup(targetJigsawx.pool());
+-                                                    Optional<? extends Holder<StructureTemplatePool>> childPool = this.pools.get(childPoolName);
+-                                                    Optional<Holder<StructureTemplatePool>> childFallbackPool = childPool.map(p -> p.value().getFallback());
+-                                                    int childPoolSize = childPool.<Integer>map(p -> p.value().getMaxSize(this.structureTemplateManager))
+-                                                        .orElse(0);
+-                                                    int childFallbackSize = childFallbackPool.<Integer>map(
+-                                                            p -> p.value().getMaxSize(this.structureTemplateManager)
+-                                                        )
+-                                                        .orElse(0);
+-                                                    return Math.max(childPoolSize, childFallbackSize);
++                                        int maxExpand = 0;
++                                        for (int ji = 0, jLen = targetJigsaws.size(); ji < jLen; ji++) {
++                                            final StructureTemplate.JigsawBlockInfo targetJigsawx = targetJigsaws.get(ji);
++                                            if (!hackBox.isInside(targetJigsawx.pos().relative(JigsawBlock.getFrontFacing(targetJigsawx.state())))) {
++                                                continue;
++                                            }
++                                            ResourceKey<StructureTemplatePool> childPoolName = poolAliasLookup.lookup(targetJigsawx.pool());
++                                            Optional<? extends Holder<StructureTemplatePool>> childPool = this.pools.get(childPoolName);
++                                            if (childPool.isPresent()) {
++                                                final StructureTemplatePool cp = childPool.get().value();
++                                                final int childPoolSize = cp.getMaxSize(this.structureTemplateManager);
++                                                final int childFallbackSize = cp.getFallback().value().getMaxSize(this.structureTemplateManager);
++                                                final int cand = Math.max(childPoolSize, childFallbackSize);
++                                                if (cand > maxExpand) {
++                                                    maxExpand = cand;
+                                                 }
+-                                            )
+-                                            .max()
+-                                            .orElse(0);
++                                            }
++                                        }
++                                        expandTo = maxExpand;
+                                     } else {
+                                         expandTo = 0;
+                                     }
+@@ -441,12 +442,9 @@ public class JigsawPlacement {
+                                                 targetBB.encapsulate(new BlockPos(targetBB.minX(), targetBB.minY() + newSize, targetBB.minZ()));
+                                             }
+ 
+-                                            if (!Shapes.joinIsNotEmpty(
+-                                                childrenFree.get(), Shapes.create(AABB.of(targetBB).deflate(0.25)), BooleanOp.ONLY_SECOND
+-                                            )) {
+-                                                childrenFree.setValue(
+-                                                    Shapes.joinUnoptimized(childrenFree.get(), Shapes.create(AABB.of(targetBB)), BooleanOp.ONLY_FIRST)
+-                                                );
++                                            final AABB targetAabb = AABB.of(targetBB);
++                                            if (childrenFree.fitsInside(targetAabb.deflate(0.25))) {
++                                                childrenFree.addBox(targetAabb);
+                                                 int sourceGroundLevelDelta = sourcePiece.getGroundLevelDelta();
+                                                 int targetGroundLevelDelta;
+                                                 if (targetRigid) {
 diff --git a/net/minecraft/world/level/levelgen/synth/GradientNoise.java b/net/minecraft/world/level/levelgen/synth/GradientNoise.java
 index 6da4d95f6a5f6043aaea6d62c550cd9f991da9ec..ec8b75578d2681394c36e954e5e3e67173041cce 100644
 --- a/net/minecraft/world/level/levelgen/synth/GradientNoise.java

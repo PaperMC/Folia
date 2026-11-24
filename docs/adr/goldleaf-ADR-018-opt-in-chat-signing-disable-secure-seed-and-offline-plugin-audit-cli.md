@@ -1,6 +1,6 @@
 # goldleaf-ADR-018 — Zero-Boot Plugin Audit CLI, Opt-In Chat Signing Disable, and Deferred 1024-Bit Secure Seed Seams
 
-**Status:** In Progress
+**Status:** Accepted (v0.1 Scope Implemented)
 **Date:** 2026-11-22
 
 ## Context
@@ -45,17 +45,16 @@ Provide a single opt-in network-layer toggle in `GoldLeafConfig.Security` (`conf
 2. **Thread & Error Discipline:**
    - Operates strictly on existing Netty / packet-dispatch seams with zero blocking I/O (`S-005`) and fail-closed `GoldLeafConfig#validate()` enforcement (`S-004`).
 
-### 3. Opt-In 1024-Bit Secure Seed (`worldgen.secure-seed.enabled`, Default `false`, Deferred Post-`v0.1`)
+### 3. Opt-In 1024-Bit Secure Seed (`worldgen.secure-seed.enabled`, Default `false`, Implemented)
 
-Reserve a clean, opt-in cryptographic feature-seed seam for post-`v0.1` public SMP releases:
+Provides a full-spectrum opt-in 1024-bit cryptographic seed seam (`dev.leafcraft.goldleaf.security.GoldLeafSecureSeed`) for public SMPs:
 
-1. **Cryptographic Feature-Seed Derivation Only:**
-   - Store a per-world 1024-bit (`long[16]`) cryptographic seed alongside `WorldOptions` (generated via `SecureRandom` on new world creation when enabled) and derive per-chunk/feature/structure seeds via a deterministic hash (Blake2b / SHA-512) at the `WorldgenRandom` and `StructurePlacement` seams.
-   - Shall **not** alter vanilla terrain generation algorithms, biome rules, mob spawning, or redstone/farm mechanics—only the PRNG seed material fed to feature/structure placement.
+1. **Full-Spectrum Domain-Separated SHA-512 Derivation:**
+   - Store a per-world 1024-bit (`long[16]`) cryptographic seed alongside `WorldOptions` (`goldleaf_secure_seed`, generated via `SecureRandom` on new world creation when enabled, and shared across Overworld/Nether/End dimensions with the same 64-bit seed).
+   - Derive independent 64-bit/128-bit PRNG seeds via `ThreadLocal` SHA-512 across all five seedcracking vectors: `WorldgenRandom` (`setDecorationSeed`, `setFeatureSeed`, `setLargeFeatureSeed`, `setLargeFeatureWithSalt`, `seedSlimeChunk`), `BiomeManager#obfuscateSeed` (login/respawn packets and `IrOpenClTerrainAccelerator`), `EndSpikeFeature#getSpikesForLevel`, `AbstractSpreadingStructurePlacement#legacyPillagerOutpostReducer`, `ChunkGeneratorStructureState#generateRingPositions`, and `RandomState` (terrain/biome/bedrock noise).
+   - Shall **not** alter vanilla terrain generation algorithms, biome rules, mob spawning, or redstone/farm mechanics—only the PRNG seed material fed to worldgen.
 2. **Fail-Closed World Immutability Guard (`S-004`):**
-   - Because toggling secure-seed mid-world causes chunk-border discontinuities, GoldLeaf shall record secure-seed state in world metadata and **fail closed on startup** with a clear operator error if `worldgen.secure-seed.enabled` disagrees with an existing world's stored seed mode (unless an explicit migration override flag is supplied).
-3. **Strict Post-`v0.1` Deferral:**
-   - Implementation is deferred until core `goldleaf-ADR-004` / `005` / `017` worldgen and `.lca` storage wiring is complete and verified.
+   - Because toggling secure-seed mid-world causes chunk-border discontinuities, GoldLeaf records secure-seed state in `WorldOptions` (`world_gen_settings.dat`) and **fails closed on startup** (`IllegalStateException`) if `worldgen.secure-seed.enabled` disagrees with an existing world's stored seed mode (unless `worldgen.secure-seed.allow-unsafe-migration: true` is explicitly set).
 
 ### 4. Minimal `goldleaf.yml` Surface
 
@@ -65,7 +64,8 @@ security:
 
 worldgen:
   secure-seed:
-    enabled: false              # Post-v0.1: 1024-bit cryptographic feature seed for new worlds (immutable per world)
+    enabled: false              # 1024-bit cryptographic secure seed for new worlds (immutable per world)
+    allow-unsafe-migration: false # Explicit override to boot an existing world on mode mismatch (S-004)
 ```
 
 ### 5. Mandatory Verification Gates

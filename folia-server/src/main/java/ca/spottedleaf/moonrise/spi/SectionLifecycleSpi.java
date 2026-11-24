@@ -26,6 +26,13 @@ public interface SectionLifecycleSpi {
      */
     void onGeneratedChunkFull(ServerLevel world, LevelChunk chunk);
 
+    /**
+     * Invoked on the owning region tick thread when a disk-loaded chunk ({@code ImposterProtoChunk})
+     * completes {@code FULL} status in {@code ChunkFullTask}.
+     */
+    default void onLoadedChunkFull(ServerLevel world, LevelChunk chunk) {
+    }
+
     static void notifyChunkDowngraded(final ServerLevel world, final LevelChunk chunk) {
         final SectionLifecycleSpi spi = Holder.current;
         if (spi != null && world != null && chunk != null) {
@@ -37,6 +44,13 @@ public interface SectionLifecycleSpi {
         final SectionLifecycleSpi spi = Holder.current;
         if (spi != null && world != null && chunk != null) {
             spi.onGeneratedChunkFull(world, chunk);
+        }
+    }
+
+    static void notifyLoadedChunkFull(final ServerLevel world, final LevelChunk chunk) {
+        final SectionLifecycleSpi spi = Holder.current;
+        if (spi != null && world != null && chunk != null) {
+            spi.onLoadedChunkFull(world, chunk);
         }
     }
 

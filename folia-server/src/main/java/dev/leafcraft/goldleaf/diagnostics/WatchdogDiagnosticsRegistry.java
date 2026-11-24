@@ -118,12 +118,23 @@ public final class WatchdogDiagnosticsRegistry {
         }
 
         final List<String> lines = new ArrayList<>();
+        final String boundsSuffix = context.loadedChunkCount() >= 0
+            ? String.format(
+                " bounds=[(%d,%d)..(%d,%d)] loadedChunks=%d",
+                context.minChunkX(),
+                context.minChunkZ(),
+                context.maxChunkX(),
+                context.maxChunkZ(),
+                context.loadedChunkCount()
+            )
+            : "";
         lines.add(String.format(
-            "[GoldLeaf Watchdog] Region=%s world='%s' center=(%d,%d) thread='%s' elapsed=%.2fs",
+            "[GoldLeaf Watchdog] Region=%s world='%s' center=(%d,%d)%s thread='%s' elapsed=%.2fs",
             context.globalRegion() ? "GLOBAL" : "REGION",
             context.worldName(),
             context.centerChunkX(),
             context.centerChunkZ(),
+            boundsSuffix,
             context.threadName(),
             context.elapsedSeconds()
         ));

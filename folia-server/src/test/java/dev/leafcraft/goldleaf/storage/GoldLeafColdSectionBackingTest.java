@@ -441,7 +441,7 @@ class GoldLeafColdSectionBackingTest {
         assertEquals(10_000L, GoldLeafSectionLifecycleManager.computeEffectiveQuietWindowMillis(200, 40, 0.70, 0.50));
         assertEquals(2_000L, GoldLeafSectionLifecycleManager.computeEffectiveQuietWindowMillis(200, 40, 0.70, 0.75));
         assertEquals(64, GoldLeafConfig.defaults().storage.lcaHotPromoteDirtyThreshold);
-        assertTrue(GoldLeafConfig.defaults().storage.lcaCompactGeneratedChunks);
+        assertFalse(GoldLeafConfig.defaults().storage.lcaCompactGeneratedChunks);
 
         // 2. Start in State 1 (COLD_LCA: baseFrame-only, compactIndex == null)
         final int[] voxels = new int[4096];
@@ -542,5 +542,609 @@ class GoldLeafColdSectionBackingTest {
         assertFalse(ca.spottedleaf.moonrise.patches.starlight.light.SWMRNibbleArray.isSharedFullBacking(nibbleMixed));
         assertEquals(10, nibbleMixed.getVisible(0, 0, 0));
         assertEquals(7, nibbleMixed.getVisible(1, 0, 0));
+    }
+
+    @Test
+    void weakReferenceUnloadGuardAndLoadedChunkFullSpiRouteCleanly() {
+        assertTrue(GoldLeafSectionLifecycleManager.isChunkStillLoaded(null, null));
+
+        final var prev = ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.get();
+        final java.util.concurrent.atomic.AtomicInteger loadedCalls = new java.util.concurrent.atomic.AtomicInteger();
+        try {
+            ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.register(new ca.spottedleaf.moonrise.spi.SectionLifecycleSpi() {
+                @Override
+                public void onChunkDowngraded(
+                    final net.minecraft.server.level.ServerLevel world,
+                    final net.minecraft.world.level.chunk.LevelChunk chunk
+                ) {
+                }
+
+                @Override
+                public void onGeneratedChunkFull(
+                    final net.minecraft.server.level.ServerLevel world,
+                    final net.minecraft.world.level.chunk.LevelChunk chunk
+                ) {
+                }
+
+                @Override
+                public void onLoadedChunkFull(
+                    final net.minecraft.server.level.ServerLevel world,
+                    final net.minecraft.world.level.chunk.LevelChunk chunk
+                ) {
+                    loadedCalls.incrementAndGet();
+                }
+            });
+            // Null world or chunk must be ignored safely
+            ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.notifyLoadedChunkFull(null, null);
+            assertEquals(0, loadedCalls.get());
+        } finally {
+            ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.register(prev);
+        }
+    }
+
+    @Test
+    void directZeroNbtBiomeInstallAndSharedFullDataLayerMatchVanillaAcross1To20Biomes() {
+        // 1. CompoundTag transient attachment round-trip and clear
+        final net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+        assertNull(tag.paper$getDirectLoadAttachment());
+        final Object marker = new Object();
+        tag.paper$setDirectLoadAttachment(marker);
+        assertEquals(marker, tag.paper$getDirectLoadAttachment());
+        tag.paper$setDirectLoadAttachment(null);
+        assertNull(tag.paper$getDirectLoadAttachment());
+
+        // 2. Shared full DataLayer identity fast-path + CoW isolation
+        final net.minecraft.world.level.chunk.DataLayer fullLayer =
+            ca.spottedleaf.moonrise.patches.starlight.light.SWMRNibbleArray.createSharedFullDataLayer();
+        final var nibble = ca.spottedleaf.moonrise.patches.starlight.light.SWMRNibbleArray.fromLoadedBytes(
+            fullLayer.getData(), 2
+        );
+        assertTrue(ca.spottedleaf.moonrise.patches.starlight.light.SWMRNibbleArray.isSharedFullBacking(nibble));
+        assertEquals(15, nibble.getVisible(7, 8, 9));
+        nibble.set(7, 8, 9, 4);
+        assertTrue(nibble.updateVisible());
+        assertFalse(ca.spottedleaf.moonrise.patches.starlight.light.SWMRNibbleArray.isSharedFullBacking(nibble));
+        assertEquals(4, nibble.getVisible(7, 8, 9));
+        assertEquals((byte) 0xFF, fullLayer.getData()[0]);
+
+        // 3. PalettedContainer#paper$installPackedBiomes parity across 1, 2, 3, 4, 8, 9, 20 distinct biomes
+        final java.util.List<String> fakeRegistryList = new java.util.ArrayList<>();
+        for (int i = 0; i < 32; i++) {
+            fakeRegistryList.add("biome_" + i);
+        }
+        final net.minecraft.core.IdMap<String> idMap = new net.minecraft.core.IdMap<>() {
+            @Override
+            public int getId(final String value) {
+                return fakeRegistryList.indexOf(value);
+            }
+
+            @Override
+            public String byId(final int id) {
+                return (id >= 0 && id < fakeRegistryList.size()) ? fakeRegistryList.get(id) : null;
+            }
+
+            @Override
+            public int size() {
+                return fakeRegistryList.size();
+            }
+
+            @Override
+            public java.util.Iterator<String> iterator() {
+                return fakeRegistryList.iterator();
+            }
+        };
+        final Strategy<String> biomeStrategy = Strategy.createForBiomes(idMap);
+        final int[] sizes = { 1, 2, 3, 4, 8, 9, 20 };
+        for (final int count : sizes) {
+            final java.util.List<String> palette = fakeRegistryList.subList(0, count);
+            final PalettedContainer<String> direct = new PalettedContainer<>("biome_0", biomeStrategy);
+            final PalettedContainer<String> expected = new PalettedContainer<>("biome_0", biomeStrategy);
+            long[] packedLongs = null;
+            if (count > 1) {
+                final int bits = net.minecraft.util.Mth.ceillog2(count);
+                final int perLong = 64 / bits;
+                final int numLongs = (64 + perLong - 1) / perLong;
+                packedLongs = new long[numLongs];
+                for (int cell = 0; cell < 64; cell++) {
+                    final int palIdx = (cell * 7 + 3) % count;
+                    packedLongs[cell / perLong] |= ((long) palIdx) << ((cell % perLong) * bits);
+                    final int x = cell & 3;
+                    final int z = (cell >>> 2) & 3;
+                    final int y = (cell >>> 4) & 3;
+                    expected.set(x, y, z, palette.get(palIdx));
+                }
+            } else {
+                expected.paper$installUniform(palette.get(0));
+            }
+            direct.paper$installPackedBiomes(palette, packedLongs);
+            for (int y = 0; y < 4; y++) {
+                for (int z = 0; z < 4; z++) {
+                    for (int x = 0; x < 4; x++) {
+                        assertEquals(
+                            expected.get(x, y, z),
+                            direct.get(x, y, z),
+                            "Biome mismatch for count=" + count + " at (" + x + "," + y + "," + z + ")"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void flatBitPackUnifiedSectionBackingMatchesVanillaAcross1To5BitsAndRandomTicks() {
+        final BlockState[] allStates = {
+            Blocks.AIR.defaultBlockState(),
+            Blocks.STONE.defaultBlockState(),
+            Blocks.DEEPSLATE.defaultBlockState(),
+            Blocks.DIRT.defaultBlockState(),
+            Blocks.GRASS_BLOCK.defaultBlockState(),
+            Blocks.WATER.defaultBlockState(),
+            Blocks.SAND.defaultBlockState(),
+            Blocks.GRAVEL.defaultBlockState(),
+            Blocks.OAK_LOG.defaultBlockState(),
+            Blocks.OAK_LEAVES.defaultBlockState(),
+            Blocks.COAL_ORE.defaultBlockState(),
+            Blocks.IRON_ORE.defaultBlockState(),
+            Blocks.GOLD_ORE.defaultBlockState(),
+            Blocks.DIAMOND_ORE.defaultBlockState(),
+            Blocks.BEDROCK.defaultBlockState(),
+            Blocks.CLAY.defaultBlockState(),
+            Blocks.SNOW_BLOCK.defaultBlockState(),
+            Blocks.ICE.defaultBlockState(),
+            Blocks.COBBLESTONE.defaultBlockState(),
+            Blocks.OAK_SAPLING.defaultBlockState()
+        };
+        final int[] counts = {2, 4, 7, 12, 20};
+        final int[] expectedBits = {1, 2, 3, 4, 5};
+        final Strategy<BlockState> strategy = Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
+
+        for (int c = 0; c < counts.length; c++) {
+            final int pCount = counts[c];
+            final int[] voxels = new int[4096];
+            final PalettedContainer<BlockState> expected = new PalettedContainer<>(Blocks.AIR.defaultBlockState(), strategy);
+            for (int i = 0; i < 4096; i++) {
+                final BlockState st = allStates[(i * 13 + 5) % pCount];
+                voxels[i] = Block.getId(st);
+                expected.set(i, st);
+            }
+            final GoldLeafFlatBlockSectionBacking flat =
+                GoldLeafFlatBlockSectionBacking.fromRuntimeVoxels(voxels, Block::stateById, Block::getId);
+            assertNotNull(flat);
+            assertEquals(expectedBits[c], flat.bitsPerVoxel());
+            assertEquals((4096 * expectedBits[c] + 7) >>> 3, flat.flatBytes().length);
+
+            final PalettedContainer<BlockState> actual = new PalettedContainer<>(Blocks.AIR.defaultBlockState(), strategy);
+            actual.paper$attachColdBacking(flat, Blocks.AIR.defaultBlockState());
+            assertTrue(actual.data.storage() instanceof net.minecraft.util.ZeroBitStorage);
+
+            // 1. Verify all 4,096 voxels match vanilla
+            for (int i = 0; i < 4096; i++) {
+                assertEquals(expected.get(i), actual.get(i), "Mismatch at pCount=" + pCount + " idx=" + i);
+            }
+
+            // 2. Verify vanilla wire serialization parity
+            final FriendlyByteBuf expBuf = new FriendlyByteBuf(Unpooled.buffer());
+            final FriendlyByteBuf actBuf = new FriendlyByteBuf(Unpooled.buffer());
+            expected.write(expBuf);
+            actual.write(actBuf);
+            assertEquals(actBuf.readableBytes(), actual.getSerializedSize());
+            final PalettedContainer<BlockState> wireDecoded = new PalettedContainer<>(Blocks.AIR.defaultBlockState(), strategy);
+            wireDecoded.read(actBuf);
+            for (int i = 0; i < 4096; i++) {
+                assertEquals(expected.get(i), wireDecoded.get(i), "Wire mismatch at pCount=" + pCount + " idx=" + i);
+            }
+
+            // 3. Verify sparse dirty edit + random-tick block counting parity
+            final BlockState sapling = Blocks.OAK_SAPLING.defaultBlockState();
+            expected.set(3, 5, 7, sapling);
+            actual.set(3, 5, 7, sapling);
+            assertEquals(1, flat.dirtyCount());
+            assertEquals(sapling, actual.get(3, 5, 7));
+
+            final java.util.Map<BlockState, Integer> expCounts = new java.util.HashMap<>();
+            final java.util.Map<BlockState, Integer> actCounts = new java.util.HashMap<>();
+            expected.count((st, cnt) -> expCounts.merge(st, cnt, Integer::sum));
+            actual.count((st, cnt) -> actCounts.merge(st, cnt, Integer::sum));
+            assertEquals(expCounts, actCounts, "Block count mismatch at pCount=" + pCount);
+        }
+    }
+
+    @Test
+    void flatBitPackGpuDmaFactoriesDirtyCompactionAndBulkColdInstallWorkEndToEnd() {
+        final BlockState air = Blocks.AIR.defaultBlockState();
+        final BlockState stone = Blocks.STONE.defaultBlockState();
+        final BlockState water = Blocks.WATER.defaultBlockState();
+        final BlockState dirt = Blocks.DIRT.defaultBlockState();
+
+        // 1. 2-bit GPU DMA factory (1,024 B) + paper$installBulkColdBacking
+        final BlockState[] pal2 = {air, stone, water};
+        final int[] words256 = new int[256];
+        int expectedNonEmpty = 0;
+        int expectedFluid = 0;
+        for (int w = 0; w < 256; w++) {
+            int word = 0;
+            for (int lx = 0; lx < 16; lx++) {
+                final int code = (w + lx) % 3;
+                word |= (code << (lx << 1));
+                if (code != 0) {
+                    expectedNonEmpty++;
+                }
+                if (code == 2) {
+                    expectedFluid++;
+                }
+            }
+            words256[w] = word;
+        }
+        final GoldLeafFlatBlockSectionBacking gpu2Bit =
+            GoldLeafFlatBlockSectionBacking.fromPacked2BitWords(words256, pal2, "minecraft:overworld");
+        assertEquals(2, gpu2Bit.bitsPerVoxel());
+        assertEquals(1024, gpu2Bit.flatBytes().length);
+        assertEquals("minecraft:overworld", gpu2Bit.worldId());
+
+        final Strategy<BlockState> blockStrategy = Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
+        final PalettedContainer<BlockState> blocks = new PalettedContainer<>(air, blockStrategy);
+        @SuppressWarnings("unchecked")
+        final PalettedContainer<net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome>> biomes =
+            (PalettedContainer<net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome>>)
+                (PalettedContainer<?>) new PalettedContainer<>("plains", Strategy.createForBiomes(new net.minecraft.core.IdMap<>() {
+                    @Override public int getId(final String value) { return 0; }
+                    @Override public String byId(final int index) { return "plains"; }
+                    @Override public int size() { return 1; }
+                    @Override public java.util.Iterator<String> iterator() { return java.util.List.of("plains").iterator(); }
+                }));
+        final LevelChunkSection section = new LevelChunkSection(blocks, biomes);
+        assertTrue(section.paper$installBulkColdBacking(
+            gpu2Bit, pal2, (short) expectedNonEmpty, (short) expectedFluid, (short) 0
+        ));
+        org.junit.jupiter.api.Assertions.assertSame(gpu2Bit, section.getStates().paper$getColdBacking());
+        for (int i = 0; i < 4096; i++) {
+            final int w = i >>> 4;
+            final int lx = i & 15;
+            assertEquals(pal2[(w + lx) % 3], section.getStates().get(i), "2-bit GPU DMA voxel mismatch at " + i);
+        }
+
+        // Fast clean palette-to-dict voxel extraction
+        final int[] dictVoxels = gpu2Bit.extractCleanDictVoxels(new int[]{10, 20, 30});
+        assertNotNull(dictVoxels);
+        assertEquals(10, dictVoxels[0]);
+        assertEquals(20, dictVoxels[1]);
+        assertEquals(30, dictVoxels[2]);
+
+        // 2. Dirty edit -> compactDirtyOffThread merges cleanly to dirtyCount == 0
+        section.setBlockState(0, 0, 0, dirt, false);
+        assertEquals(1, gpu2Bit.dirtyCount());
+        assertNull(gpu2Bit.extractCleanDictVoxels(new int[]{10, 20, 30}));
+        final GoldLeafFlatBlockSectionBacking.CompactionResult compacted = gpu2Bit.compactDirtyOffThread();
+        assertNotNull(compacted);
+        assertNotNull(compacted.compactedBacking());
+        assertEquals(0, compacted.compactedBacking().dirtyCount());
+        assertEquals("minecraft:overworld", compacted.compactedBacking().worldId());
+        assertEquals(dirt, compacted.compactedBacking().getByIndex(0));
+        assertEquals(stone, compacted.compactedBacking().getByIndex(1));
+
+        // 3. 4-bit GPU DMA factory (2,048 B)
+        final BlockState[] pal4 = {air, stone, water, dirt};
+        final long[] longs256 = new long[256];
+        for (int w = 0; w < 256; w++) {
+            long row = 0L;
+            for (int lx = 0; lx < 16; lx++) {
+                row |= ((long) ((w + lx) & 3)) << (lx << 2);
+            }
+            longs256[w] = row;
+        }
+        final GoldLeafFlatBlockSectionBacking gpu4Bit =
+            GoldLeafFlatBlockSectionBacking.fromPacked4BitLongs(longs256, pal4, null);
+        assertEquals(4, gpu4Bit.bitsPerVoxel());
+        assertEquals(2048, gpu4Bit.flatBytes().length);
+        for (int i = 0; i < 4096; i++) {
+            assertEquals(pal4[((i >>> 4) + (i & 15)) & 3], gpu4Bit.getByIndex(i));
+        }
+
+        // 4. Fail-closed guard: ticking block in palette rejects paper$installBulkColdBacking
+        final LevelChunkSection airSec = new LevelChunkSection(new PalettedContainer<>(air, blockStrategy), biomes);
+        final BlockState[] tickingPal = {air, Blocks.GRASS_BLOCK.defaultBlockState()};
+        assertFalse(airSec.paper$installBulkColdBacking(gpu2Bit, tickingPal, (short) 10, (short) 0, (short) 0));
+    }
+
+    @Test
+    void modeABlockSectionBackingDirectReadsCountsWireAndCompactionWorkEndToEnd() {
+        final BlockState air = Blocks.AIR.defaultBlockState();
+        final BlockState stone = Blocks.STONE.defaultBlockState();
+        final BlockState dirt = Blocks.DIRT.defaultBlockState();
+        final BlockState grass = Blocks.GRASS_BLOCK.defaultBlockState();
+        final BlockState sapling = Blocks.OAK_SAPLING.defaultBlockState();
+
+        final int airId = Block.getId(air);
+        final int stoneId = Block.getId(stone);
+        final int dirtId = Block.getId(dirt);
+        final int grassId = Block.getId(grass);
+
+        final int[] voxels = new int[4096];
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    final int yzx = (y << 8) | (z << 4) | x;
+                    if (y < 8) {
+                        voxels[yzx] = stoneId;
+                    } else if (y < 11) {
+                        voxels[yzx] = dirtId;
+                    } else if (y == 11) {
+                        voxels[yzx] = grassId;
+                    } else {
+                        voxels[yzx] = airId;
+                    }
+                }
+            }
+        }
+
+        final GoldLeafModeABlockSectionBacking modeA =
+            GoldLeafModeABlockSectionBacking.fromRuntimeVoxels(voxels, "minecraft:overworld", Block::stateById, Block::getId);
+        assertNotNull(modeA);
+        assertEquals("minecraft:overworld", modeA.worldId());
+        assertTrue(modeA.baseSection().payloadByteLength() < 128,
+            "Layered Mode A section should stay ultra-compact in memory: " + modeA.baseSection().payloadByteLength());
+
+        final Strategy<BlockState> strategy = Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
+        final PalettedContainer<BlockState> expected = new PalettedContainer<>(air, strategy);
+        for (int i = 0; i < 4096; i++) {
+            expected.set(i, Block.stateById(voxels[i]));
+        }
+        final PalettedContainer<BlockState> actual = new PalettedContainer<>(air, strategy);
+        actual.paper$attachColdBacking(modeA, air);
+
+        // 1. Voxel read parity across all 4,096 voxels
+        for (int i = 0; i < 4096; i++) {
+            assertEquals(expected.get(i), actual.get(i), "Mode A read mismatch at " + i);
+        }
+
+        // 2. LevelChunkSection#recalcBlockCounts() parity (count + tickingBlocks)
+        final LevelChunkSection expSec = new LevelChunkSection(expected, null);
+        final LevelChunkSection actSec = new LevelChunkSection(actual, null);
+        assertEquals(expSec.hasOnlyAir(), actSec.hasOnlyAir());
+        assertEquals(expSec.isRandomlyTickingBlocks(), actSec.isRandomlyTickingBlocks());
+        assertEquals(expSec.moonrise$getTickingBlockList().size(), actSec.moonrise$getTickingBlockList().size());
+
+        // 3. Vanilla wire serialization parity (clean)
+        final FriendlyByteBuf wireBuf = new FriendlyByteBuf(Unpooled.buffer());
+        actual.write(wireBuf);
+        assertEquals(wireBuf.readableBytes(), actual.getSerializedSize());
+        final PalettedContainer<BlockState> decoded = new PalettedContainer<>(air, strategy);
+        decoded.read(wireBuf);
+        for (int i = 0; i < 4096; i++) {
+            assertEquals(expected.get(i), decoded.get(i), "Clean wire mismatch at " + i);
+        }
+
+        // 4. Sparse dirty edit + count + wire + off-tick compaction
+        expected.set(3, 12, 5, sapling);
+        actual.set(3, 12, 5, sapling);
+        assertEquals(1, modeA.dirtyCount());
+        assertEquals(sapling, actual.get(3, 12, 5));
+
+        final java.util.Map<BlockState, Integer> expCounts = new java.util.HashMap<>();
+        final java.util.Map<BlockState, Integer> actCounts = new java.util.HashMap<>();
+        expected.count((st, cnt) -> expCounts.merge(st, cnt, Integer::sum));
+        actual.count((st, cnt) -> actCounts.merge(st, cnt, Integer::sum));
+        assertEquals(expCounts, actCounts);
+
+        final GoldLeafModeABlockSectionBacking.CompactionResult compacted = modeA.compactDirtyOffThread();
+        assertNotNull(compacted);
+        assertNotNull(compacted.compactedBacking());
+        assertEquals(0, compacted.compactedBacking().dirtyCount());
+        assertEquals(sapling, compacted.compactedBacking().get(3, 12, 5));
+        assertEquals(grass, compacted.compactedBacking().get(0, 11, 0));
+    }
+
+    @Test
+    void directPayloadLightCorrectHonorsResidualIsLightOnFalseForStarlightChunks() {
+        final int starlightVersion = ca.spottedleaf.moonrise.patches.starlight.util.SaveUtil.STARLIGHT_LIGHT_VERSION;
+        final io.github.dailystruggle.anvil.LcaDecodedChunkMeta starlightResidualMeta =
+            new io.github.dailystruggle.anvil.LcaDecodedChunkMeta(
+                4786, 0, 0, -4, "minecraft:full", 0L, 0L,
+                64, // hasStarlightVersion=true, hasIsLightOn=false (isLightOn=0 lives in residual NBT)
+                0, starlightVersion,
+                java.util.List.of(),
+                new int[0], new String[0], new long[0][],
+                new io.github.dailystruggle.anvil.LcaDecodedChunkMeta.DecodedSectionMeta[0],
+                new byte[]{1}
+            );
+
+        final net.minecraft.nbt.CompoundTag residualWithIsLightOnFalse = new net.minecraft.nbt.CompoundTag();
+        residualWithIsLightOnFalse.putBoolean("isLightOn", false);
+        assertTrue(
+            LcaDirectSectionSerializer.isDirectPayloadLightCorrect(
+                net.minecraft.world.level.chunk.status.ChunkStatus.FULL,
+                starlightResidualMeta,
+                residualWithIsLightOnFalse
+            ),
+            "Starlight-lit .lca chunk with isLightOn=0 in residual NBT must report lightCorrect=true"
+        );
+
+        final net.minecraft.nbt.CompoundTag residualWithoutIsLightOn = new net.minecraft.nbt.CompoundTag();
+        assertFalse(
+            LcaDirectSectionSerializer.isDirectPayloadLightCorrect(
+                net.minecraft.world.level.chunk.status.ChunkStatus.FULL,
+                starlightResidualMeta,
+                residualWithoutIsLightOn
+            ),
+            "Chunk missing isLightOn in both bpFlags and residual NBT must report lightCorrect=false"
+        );
+
+        assertFalse(
+            LcaDirectSectionSerializer.isDirectPayloadLightCorrect(
+                net.minecraft.world.level.chunk.status.ChunkStatus.FEATURES,
+                starlightResidualMeta,
+                residualWithIsLightOnFalse
+            ),
+            "Chunk before ChunkStatus.LIGHT must report lightCorrect=false"
+        );
+
+        final io.github.dailystruggle.anvil.LcaDecodedChunkMeta bpFlagLightOnMeta =
+            new io.github.dailystruggle.anvil.LcaDecodedChunkMeta(
+                4786, 0, 0, -4, "minecraft:full", 0L, 0L,
+                64 | 8, // hasStarlightVersion=true, hasIsLightOn=true
+                0, starlightVersion,
+                java.util.List.of(),
+                new int[0], new String[0], new long[0][],
+                new io.github.dailystruggle.anvil.LcaDecodedChunkMeta.DecodedSectionMeta[0],
+                null
+            );
+        assertTrue(
+            LcaDirectSectionSerializer.isDirectPayloadLightCorrect(
+                net.minecraft.world.level.chunk.status.ChunkStatus.FULL,
+                bpFlagLightOnMeta,
+                null
+            ),
+            "Chunk with bpFlags isLightOn=1 and matching Starlight version must report lightCorrect=true"
+        );
+    }
+
+    @Test
+    void directCoWCommittedSentinelStampsCurrentDataVersionAndStorageDefaultsMatchMcaCloseSync(
+        @org.junit.jupiter.api.io.TempDir final java.nio.file.Path tempDir
+    ) throws Exception {
+        final net.minecraft.nbt.CompoundTag sentinel =
+            LcaDirectSectionSerializer.createDirectCoWCommittedSentinel("minecraft:overworld", 144, 139);
+        final int currentVersion = net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version();
+        assertTrue(sentinel.getBooleanOr(io.github.dailystruggle.anvil.LcaRegionFileStorage.DIRECT_COW_COMMITTED_TAG, false));
+        assertEquals(currentVersion, net.minecraft.nbt.NbtUtils.getDataVersion(sentinel, -1),
+            "CoW sentinel must carry current DataVersion so SimpleRegionStorage#upgradeChunkTag bypasses V2842");
+        assertEquals(144, sentinel.getIntOr("xPos", -1));
+        assertEquals(139, sentinel.getIntOr("zPos", -1));
+        assertEquals("minecraft:overworld", sentinel.getStringOr(LcaDirectSectionSerializer.DIRECT_COW_WORLD_TAG, ""));
+
+        final java.nio.file.Path regionDir = tempDir.resolve("region");
+        java.nio.file.Files.createDirectories(regionDir);
+        final GoldLeafConfig.Storage storageCfg = GoldLeafConfig.defaults().storage;
+        final String prevProp = System.getProperty("leafanvil.fsync.onClose");
+        try {
+            System.clearProperty("leafanvil.fsync.onClose");
+            try (LcaRegionStorageProvider provider = LcaRegionStorageProvider.open(regionDir, storageCfg, "minecraft:overworld")) {
+                assertFalse(provider.delegate().isForceSyncOnClose(),
+                    "GoldLeaf LcaRegionStorageProvider must default to forceSyncOnClose=false to match vanilla .mca");
+            }
+            System.setProperty("leafanvil.fsync.onClose", "true");
+            try (LcaRegionStorageProvider provider = LcaRegionStorageProvider.open(regionDir, storageCfg, "minecraft:overworld")) {
+                assertTrue(provider.delegate().isForceSyncOnClose(),
+                    "GoldLeaf LcaRegionStorageProvider must honor -Dleafanvil.fsync.onClose=true");
+            }
+        } finally {
+            if (prevProp == null) {
+                System.clearProperty("leafanvil.fsync.onClose");
+            } else {
+                System.setProperty("leafanvil.fsync.onClose", prevProp);
+            }
+        }
+    }
+
+    @Test
+    void palettedContainerCopyPreservesColdBackingsWithIsolationAndNonRecursivePack() {
+        final Strategy<BlockState> strategy = Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
+        final BlockState air = Blocks.AIR.defaultBlockState();
+        final BlockState stone = Blocks.STONE.defaultBlockState();
+        final BlockState dirt = Blocks.DIRT.defaultBlockState();
+        final BlockState grass = Blocks.GRASS_BLOCK.defaultBlockState();
+        final BlockState oakPlanks = Blocks.OAK_PLANKS.defaultBlockState();
+
+        // 1. GoldLeafModeABlockSectionBacking: clean copy preserves cold backing + worldId, isolates future edits, pack() non-recursive
+        final int[] voxels = new int[4096];
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    final int pos12 = (y << 8) | (z << 4) | x;
+                    voxels[pos12] = Block.getId(y < 8 ? stone : (y == 8 ? grass : air));
+                }
+            }
+        }
+        final GoldLeafModeABlockSectionBacking modeA =
+            GoldLeafModeABlockSectionBacking.fromRuntimeVoxels(voxels, "minecraft:overworld", Block::stateById, Block::getId);
+        assertNotNull(modeA);
+        final PalettedContainer<BlockState> modeAContainer = new PalettedContainer<>(air, strategy);
+        modeAContainer.paper$attachColdBacking(modeA, modeA.uniformFallback());
+
+        final PalettedContainer<BlockState> cleanCopy = modeAContainer.copy();
+        org.junit.jupiter.api.Assertions.assertInstanceOf(GoldLeafModeABlockSectionBacking.class, cleanCopy.paper$getColdBacking());
+        org.junit.jupiter.api.Assertions.assertNotSame(modeA, cleanCopy.paper$getColdBacking());
+        assertEquals("minecraft:overworld", ((GoldLeafModeABlockSectionBacking) cleanCopy.paper$getColdBacking()).worldId());
+        assertEquals(0, cleanCopy.paper$getColdBacking().dirtyCount());
+
+        // Mutating original after copy() must NOT leak into cleanCopy
+        modeAContainer.set(1, 9, 2, dirt);
+        assertEquals(dirt, modeAContainer.get(1, 9, 2));
+        assertEquals(air, cleanCopy.get(1, 9, 2));
+        assertEquals(0, cleanCopy.paper$getColdBacking().dirtyCount());
+
+        // Dirty copy preserves dirty edits and isolates further edits
+        final PalettedContainer<BlockState> dirtyCopy = modeAContainer.copy();
+        org.junit.jupiter.api.Assertions.assertInstanceOf(GoldLeafModeABlockSectionBacking.class, dirtyCopy.paper$getColdBacking());
+        assertEquals(1, dirtyCopy.paper$getColdBacking().dirtyCount());
+        assertEquals(dirt, dirtyCopy.get(1, 9, 2));
+        modeAContainer.set(1, 9, 2, oakPlanks);
+        assertEquals(oakPlanks, modeAContainer.get(1, 9, 2));
+        assertEquals(dirt, dirtyCopy.get(1, 9, 2));
+
+        // pack() must materialize ephemerally and not infinitely recurse
+        final var packedModeA = dirtyCopy.pack(strategy);
+        assertNotNull(packedModeA);
+        assertTrue(packedModeA.paletteEntries().contains(dirt));
+        assertTrue(packedModeA.paletteEntries().contains(stone));
+
+        // 2. GoldLeafFlatBlockSectionBacking: clean + dirty snapshot isolation + pack() non-recursive
+        final int[] flatWords = new int[256];
+        for (int i = 0; i < 256; i++) {
+            flatWords[i] = 0x5555_5555; // all ordinal 1 (stone)
+        }
+        flatWords[0] = 0x5555_5554; // voxel 0 -> ordinal 0 (air)
+        final GoldLeafFlatBlockSectionBacking flat = GoldLeafFlatBlockSectionBacking.fromPacked2BitWords(
+            flatWords,
+            new BlockState[]{air, stone},
+            "minecraft:the_nether"
+        );
+        final PalettedContainer<BlockState> flatContainer = new PalettedContainer<>(air, strategy);
+        flatContainer.paper$attachColdBacking(flat, flat.uniformFallback());
+
+        final PalettedContainer<BlockState> flatCopy = flatContainer.copy();
+        org.junit.jupiter.api.Assertions.assertInstanceOf(GoldLeafFlatBlockSectionBacking.class, flatCopy.paper$getColdBacking());
+        org.junit.jupiter.api.Assertions.assertNotSame(flat, flatCopy.paper$getColdBacking());
+        assertEquals("minecraft:the_nether", ((GoldLeafFlatBlockSectionBacking) flatCopy.paper$getColdBacking()).worldId());
+        assertEquals(air, flatCopy.get(0, 0, 0));
+        assertEquals(stone, flatCopy.get(1, 0, 0));
+
+        flatContainer.set(0, 0, 0, dirt);
+        assertEquals(dirt, flatContainer.get(0, 0, 0));
+        assertEquals(air, flatCopy.get(0, 0, 0));
+
+        final PalettedContainer<BlockState> flatDirtyCopy = flatContainer.copy();
+        assertEquals(1, flatDirtyCopy.paper$getColdBacking().dirtyCount());
+        assertEquals(dirt, flatDirtyCopy.get(0, 0, 0));
+        flatContainer.set(0, 0, 0, oakPlanks);
+        assertEquals(dirt, flatDirtyCopy.get(0, 0, 0));
+
+        final var packedFlat = flatDirtyCopy.pack(strategy);
+        assertNotNull(packedFlat);
+        assertTrue(packedFlat.paletteEntries().contains(dirt));
+        assertTrue(packedFlat.paletteEntries().contains(stone));
+    }
+
+    @Test
+    void compoundTagCopyPreservesDirectLoadAttachmentForMultiWaiterReads() {
+        final net.minecraft.nbt.CompoundTag original = new net.minecraft.nbt.CompoundTag();
+        original.putInt("xPos", 129);
+        original.putInt("zPos", 150);
+        final Object markerAttachment = new Object();
+        original.paper$setDirectLoadAttachment(markerAttachment);
+
+        final net.minecraft.nbt.CompoundTag copied = original.copy();
+        org.junit.jupiter.api.Assertions.assertSame(
+            markerAttachment,
+            copied.paper$getDirectLoadAttachment(),
+            "CompoundTag#copy() must preserve paper$directLoadAttachment for MoonriseRegionFileIO multi-waiter reads"
+        );
+        copied.paper$setDirectLoadAttachment(null);
+        org.junit.jupiter.api.Assertions.assertSame(
+            markerAttachment,
+            original.paper$getDirectLoadAttachment(),
+            "Clearing attachment on a copied tag must not clear the original tag"
+        );
     }
 }

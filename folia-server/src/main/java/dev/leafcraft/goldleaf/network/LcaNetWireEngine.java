@@ -1,9 +1,14 @@
 package dev.leafcraft.goldleaf.network;
 
 import dev.leafcraft.goldleaf.config.GoldLeafConfig;
+import dev.leafcraft.goldleaf.storage.GoldLeafModeABlockSectionBacking;
 import dev.leafcraft.goldleaf.storage.LcaChunkResidencyCache;
+import dev.leafcraft.goldleaf.storage.LcaDirectSectionSerializer;
 import dev.leafcraft.goldleaf.storage.LcaResidencyManager;
+import io.github.dailystruggle.anvil.LcaModeABlockSection;
+import io.github.dailystruggle.anvil.LcaSectionBacking;
 import io.github.dailystruggle.anvil.RawChunkFrameSnapshot;
+import io.github.dailystruggle.anvil.stream.LcaOrderlessDictWireTable;
 import io.github.dailystruggle.anvil.stream.LcaRemoteStreamCodec;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -17,15 +22,32 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket;
+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.util.BitStorage;
+import net.minecraft.util.SimpleBitStorage;
+import net.minecraft.util.ZeroBitStorage;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Layer 2 {@code LCA_NET_V1} negotiated chunk-streaming and {@code LCAS} Halo wire engine
@@ -175,6 +197,10 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
         public boolean isV3SectionsEnabled() {
             return hasCapability(CAP_LCA_V3_SECTIONS);
         }
+
+        public boolean isOrderlessDictAndMulticastEnabled() {
+            return hasCapability(CAP_ORDERLESS_DICT_AND_MULTICAST);
+        }
     }
 
     /**
@@ -196,6 +222,8 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
     private static final class PlayerWireSession {
         private final NegotiatedSession negotiated;
         private final Map<Long, ClientChunkBaseline> knownChunks;
+        private final LcaOrderlessDictWireTable.KnownSlotBitSet knownDictSlots =
+            new LcaOrderlessDictWireTable.KnownSlotBitSet();
 
         PlayerWireSession(final NegotiatedSession negotiated, final int maxCachedChunks) {
             this.negotiated = negotiated;
@@ -218,18 +246,31 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
 
         synchronized void clear() {
             this.knownChunks.clear();
+            this.knownDictSlots.clear();
         }
     }
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LcaNetWireEngine.class);
+    private static final int[] EMPTY_INT_ARRAY = new int[0];
+    private static final ThreadLocal<int[]> LIVE_SECTION_VOXELS_SCRATCH = ThreadLocal.withInitial(() -> new int[4096]);
 
     private final LcaChunkResidencyCache residencyCache;
     private final @Nullable LcaResidencyManager residencyManager;
     private final int serverCapabilities;
     private final long serverRegistryParityHash64;
+    private volatile long lazyRegistryParityHash64;
     private final int maxSessionCacheChunks;
     private final @Nullable ChunkSectionSanitizer antiXraySanitizer;
     private final @Nullable OutboundBatchEmitter outboundEmitter;
+    private final LcaOrderlessDictWireTable orderlessDict = new LcaOrderlessDictWireTable();
     private final ConcurrentHashMap<UUID, PlayerWireSession> sessions = new ConcurrentHashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final AtomicLong handshakesAccepted = new AtomicLong();
+    private final AtomicLong handshakesRejected = new AtomicLong();
+    private final AtomicLong chunksSentLca = new AtomicLong();
+    private final AtomicLong chunksSentFromResidency = new AtomicLong();
+    private final AtomicLong chunksSentFromLiveChunk = new AtomicLong();
+    private final AtomicLong chunksFallbackVanilla = new AtomicLong();
 
     public LcaNetWireEngine(
         final LcaChunkResidencyCache residencyCache,
@@ -282,7 +323,11 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
         final @Nullable OutboundBatchEmitter outboundEmitter
     ) {
         Objects.requireNonNull(networkConfig, "networkConfig");
-        int caps = CAP_LCA_SECTION_STREAM | CAP_CLIENT_HEIGHTMAPS | CAP_DELTA_REVISIT_CACHE | CAP_LCA_V3_SECTIONS;
+        int caps = CAP_LCA_SECTION_STREAM
+            | CAP_CLIENT_HEIGHTMAPS
+            | CAP_DELTA_REVISIT_CACHE
+            | CAP_ORDERLESS_DICT_AND_MULTICAST
+            | CAP_LCA_V3_SECTIONS;
         if (networkConfig.lcaNetBatchLcd2) {
             caps |= CAP_BATCH_LCD2;
         }
@@ -325,6 +370,57 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
     }
 
     /**
+     * Computes the deterministic 64-bit FNV-1a parity hash over {@link Block#BLOCK_STATE_REGISTRY}
+     * matching {@code FabricLeafAnvilClientMod#computeBlockStateRegistryParityHash()}
+     * ({@code leafanvil-ADR-003} Section 1).
+     */
+    public static long computeBlockStateRegistryParityHash() {
+        long hash = 0xCBF29CE484222325L;
+        final int size = Block.BLOCK_STATE_REGISTRY.size();
+        hash = (hash ^ size) * 0x100000001B3L;
+        for (int id = 0; id < size; id++) {
+            final BlockState state = Block.stateById(id);
+            final int actualId = Block.getId(state);
+            hash = (hash ^ (((long) id << 32) | (actualId & 0xFFFFFFFFL))) * 0x100000001B3L;
+        }
+        return hash;
+    }
+
+    /**
+     * Resolves the server's 64-bit block-state registry parity hash, lazily computing it from
+     * {@link Block#BLOCK_STATE_REGISTRY} when constructed with {@code 0L}.
+     */
+    public long resolveServerRegistryParityHash64() {
+        if (this.serverRegistryParityHash64 != 0L) {
+            return this.serverRegistryParityHash64;
+        }
+        long cached = this.lazyRegistryParityHash64;
+        if (cached != 0L) {
+            return cached;
+        }
+        if (Block.BLOCK_STATE_REGISTRY.size() <= 0) {
+            return 0L;
+        }
+        cached = computeBlockStateRegistryParityHash();
+        this.lazyRegistryParityHash64 = cached;
+        return cached;
+    }
+
+    /**
+     * Encodes the 20-byte server {@code leafanvil:chunk_stream_handshake} ACK payload for a
+     * negotiated session (or {@code caps=0} fallback ACK).
+     */
+    public static byte[] buildHandshakeAckBytes(final NegotiatedSession session) {
+        Objects.requireNonNull(session, "session");
+        return new HandshakePayload(
+            PROTOCOL_VERSION,
+            session.lcaStreamActive() ? session.activeCapabilities() : 0,
+            session.negotiatedCacheBudgetKiB(),
+            session.registryParityHash64()
+        ).toBytes();
+    }
+
+    /**
      * Handles a client's {@code leafanvil:chunk_stream_handshake} payload, registering an active
      * session when negotiated or clearing any prior session on fallback.
      */
@@ -338,18 +434,22 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
             clientPayload = HandshakePayload.fromBytes(handshakeBytes);
         } catch (final IllegalArgumentException invalid) {
             unregisterConnection(playerId);
+            this.handshakesRejected.incrementAndGet();
             return NegotiatedSession.VANILLA_FALLBACK;
         }
+        final long serverHash = resolveServerRegistryParityHash64();
         final NegotiatedSession negotiated = negotiate(
             clientPayload,
             this.serverCapabilities,
-            this.serverRegistryParityHash64
+            serverHash
         );
         if (!negotiated.lcaStreamActive()) {
             unregisterConnection(playerId);
+            this.handshakesRejected.incrementAndGet();
             return NegotiatedSession.VANILLA_FALLBACK;
         }
         this.sessions.put(playerId, new PlayerWireSession(negotiated, this.maxSessionCacheChunks));
+        this.handshakesAccepted.incrementAndGet();
         return negotiated;
     }
 
@@ -377,6 +477,23 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
         return this.sessions.size();
     }
 
+    public LcaOrderlessDictWireTable orderlessDict() {
+        return this.orderlessDict;
+    }
+
+    /**
+     * Resets a player's known orderless dictionary bitset and builds a full {@code ODCT}
+     * dictionary snapshot for deterministic resynchronization.
+     */
+    public byte @Nullable [] resetAndBuildFullDictionarySnapshot(final UUID playerId) throws IOException {
+        final PlayerWireSession session = this.sessions.get(playerId);
+        if (session == null || !session.negotiated.lcaStreamActive()) {
+            return null;
+        }
+        session.knownDictSlots.clear();
+        return this.orderlessDict.encodeFullDictionarySnapshot(session.knownDictSlots);
+    }
+
     @Override
     public boolean supportsConnection(final ServerGamePacketListenerImpl connection) {
         if (this.closed.get() || connection == null || connection.player == null) {
@@ -397,35 +514,352 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
         }
         if (shouldModifyAntiXray && this.antiXraySanitizer == null) {
             // Fail closed to vanilla anti-xray packet transmission rather than leaking unsanitized ore data
+            this.chunksFallbackVanilla.incrementAndGet();
             return false;
         }
         if (this.outboundEmitter == null) {
             return false;
         }
         final UUID playerId = connection.player.getUUID();
+        final PlayerWireSession session = this.sessions.get(playerId);
+        if (session == null || !session.negotiated.lcaStreamActive()) {
+            return false;
+        }
         final ChunkPos pos = chunk.getPos();
         final long chunkKey = ChunkPos.pack(pos.x(), pos.z());
         final LcaChunkResidencyCache worldCache = resolveCacheForLevel(level);
-        final LcaChunkResidencyCache.FrozenReadSnapshot snapshot = worldCache.getReadSnapshot(chunkKey);
-        if (snapshot == null) {
-            return false;
+        final LcaChunkResidencyCache.FrozenReadSnapshot snapshot;
+        if (chunk.goldleaf$isGeneratedFresh()) {
+            // Freshly promoted ProtoChunk -> LevelChunk must always encode live sections, never a stale pre-FULL snapshot.
+            worldCache.markUnloadedAndEvict(chunkKey);
+            snapshot = null;
+        } else {
+            snapshot = worldCache.getReadSnapshot(chunkKey);
         }
         try {
-            final EncodedChunkBatch encoded = encodeChunkForSession(
-                playerId,
-                pos.x(),
-                pos.z(),
-                snapshot,
-                shouldModifyAntiXray,
-                s -> 0
-            );
+            final byte[] wireHeightmaps = encodeClientHeightmaps(chunk);
+            final EncodedChunkBatch encoded;
+            final boolean fromResidency;
+            if (snapshot != null) {
+                encoded = encodeChunkForSessionInternal(
+                    playerId,
+                    pos.x(),
+                    pos.z(),
+                    snapshot,
+                    shouldModifyAntiXray,
+                    LcaDirectSectionSerializer.canonicalToRuntimeStateLookup(),
+                    false,
+                    true,
+                    wireHeightmaps
+                );
+                fromResidency = true;
+            } else {
+                encoded = encodeLiveChunkForSession(
+                    playerId,
+                    chunk,
+                    shouldModifyAntiXray,
+                    wireHeightmaps
+                );
+                fromResidency = false;
+            }
             if (encoded == null) {
+                this.chunksFallbackVanilla.incrementAndGet();
                 return false;
             }
-            return this.outboundEmitter.emitChunkBatch(connection, CHANNEL_CHUNK_BATCH, encoded.wirePayload());
-        } catch (final IOException ex) {
+            if (!this.outboundEmitter.emitChunkBatch(connection, CHANNEL_CHUNK_BATCH, encoded.wirePayload())) {
+                this.chunksFallbackVanilla.incrementAndGet();
+                return false;
+            }
+            // Deliver biomes, lighting, and block-entity state in strict TCP FIFO order right after
+            // the LCA_NET_V1 block-section batch so the client hydrates full chunk fidelity without
+            // needing ClientboundLevelChunkWithLightPacket.
+            connection.send(ClientboundChunksBiomesPacket.forChunks(List.of(chunk)));
+            connection.send(new ClientboundLightUpdatePacket(pos, level.getLightEngine(), null, null));
+            final Map<?, BlockEntity> blockEntities = chunk.getBlockEntities();
+            if (blockEntities != null && !blockEntities.isEmpty()) {
+                for (final BlockEntity blockEntity : blockEntities.values()) {
+                    if (blockEntity != null) {
+                        final Packet<ClientGamePacketListener> updatePacket = blockEntity.getUpdatePacket();
+                        if (updatePacket != null) {
+                            connection.send(updatePacket);
+                        }
+                    }
+                }
+            }
+            this.chunksSentLca.incrementAndGet();
+            if (fromResidency) {
+                this.chunksSentFromResidency.incrementAndGet();
+            } else {
+                this.chunksSentFromLiveChunk.incrementAndGet();
+            }
+            return true;
+        } catch (final IOException | RuntimeException ex) {
+            LOGGER.warn(
+                "[GoldLeaf-LcaNet] Failed encoding LCA_NET_V1 chunk ({}, {}); falling back to vanilla packet",
+                pos.x(), pos.z(), ex
+            );
+            this.chunksFallbackVanilla.incrementAndGet();
             return false;
         }
+    }
+
+    public @Nullable EncodedChunkBatch encodeLiveChunkForSession(
+        final UUID playerId,
+        final LevelChunk chunk,
+        final boolean shouldModifyAntiXray
+    ) throws IOException {
+        return encodeLiveChunkForSession(playerId, chunk, shouldModifyAntiXray, encodeClientHeightmaps(chunk));
+    }
+
+    private @Nullable EncodedChunkBatch encodeLiveChunkForSession(
+        final UUID playerId,
+        final LevelChunk chunk,
+        final boolean shouldModifyAntiXray,
+        final byte[] heightmapBytes
+    ) throws IOException {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(chunk, "chunk");
+        if (this.closed.get()) {
+            return null;
+        }
+        if (shouldModifyAntiXray && this.antiXraySanitizer == null) {
+            return null;
+        }
+        final PlayerWireSession session = this.sessions.get(playerId);
+        if (session == null || !session.negotiated.lcaStreamActive()) {
+            return null;
+        }
+        final List<LcaRemoteStreamCodec.SectionWireSlice> rawSlices = buildSectionWireSlicesFromLiveChunk(chunk);
+        if (rawSlices == null || rawSlices.isEmpty()) {
+            return null;
+        }
+        final ChunkPos pos = chunk.getPos();
+        final List<LcaRemoteStreamCodec.SectionWireSlice> wireSlices = shouldModifyAntiXray
+            ? Objects.requireNonNull(this.antiXraySanitizer).sanitize(playerId, pos.x(), pos.z(), rawSlices)
+            : rawSlices;
+        final NegotiatedSession neg = session.negotiated;
+        final byte[] hmBytes = heightmapBytes == null ? new byte[0] : heightmapBytes;
+        final LcaRemoteStreamCodec.EntryFullChunk fullEntry = LcaRemoteStreamCodec.EntryFullChunk.createWithComputedSyndrome(
+            pos.x(),
+            pos.z(),
+            0L,
+            wireSlices,
+            hmBytes
+        );
+        final long currentSyndrome64 = fullEntry.secDedSyndrome64();
+        final boolean omitHeightmaps = hmBytes.length == 0 && neg.isClientHeightmapsEnabled();
+        final boolean useLcd2 = neg.isBatchLcd2Enabled();
+        final boolean useOrderlessDict = neg.isOrderlessDictAndMulticastEnabled();
+        final byte[] wireBytes = LcaRemoteStreamCodec.encodeChunkBatchDirect(
+            pos.x() >> 5,
+            pos.z() >> 5,
+            List.of(fullEntry),
+            omitHeightmaps,
+            useLcd2,
+            useOrderlessDict ? this.orderlessDict : null,
+            useOrderlessDict ? session.knownDictSlots : null
+        );
+        if (neg.isDeltaRevisitCacheEnabled()) {
+            session.recordBaseline(ChunkPos.pack(pos.x(), pos.z()), 0L, currentSyndrome64);
+        }
+        return new EncodedChunkBatch(
+            fullEntry.entryType(),
+            currentSyndrome64,
+            useLcd2,
+            false,
+            wireBytes
+        );
+    }
+
+    private static final Heightmap.Types[] CLIENT_WIRE_HEIGHTMAP_TYPES = {
+        Heightmap.Types.WORLD_SURFACE,
+        Heightmap.Types.MOTION_BLOCKING,
+        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+        Heightmap.Types.OCEAN_FLOOR
+    };
+
+    /**
+     * Encodes the chunk's 4 client-facing heightmaps in compact binary wire format
+     * ({@code [magic='H', version=1, count, (typeId, longCountBE16, longsBE64[])*]}) so the
+     * {@code LCA_NET_V1} client installs them in O(1) without scanning 98,304 voxels on the render thread.
+     */
+    public static byte[] encodeClientHeightmaps(final LevelChunk chunk) {
+        if (chunk == null) {
+            return new byte[0];
+        }
+        int presentCount = 0;
+        int totalBytes = 3;
+        final long[][] rawArrays = new long[CLIENT_WIRE_HEIGHTMAP_TYPES.length][];
+        for (int i = 0; i < CLIENT_WIRE_HEIGHTMAP_TYPES.length; i++) {
+            final Heightmap.Types type = CLIENT_WIRE_HEIGHTMAP_TYPES[i];
+            if (chunk.hasPrimedHeightmap(type)) {
+                final long[] raw = chunk.getOrCreateHeightmapUnprimed(type).getRawData();
+                if (raw != null && raw.length > 0 && raw.length <= Short.MAX_VALUE) {
+                    rawArrays[i] = raw;
+                    presentCount++;
+                    totalBytes += 3 + (raw.length << 3);
+                }
+            }
+        }
+        if (presentCount == 0) {
+            return new byte[0];
+        }
+        final ByteBuffer buf = ByteBuffer.allocate(totalBytes);
+        buf.put((byte) 'H');
+        buf.put((byte) 1);
+        buf.put((byte) presentCount);
+        for (int i = 0; i < rawArrays.length; i++) {
+            final long[] raw = rawArrays[i];
+            if (raw == null) {
+                continue;
+            }
+            buf.put((byte) i);
+            buf.putShort((short) raw.length);
+            for (final long word : raw) {
+                buf.putLong(word);
+            }
+        }
+        return buf.array();
+    }
+
+    private static @Nullable List<LcaRemoteStreamCodec.SectionWireSlice> buildSectionWireSlicesFromLiveChunk(
+        final LevelChunk chunk
+    ) {
+        final LevelChunkSection[] sections = chunk.getSections();
+        if (sections == null || sections.length == 0) {
+            return null;
+        }
+        final int sectionCount = Math.min(32, sections.length);
+        final List<LcaRemoteStreamCodec.SectionWireSlice> slices = new ArrayList<>(sectionCount);
+        int[] voxels4096 = null;
+        for (int i = 0; i < sectionCount; i++) {
+            final LevelChunkSection sec = sections[i];
+            if (sec == null || sec.hasOnlyAir()) {
+                slices.add(LcaRemoteStreamCodec.SectionWireSlice.uniform(i, 15, 0, 0));
+                continue;
+            }
+            final PalettedContainer<BlockState> states = sec.getStates();
+            // Fast path 1: already-compressed Mode A cold backing -> direct byte copy + sparse dirty overlay
+            // (zero voxel decompression, zero Hilbert/Delta-Roaring re-encode).
+            final var coldBacking = states.paper$getColdBacking();
+            if (coldBacking instanceof GoldLeafModeABlockSectionBacking modeABacking) {
+                final byte[] modeAWire = modeABacking.baseSection().toWireSectionFrameBytes();
+                if (modeAWire.length > 0 && modeAWire.length <= 0x7FFF) {
+                    final int[] dirtyOverlay = modeABacking.exportDirtyOverlayEntries();
+                    slices.add(LcaRemoteStreamCodec.SectionWireSlice.nonUniform(i, modeAWire, dirtyOverlay));
+                    continue;
+                }
+            }
+            if (coldBacking instanceof dev.leafcraft.goldleaf.storage.GoldLeafFlatBlockSectionBacking flatBacking) {
+                final byte[] flatWire = flatBacking.toWireSectionFrameBytes();
+                if (flatWire != null && flatWire.length > 0 && flatWire.length <= 0x7FFF) {
+                    final int[] dirtyOverlay = flatBacking.exportDirtyOverlayEntries();
+                    slices.add(LcaRemoteStreamCodec.SectionWireSlice.nonUniform(i, flatWire, dirtyOverlay));
+                    continue;
+                }
+            }
+            // Fast path 2: uniform SingleValuePalette / ZeroBitStorage -> O(1) 2-byte uniform slice.
+            final PalettedContainer.Data<BlockState> data = states.data;
+            final BitStorage storage = data.storage();
+            final Palette<BlockState> palette = data.palette();
+            final int palSize = palette.getSize();
+            if (storage instanceof ZeroBitStorage || palSize <= 1) {
+                final BlockState single = palette.valueFor(0);
+                final int singleId = single == null ? 0 : Block.getId(single);
+                if (singleId < 0 || singleId > 0x1FFF) {
+                    return null;
+                }
+                slices.add(LcaRemoteStreamCodec.SectionWireSlice.uniform(i, 15, 0, singleId));
+                continue;
+            }
+            // Fast path 3: hot SimpleBitStorage (e.g. GPU Pass 5 4-bit packed sections) -> direct
+            // BLOCK_MODE_FLAT_BITPACK wire slice without unpacking 4,096 BlockStates or Hilbert search.
+            final int storageBits = storage.getBits();
+            if (storage instanceof SimpleBitStorage simpleStorage
+                && storageBits >= 4
+                && storageBits <= 8
+                && palSize >= 2
+                && palSize <= 256) {
+                final int[] paletteIds = new int[palSize];
+                boolean palOk = true;
+                for (int p = 0; p < palSize; p++) {
+                    final BlockState st = palette.valueFor(p);
+                    final int stId = st == null ? 0 : Block.getId(st);
+                    if (stId < 0 || stId > LcaSectionBacking.MAX_STATE_ID_19) {
+                        palOk = false;
+                        break;
+                    }
+                    paletteIds[p] = stId;
+                }
+                if (palOk) {
+                    final byte[] flatWire = LcaModeABlockSection.encodeFlatBitpackFromSimpleBitStorage(
+                        paletteIds,
+                        storageBits,
+                        simpleStorage.getRaw()
+                    );
+                    if (flatWire != null && flatWire.length > 0 && flatWire.length <= 0x7FFF) {
+                        slices.add(LcaRemoteStreamCodec.SectionWireSlice.nonUniform(i, flatWire, EMPTY_INT_ARRAY));
+                        continue;
+                    }
+                }
+            }
+            // Rare fallback (GlobalPalette > 256 unique states in one section): standard compact encoder.
+            if (voxels4096 == null) {
+                voxels4096 = LIVE_SECTION_VOXELS_SCRATCH.get();
+            }
+            int firstId = -1;
+            boolean allSame = true;
+            int idx = 0;
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        final int stateId = Block.getId(sec.getBlockState(x, y, z));
+                        voxels4096[idx++] = stateId;
+                        if (firstId < 0) {
+                            firstId = stateId;
+                        } else if (stateId != firstId) {
+                            allSame = false;
+                        }
+                    }
+                }
+            }
+            if (allSame) {
+                if (firstId < 0 || firstId > 0x1FFF) {
+                    return null;
+                }
+                slices.add(LcaRemoteStreamCodec.SectionWireSlice.uniform(i, 15, 0, firstId));
+                continue;
+            }
+            final LcaSectionBacking.EncodedCompactFrame compact = LcaSectionBacking.encodeCompactSectionFrame(
+                voxels4096, 15, 0
+            );
+            final byte[] frameBytes = compact.frameBytes();
+            if (frameBytes.length == 0) {
+                final int maj = compact.majorityStateId();
+                if (maj < 0 || maj > 0x1FFF) {
+                    return null;
+                }
+                slices.add(LcaRemoteStreamCodec.SectionWireSlice.uniform(i, 15, 0, maj));
+            } else {
+                slices.add(LcaRemoteStreamCodec.SectionWireSlice.nonUniform(i, frameBytes, EMPTY_INT_ARRAY));
+            }
+        }
+        return slices;
+    }
+
+    public String formatTelemetrySummary() {
+        return String.format(
+            java.util.Locale.ROOT,
+            "[GoldLeaf-LcaNet] handshakesAccepted=%d handshakesRejected=%d activeSessions=%d "
+                + "chunksSentLca=%d (residency=%d liveChunk=%d) fallbackVanilla=%d",
+            this.handshakesAccepted.get(),
+            this.handshakesRejected.get(),
+            this.sessions.size(),
+            this.chunksSentLca.get(),
+            this.chunksSentFromResidency.get(),
+            this.chunksSentFromLiveChunk.get(),
+            this.chunksFallbackVanilla.get()
+        );
     }
 
     private LcaChunkResidencyCache resolveCacheForLevel(final @Nullable ServerLevel level) {
@@ -461,6 +895,30 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
         final boolean shouldModifyAntiXray,
         final Function<String, Integer> fallbackRuntimeLookup
     ) throws IOException {
+        return encodeChunkForSessionInternal(
+            playerId,
+            chunkX,
+            chunkZ,
+            snapshot,
+            shouldModifyAntiXray,
+            fallbackRuntimeLookup,
+            true,
+            false,
+            new byte[0]
+        );
+    }
+
+    private @Nullable EncodedChunkBatch encodeChunkForSessionInternal(
+        final UUID playerId,
+        final int chunkX,
+        final int chunkZ,
+        final LcaChunkResidencyCache.FrozenReadSnapshot snapshot,
+        final boolean shouldModifyAntiXray,
+        final Function<String, Integer> fallbackRuntimeLookup,
+        final boolean allowProxyStoredZlibWrapper,
+        final boolean allowOrderlessDict,
+        final byte[] heightmapBytes
+    ) throws IOException {
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(fallbackRuntimeLookup, "fallbackRuntimeLookup");
@@ -494,12 +952,13 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
             )
             : allSlices;
 
+        final byte[] hmBytes = heightmapBytes == null ? new byte[0] : heightmapBytes;
         final LcaRemoteStreamCodec.EntryFullChunk fullEntry = LcaRemoteStreamCodec.EntryFullChunk.createWithComputedSyndrome(
             chunkX,
             chunkZ,
             baseFrame.lastUpdateTick(),
             wireSlices,
-            new byte[0]
+            hmBytes
         );
         final long currentSyndrome64 = fullEntry.secDedSyndrome64();
 
@@ -534,16 +993,19 @@ public final class LcaNetWireEngine implements ChunkStreamInterceptor, Closeable
 
         final int regionX = chunkX >> 5;
         final int regionZ = chunkZ >> 5;
-        final boolean omitHeightmaps = neg.isClientHeightmapsEnabled();
+        final boolean omitHeightmaps = hmBytes.length == 0 && neg.isClientHeightmapsEnabled();
         final boolean useLcd2 = neg.isBatchLcd2Enabled();
-        byte[] wireBytes = LcaRemoteStreamCodec.encodeChunkBatch(
+        final boolean useOrderlessDict = allowOrderlessDict && neg.isOrderlessDictAndMulticastEnabled();
+        byte[] wireBytes = LcaRemoteStreamCodec.encodeChunkBatchDirect(
             regionX,
             regionZ,
             List.of(chosenEntry),
             omitHeightmaps,
-            useLcd2
+            useLcd2,
+            useOrderlessDict ? this.orderlessDict : null,
+            useOrderlessDict ? session.knownDictSlots : null
         );
-        final boolean wrapStoredZlib = neg.isProxySafeStoredZlibEnabled();
+        final boolean wrapStoredZlib = allowProxyStoredZlibWrapper && neg.isProxySafeStoredZlibEnabled();
         if (wrapStoredZlib) {
             wireBytes = wrapProxySafeStoredZlib(wireBytes);
         }

@@ -19,6 +19,40 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BuiltInTechnicalProtocolHandlers {
 
+    @FunctionalInterface
+    public interface PayloadSender {
+        boolean send(UUID playerId, String channelId, byte[] payload);
+    }
+
+    public record PlayerProtocolState(@Nullable UUID worldUuid, float saturation, float exhaustion) {
+    }
+
+    @FunctionalInterface
+    public interface PlayerStateProvider {
+        @Nullable PlayerProtocolState lookup(UUID playerId);
+    }
+
+    @FunctionalInterface
+    public interface ServuxQueryResponder {
+        byte @Nullable [] respond(UUID playerId, TechnicalProtocolCodecs.ServuxStructureQuery query);
+    }
+
+    @FunctionalInterface
+    public interface SyncmaticaHeaderResponder {
+        byte @Nullable [] respond(UUID playerId, TechnicalProtocolCodecs.SyncmaticaPlacementHeader header);
+    }
+
+    @FunctionalInterface
+    public interface JadeInspectResponder {
+        byte @Nullable [] respond(UUID playerId, TechnicalProtocolCodecs.JadeInspectRequest request);
+    }
+
+    private static volatile @Nullable PayloadSender payloadSender;
+    private static volatile @Nullable PlayerStateProvider playerStateProvider;
+    private static volatile @Nullable ServuxQueryResponder servuxResponder;
+    private static volatile @Nullable SyncmaticaHeaderResponder syncmaticaResponder;
+    private static volatile @Nullable JadeInspectResponder jadeResponder;
+
     private static final ServuxHandler SERVUX = new ServuxHandler();
     private static final SyncmaticaHandler SYNCMATICA = new SyncmaticaHandler();
     private static final JadeHandler JADE = new JadeHandler();
@@ -26,6 +60,26 @@ public final class BuiltInTechnicalProtocolHandlers {
     private static final MapWorldIdHandler MAP_WORLD_ID = new MapWorldIdHandler();
 
     private BuiltInTechnicalProtocolHandlers() {
+    }
+
+    public static void setPayloadSender(final @Nullable PayloadSender sender) {
+        payloadSender = sender;
+    }
+
+    public static void setPlayerStateProvider(final @Nullable PlayerStateProvider provider) {
+        playerStateProvider = provider;
+    }
+
+    public static void setServuxResponder(final @Nullable ServuxQueryResponder responder) {
+        servuxResponder = responder;
+    }
+
+    public static void setSyncmaticaResponder(final @Nullable SyncmaticaHeaderResponder responder) {
+        syncmaticaResponder = responder;
+    }
+
+    public static void setJadeResponder(final @Nullable JadeInspectResponder responder) {
+        jadeResponder = responder;
     }
 
     /**
@@ -82,6 +136,7 @@ public final class BuiltInTechnicalProtocolHandlers {
         private static final Set<String> CHANNELS = Set.of(TechnicalProtocolCodecs.CHANNEL_SERVUX_STRUCTURES);
         private final ConcurrentHashMap<UUID, TechnicalProtocolCodecs.ServuxStructureQuery> lastQueries = new ConcurrentHashMap<>();
         private final AtomicLong validQueries = new AtomicLong();
+        private final AtomicLong outboundPackets = new AtomicLong();
 
         @Override
         public String namespace() {
@@ -109,6 +164,14 @@ public final class BuiltInTechnicalProtocolHandlers {
             }
             this.lastQueries.put(playerId, query);
             this.validQueries.incrementAndGet();
+            final PayloadSender sender = payloadSender;
+            final ServuxQueryResponder responder = servuxResponder;
+            if (sender != null && responder != null) {
+                final byte[] response = responder.respond(playerId, query);
+                if (response != null && sender.send(playerId, TechnicalProtocolCodecs.CHANNEL_SERVUX_STRUCTURES, response)) {
+                    this.outboundPackets.incrementAndGet();
+                }
+            }
             return true;
         }
 
@@ -124,12 +187,17 @@ public final class BuiltInTechnicalProtocolHandlers {
         public long validQueries() {
             return this.validQueries.get();
         }
+
+        public long outboundPackets() {
+            return this.outboundPackets.get();
+        }
     }
 
     public static final class SyncmaticaHandler implements ClientProtocolHandler {
         private static final Set<String> CHANNELS = Set.of(TechnicalProtocolCodecs.CHANNEL_SYNCMATICA_MAIN);
         private final ConcurrentHashMap<UUID, TechnicalProtocolCodecs.SyncmaticaPlacementHeader> lastHeaders = new ConcurrentHashMap<>();
         private final AtomicLong validHeaders = new AtomicLong();
+        private final AtomicLong outboundPackets = new AtomicLong();
 
         @Override
         public String namespace() {
@@ -157,6 +225,14 @@ public final class BuiltInTechnicalProtocolHandlers {
             }
             this.lastHeaders.put(playerId, header);
             this.validHeaders.incrementAndGet();
+            final PayloadSender sender = payloadSender;
+            final SyncmaticaHeaderResponder responder = syncmaticaResponder;
+            if (sender != null && responder != null) {
+                final byte[] response = responder.respond(playerId, header);
+                if (response != null && sender.send(playerId, TechnicalProtocolCodecs.CHANNEL_SYNCMATICA_MAIN, response)) {
+                    this.outboundPackets.incrementAndGet();
+                }
+            }
             return true;
         }
 
@@ -172,12 +248,17 @@ public final class BuiltInTechnicalProtocolHandlers {
         public long validHeaders() {
             return this.validHeaders.get();
         }
+
+        public long outboundPackets() {
+            return this.outboundPackets.get();
+        }
     }
 
     public static final class JadeHandler implements ClientProtocolHandler {
         private static final Set<String> CHANNELS = Set.of(TechnicalProtocolCodecs.CHANNEL_JADE_REQUEST);
         private final ConcurrentHashMap<UUID, TechnicalProtocolCodecs.JadeInspectRequest> lastRequests = new ConcurrentHashMap<>();
         private final AtomicLong validRequests = new AtomicLong();
+        private final AtomicLong outboundPackets = new AtomicLong();
 
         @Override
         public String namespace() {
@@ -203,6 +284,14 @@ public final class BuiltInTechnicalProtocolHandlers {
             }
             this.lastRequests.put(playerId, req);
             this.validRequests.incrementAndGet();
+            final PayloadSender sender = payloadSender;
+            final JadeInspectResponder responder = jadeResponder;
+            if (sender != null && responder != null) {
+                final byte[] response = responder.respond(playerId, req);
+                if (response != null && sender.send(playerId, TechnicalProtocolCodecs.CHANNEL_JADE_REQUEST, response)) {
+                    this.outboundPackets.incrementAndGet();
+                }
+            }
             return true;
         }
 
@@ -218,6 +307,10 @@ public final class BuiltInTechnicalProtocolHandlers {
         public long validRequests() {
             return this.validRequests.get();
         }
+
+        public long outboundPackets() {
+            return this.outboundPackets.get();
+        }
     }
 
     public static final class AppleSkinHandler implements ClientProtocolHandler {
@@ -227,6 +320,7 @@ public final class BuiltInTechnicalProtocolHandlers {
         );
         private final ConcurrentHashMap<UUID, TechnicalProtocolCodecs.AppleSkinTracker> trackers = new ConcurrentHashMap<>();
         private final AtomicLong validUpdates = new AtomicLong();
+        private final AtomicLong outboundPackets = new AtomicLong();
 
         @Override
         public String namespace() {
@@ -256,6 +350,29 @@ public final class BuiltInTechnicalProtocolHandlers {
         }
 
         @Override
+        public void onPlayerTick(final UUID playerId) {
+            final PayloadSender sender = payloadSender;
+            final PlayerStateProvider provider = playerStateProvider;
+            if (sender == null || provider == null) {
+                return;
+            }
+            final PlayerProtocolState state = provider.lookup(playerId);
+            if (state == null) {
+                return;
+            }
+            final TechnicalProtocolCodecs.AppleSkinTracker tracker =
+                this.trackers.computeIfAbsent(playerId, ignored -> new TechnicalProtocolCodecs.AppleSkinTracker());
+            final byte[] satDelta = tracker.encodeSaturationDelta(state.saturation());
+            if (satDelta != null && sender.send(playerId, TechnicalProtocolCodecs.CHANNEL_APPLESKIN_SATURATION, satDelta)) {
+                this.outboundPackets.incrementAndGet();
+            }
+            final byte[] exhDelta = tracker.encodeExhaustionDelta(state.exhaustion());
+            if (exhDelta != null && sender.send(playerId, TechnicalProtocolCodecs.CHANNEL_APPLESKIN_EXHAUSTION, exhDelta)) {
+                this.outboundPackets.incrementAndGet();
+            }
+        }
+
+        @Override
         public void onPlayerQuit(final UUID playerId) {
             this.trackers.remove(playerId);
         }
@@ -267,11 +384,16 @@ public final class BuiltInTechnicalProtocolHandlers {
         public long validUpdates() {
             return this.validUpdates.get();
         }
+
+        public long outboundPackets() {
+            return this.outboundPackets.get();
+        }
     }
 
     public static final class MapWorldIdHandler implements ClientProtocolHandler {
         private static final Set<String> CHANNELS = Set.of(TechnicalProtocolCodecs.CHANNEL_XAERO_WORLD_ID);
         private final ConcurrentHashMap<UUID, Integer> lastWorldIds = new ConcurrentHashMap<>();
+        private final AtomicLong outboundPackets = new AtomicLong();
 
         @Override
         public String namespace() {
@@ -281,6 +403,18 @@ public final class BuiltInTechnicalProtocolHandlers {
         @Override
         public Set<String> channelIds() {
             return CHANNELS;
+        }
+
+        @Override
+        public void onPlayerJoin(final UUID playerId) {
+            this.emitWorldIdIfAvailable(playerId, false);
+        }
+
+        @Override
+        public void onChannelRegister(final UUID playerId, final String channelId) {
+            if (TechnicalProtocolCodecs.CHANNEL_XAERO_WORLD_ID.equals(channelId)) {
+                this.emitWorldIdIfAvailable(playerId, true);
+            }
         }
 
         @Override
@@ -298,8 +432,32 @@ public final class BuiltInTechnicalProtocolHandlers {
             this.lastWorldIds.remove(playerId);
         }
 
+        private void emitWorldIdIfAvailable(final UUID playerId, final boolean force) {
+            final PayloadSender sender = payloadSender;
+            final PlayerStateProvider provider = playerStateProvider;
+            if (sender == null || provider == null) {
+                return;
+            }
+            final PlayerProtocolState state = provider.lookup(playerId);
+            if (state == null || state.worldUuid() == null) {
+                return;
+            }
+            final int worldId = TechnicalProtocolCodecs.deterministicWorldId(state.worldUuid(), null);
+            final Integer prev = this.lastWorldIds.put(playerId, worldId);
+            if (force || !Integer.valueOf(worldId).equals(prev)) {
+                final byte[] wire = TechnicalProtocolCodecs.encodeXaeroWorldId(worldId);
+                if (sender.send(playerId, TechnicalProtocolCodecs.CHANNEL_XAERO_WORLD_ID, wire)) {
+                    this.outboundPackets.incrementAndGet();
+                }
+            }
+        }
+
         public @Nullable Integer lastWorldId(final UUID playerId) {
             return this.lastWorldIds.get(playerId);
+        }
+
+        public long outboundPackets() {
+            return this.outboundPackets.get();
         }
     }
 }

@@ -1,6 +1,6 @@
 # goldleaf-ADR-014 — Zero-Friction Migration CLI (`.lca <-> .mca`), Honest Auto-Tuner Config Surface, and Technical-Vanilla Parity Compatibility
 
-**Status:** In Progress
+**Status:** Accepted
 **Date:** 2026-11-21
 
 ## Context

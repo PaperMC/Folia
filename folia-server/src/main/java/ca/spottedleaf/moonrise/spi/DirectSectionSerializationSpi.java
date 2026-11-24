@@ -21,6 +21,13 @@ public interface DirectSectionSerializationSpi {
 
     @Nullable CompoundTag trySerializeDirect(SerializableChunkData data);
 
+    default @Nullable CompoundTag trySerializeDirect(
+        final SerializableChunkData data,
+        final @Nullable String worldId
+    ) {
+        return trySerializeDirect(data);
+    }
+
     default @Nullable SerializableChunkData tryDeserializeDirect(
         final net.minecraft.server.level.ServerLevel level,
         final net.minecraft.world.level.chunk.PalettedContainerFactory containerFactory,

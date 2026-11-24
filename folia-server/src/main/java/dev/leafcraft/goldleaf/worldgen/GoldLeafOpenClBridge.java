@@ -285,6 +285,44 @@ public final class GoldLeafOpenClBridge {
         }
 
         /**
+         * Executes fused 6-channel {@code eval_biome_climate6_batch} for {@code batchCount}
+         * quart volumes in one kernel dispatch and one contiguous interleaved {@code float[6]}
+         * readback.
+         *
+         * @return {@code 0} on success, or a non-zero OpenCL/JNI error code
+         */
+        public int dispatchBiomeClimate6Batch(
+            final int[] originsXyz4,
+            final int batchCount,
+            final int sizeX,
+            final int sizeY,
+            final int sizeZ,
+            final int stepX,
+            final int stepY,
+            final int stepZ,
+            final float[] outInterleaved6,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                throw new IllegalStateException("CompiledKernel '" + this.kernelName + "' has been closed");
+            }
+            return nativeDispatchBiomeClimate6Batch(
+                h,
+                originsXyz4,
+                batchCount,
+                sizeX,
+                sizeY,
+                sizeZ,
+                stepX,
+                stepY,
+                stepZ,
+                outInterleaved6,
+                outTimingsNanos
+            );
+        }
+
+        /**
          * Executes {@code fill_section_palette_batch_u2} for {@code batchCount} chunks of
          * {@code sectionCount} {@code 16x16x16} sections, writing packed 2-bit palette words
          * ({@code 1024 B/section}) and {@code ushort4} metadata headers ({@code 8 B/section})
@@ -365,11 +403,404 @@ public final class GoldLeafOpenClBridge {
             );
         }
 
+        /**
+         * Executes {@code eval_biome_rtree_batch} for {@code batchCount} chunks, writing compact
+         * {@code uint8} biome palette indices ({@code 1 byte/quart}, {@code 24x} smaller DMA than
+         * 6-channel float climate readback).
+         */
+        public int dispatchBiomeRTreeBatch(
+            final int[] originsXyz4,
+            final int batchCount,
+            final int sizeX,
+            final int sizeY,
+            final int sizeZ,
+            final int stepX,
+            final int stepY,
+            final int stepZ,
+            final byte[] outBiomeIds,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                throw new IllegalStateException("CompiledKernel '" + this.kernelName + "' has been closed");
+            }
+            return nativeDispatchBiomeRTreeBatch(
+                h,
+                originsXyz4,
+                batchCount,
+                sizeX,
+                sizeY,
+                sizeZ,
+                stepX,
+                stepY,
+                stepZ,
+                outBiomeIds,
+                outTimingsNanos
+            );
+        }
+
+        public int dispatchVanillaSurfaceU8Batch(
+            final CompiledKernel surfaceKernel,
+            final CompiledKernel packKernel,
+            final @Nullable CompiledKernel carverKernel,
+            final int[] originsXyz4,
+            final byte[] biomesHalo,
+            final float[] prelimCorners4,
+            final int[] beardMeta2,
+            final int[] beardItems8,
+            final int beardItemCount,
+            final int @Nullable [] carverMeta,
+            final int @Nullable [] carverMasks,
+            final int carvedChunkCount,
+            final int wordsPerCol,
+            final int batchCount,
+            final int sectionCount,
+            final int seaLevel,
+            final int deepFluidY,
+            final int minBlockY,
+            final long biomeZoomSeed,
+            final ByteBuffer outVoxelsDirectBuf,
+            final ByteBuffer outMetaDirectBuf,
+            final @Nullable ByteBuffer outHeightmapsDirectBuf,
+            final byte[] outChunkFlags,
+            final int @Nullable [] outCarverEvents,
+            final int @Nullable [] outCarverCounts,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            return dispatchVanillaSurfaceU8Batch(
+                surfaceKernel,
+                packKernel,
+                null,
+                carverKernel,
+                null,
+                originsXyz4,
+                biomesHalo,
+                prelimCorners4,
+                beardMeta2,
+                beardItems8,
+                beardItemCount,
+                carverMeta,
+                carverMasks,
+                carvedChunkCount,
+                wordsPerCol,
+                minBlockY + 1,
+                minBlockY + sectionCount * 16 - 8,
+                batchCount,
+                sectionCount,
+                seaLevel,
+                deepFluidY,
+                minBlockY,
+                biomeZoomSeed,
+                outVoxelsDirectBuf,
+                outMetaDirectBuf,
+                outHeightmapsDirectBuf,
+                outChunkFlags,
+                outCarverEvents,
+                outCarverCounts,
+                outTimingsNanos
+            );
+        }
+
+        public int dispatchVanillaSurfaceU8Batch(
+            final CompiledKernel surfaceKernel,
+            final CompiledKernel packKernel,
+            final @Nullable CompiledKernel carverMaskKernel,
+            final @Nullable CompiledKernel carverKernel,
+            final @Nullable CompiledKernel featureKernel,
+            final int[] originsXyz4,
+            final byte[] biomesHalo,
+            final float[] prelimCorners4,
+            final int[] beardMeta2,
+            final int[] beardItems8,
+            final int beardItemCount,
+            final int @Nullable [] carverMeta,
+            final int @Nullable [] carverMasks,
+            final int carvedChunkCount,
+            final int wordsPerCol,
+            final int minCarveY,
+            final int maxCarveY,
+            final int batchCount,
+            final int sectionCount,
+            final int seaLevel,
+            final int deepFluidY,
+            final int minBlockY,
+            final long biomeZoomSeed,
+            final ByteBuffer outVoxelsDirectBuf,
+            final ByteBuffer outMetaDirectBuf,
+            final @Nullable ByteBuffer outHeightmapsDirectBuf,
+            final byte[] outChunkFlags,
+            final int @Nullable [] outCarverEvents,
+            final int @Nullable [] outCarverCounts,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            Objects.requireNonNull(surfaceKernel, "surfaceKernel");
+            Objects.requireNonNull(packKernel, "packKernel");
+            Objects.requireNonNull(outVoxelsDirectBuf, "outVoxelsDirectBuf");
+            Objects.requireNonNull(outMetaDirectBuf, "outMetaDirectBuf");
+            if (!outVoxelsDirectBuf.isDirect() || !outMetaDirectBuf.isDirect()
+                || (outHeightmapsDirectBuf != null && !outHeightmapsDirectBuf.isDirect())) {
+                throw new IllegalArgumentException("DMA writeback buffers must be direct ByteBuffers");
+            }
+            final long hTerrain = this.nativeHandle.get();
+            final long hSurface = surfaceKernel.nativeHandle.get();
+            final long hPack = packKernel.nativeHandle.get();
+            final long hCarverMask = carverMaskKernel != null ? carverMaskKernel.nativeHandle.get() : 0L;
+            final long hCarver = carverKernel != null ? carverKernel.nativeHandle.get() : 0L;
+            final long hFeature = featureKernel != null ? featureKernel.nativeHandle.get() : 0L;
+            if (hTerrain == 0L || hSurface == 0L || hPack == 0L
+                || (carverMaskKernel != null && hCarverMask == 0L)
+                || (carverKernel != null && hCarver == 0L)
+                || (featureKernel != null && hFeature == 0L)) {
+                throw new IllegalStateException("CompiledKernel has been closed");
+            }
+            return nativeDispatchVanillaSurfaceU8Batch(
+                hTerrain,
+                hSurface,
+                hPack,
+                hCarverMask,
+                hCarver,
+                hFeature,
+                originsXyz4,
+                biomesHalo,
+                prelimCorners4,
+                beardMeta2,
+                beardItems8,
+                beardItemCount,
+                carverMeta,
+                carverMasks,
+                carvedChunkCount,
+                wordsPerCol,
+                minCarveY,
+                maxCarveY,
+                batchCount,
+                sectionCount,
+                seaLevel,
+                deepFluidY,
+                minBlockY,
+                biomeZoomSeed,
+                outVoxelsDirectBuf,
+                outMetaDirectBuf,
+                outHeightmapsDirectBuf,
+                outChunkFlags,
+                outCarverEvents,
+                outCarverCounts,
+                outTimingsNanos
+            );
+        }
+
+        public int dispatchCarverMaskBatch(
+            final int[] originsXyz4,
+            final int batchCount,
+            final int wordsPerCol,
+            final int minBlockY,
+            final int minCarveY,
+            final int maxCarveY,
+            final int[] outCarverMeta,
+            final int[] outCarverMasks
+        ) {
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                throw new IllegalStateException("CompiledKernel has been closed");
+            }
+            return nativeDispatchCarverMaskBatch(
+                h,
+                originsXyz4,
+                batchCount,
+                wordsPerCol,
+                minBlockY,
+                minCarveY,
+                maxCarveY,
+                outCarverMeta,
+                outCarverMasks
+            );
+        }
+
+        public int dispatchOreVeinRasterBatch(
+            final int[] veinMeta4,
+            final float[] veinRel6,
+            final long[] veinSeeds2,
+            final int veinCount,
+            final int regionMinX,
+            final int regionMinZ,
+            final int minBuildY,
+            final int maxBuildY,
+            final int[] outSlices2,
+            final int[] outVoxels,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                throw new IllegalStateException("CompiledKernel has been closed");
+            }
+            return nativeDispatchOreVeinRasterBatch(
+                h,
+                veinMeta4,
+                veinRel6,
+                veinSeeds2,
+                veinCount,
+                regionMinX,
+                regionMinZ,
+                minBuildY,
+                maxBuildY,
+                outSlices2,
+                outVoxels,
+                outTimingsNanos
+            );
+        }
+
+        public int dispatchLightBatch(
+            final int[] meta4,
+            final byte[] voxelInfo,
+            final int batchCount,
+            final int totalSections,
+            final boolean readBlockLight,
+            final byte[] outSkyNibbles,
+            final byte @Nullable [] outBlkNibbles,
+            final byte[] outSecFlags,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                throw new IllegalStateException("CompiledKernel has been closed");
+            }
+            return nativeDispatchLightBatch(
+                h,
+                meta4,
+                voxelInfo,
+                batchCount,
+                totalSections,
+                readBlockLight,
+                outSkyNibbles,
+                outBlkNibbles,
+                outSecFlags,
+                outTimingsNanos
+            );
+        }
+
+        /**
+         * Dispatches a generic GoldLeaf compute kernel on the dedicated per-device compute queue
+         * (isolated from worldgen DMA slots).
+         *
+         * @return {@code 0} on success, or a non-zero OpenCL/JNI error code
+         */
+        public int dispatchComputeKernel(
+            final @Nullable ByteBuffer inputDirectBuf,
+            final int inputBytes,
+            final @Nullable ComputeVramBuffer persistentState,
+            final ByteBuffer outputDirectBuf,
+            final int outputBytes,
+            final int @Nullable [] scalarParams,
+            final int globalWorkItems,
+            final int localWorkItems,
+            final boolean clearOutputBeforeDispatch,
+            final long @Nullable [] outTimingsNanos
+        ) {
+            Objects.requireNonNull(outputDirectBuf, "outputDirectBuf");
+            if (!outputDirectBuf.isDirect()) {
+                throw new IllegalArgumentException("outputDirectBuf must be a direct ByteBuffer");
+            }
+            if (inputBytes > 0) {
+                Objects.requireNonNull(inputDirectBuf, "inputDirectBuf");
+                if (!inputDirectBuf.isDirect()) {
+                    throw new IllegalArgumentException("inputDirectBuf must be a direct ByteBuffer");
+                }
+            }
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                throw new IllegalStateException("CompiledKernel '" + this.kernelName + "' has been closed");
+            }
+            final long vramHandle;
+            if (persistentState != null) {
+                vramHandle = persistentState.nativeHandle();
+                if (vramHandle == 0L) {
+                    throw new IllegalStateException("ComputeVramBuffer has been closed");
+                }
+            } else {
+                vramHandle = 0L;
+            }
+            return nativeDispatchComputeKernel(
+                h,
+                inputDirectBuf,
+                inputBytes,
+                vramHandle,
+                outputDirectBuf,
+                outputBytes,
+                scalarParams,
+                globalWorkItems,
+                localWorkItems,
+                clearOutputBeforeDispatch,
+                outTimingsNanos
+            );
+        }
+
+        public int uploadBlockDictLut(final int[] dictIds) {
+            Objects.requireNonNull(dictIds, "dictIds");
+            final long h = this.nativeHandle.get();
+            if (h == 0L) {
+                return -1;
+            }
+            return nativeUploadBlockDictLut(h, dictIds);
+        }
+
         @Override
         public void close() {
             final long h = this.nativeHandle.getAndSet(0L);
             if (h != 0L) {
                 nativeReleaseProgram(h);
+            }
+        }
+    }
+
+    /**
+     * Allocates a zero-initialized persistent {@code CL_MEM_READ_WRITE} VRAM buffer on
+     * {@code deviceIndex} for stateful compute kernels ({@code S-002}).
+     */
+    public static @Nullable ComputeVramBuffer allocComputeVramBuffer(final int deviceIndex, final int sizeBytes) {
+        if (!isAvailable() || sizeBytes <= 0) {
+            return null;
+        }
+        final long handle = nativeAllocComputeVramBuffer(deviceIndex, sizeBytes);
+        if (handle == 0L) {
+            return null;
+        }
+        return new ComputeVramBuffer(deviceIndex, sizeBytes, handle);
+    }
+
+    /**
+     * Native persistent VRAM buffer handle with idempotent {@link #close()} teardown ({@code S-002}).
+     */
+    public static final class ComputeVramBuffer implements AutoCloseable {
+        private final int deviceIndex;
+        private final int sizeBytes;
+        private final AtomicLong nativeHandle;
+
+        private ComputeVramBuffer(final int deviceIndex, final int sizeBytes, final long nativeHandle) {
+            this.deviceIndex = deviceIndex;
+            this.sizeBytes = sizeBytes;
+            this.nativeHandle = new AtomicLong(nativeHandle);
+        }
+
+        public int deviceIndex() {
+            return this.deviceIndex;
+        }
+
+        public int sizeBytes() {
+            return this.sizeBytes;
+        }
+
+        public boolean isClosed() {
+            return this.nativeHandle.get() == 0L;
+        }
+
+        long nativeHandle() {
+            return this.nativeHandle.get();
+        }
+
+        @Override
+        public void close() {
+            final long h = this.nativeHandle.getAndSet(0L);
+            if (h != 0L) {
+                nativeReleaseComputeVramBuffer(h);
             }
         }
     }
@@ -394,6 +825,8 @@ public final class GoldLeafOpenClBridge {
 
     private static native int nativeUploadSpillLut(long handle, int[] spillWords);
 
+    private static native int nativeUploadBlockDictLut(long handle, int[] dictIds);
+
     private static native int nativeDispatchDensityVolumeBatch(
         long handle,
         int[] originsXyz4,
@@ -405,6 +838,34 @@ public final class GoldLeafOpenClBridge {
         int stepY,
         int stepZ,
         float[] outValues,
+        long @Nullable [] outTimingsNanos
+    );
+
+    private static native int nativeDispatchBiomeClimate6Batch(
+        long handle,
+        int[] originsXyz4,
+        int batchCount,
+        int sizeX,
+        int sizeY,
+        int sizeZ,
+        int stepX,
+        int stepY,
+        int stepZ,
+        float[] outInterleaved6,
+        long @Nullable [] outTimingsNanos
+    );
+
+    private static native int nativeDispatchBiomeRTreeBatch(
+        long handle,
+        int[] originsXyz4,
+        int batchCount,
+        int sizeX,
+        int sizeY,
+        int sizeZ,
+        int stepX,
+        int stepY,
+        int stepZ,
+        byte[] outBiomeIds,
         long @Nullable [] outTimingsNanos
     );
 
@@ -433,5 +894,97 @@ public final class GoldLeafOpenClBridge {
         long @Nullable [] outTimingsNanos
     );
 
+    private static native int nativeDispatchVanillaSurfaceU8Batch(
+        long terrainHandle,
+        long surfaceHandle,
+        long packHandle,
+        long carverMaskHandle,
+        long carverHandle,
+        long featureHandle,
+        int[] originsXyz4,
+        byte[] biomesHalo,
+        float[] prelimCorners4,
+        int[] beardMeta2,
+        int[] beardItems8,
+        int beardItemCount,
+        int @Nullable [] carverMeta,
+        int @Nullable [] carverMasks,
+        int carvedChunkCount,
+        int wordsPerCol,
+        int minCarveY,
+        int maxCarveY,
+        int batchCount,
+        int sectionCount,
+        int seaLevel,
+        int deepFluidY,
+        int minBlockY,
+        long biomeZoomSeed,
+        ByteBuffer outVoxelsDirectBuf,
+        ByteBuffer outMetaDirectBuf,
+        @Nullable ByteBuffer outHeightmapsDirectBuf,
+        byte[] outChunkFlags,
+        int @Nullable [] outCarverEvents,
+        int @Nullable [] outCarverCounts,
+        long @Nullable [] outTimingsNanos
+    );
+
+    private static native int nativeDispatchCarverMaskBatch(
+        long carverMaskHandle,
+        int[] originsXyz4,
+        int batchCount,
+        int wordsPerCol,
+        int minBlockY,
+        int minCarveY,
+        int maxCarveY,
+        int[] outCarverMeta,
+        int[] outCarverMasks
+    );
+
+    private static native int nativeDispatchOreVeinRasterBatch(
+        long handle,
+        int[] veinMeta4,
+        float[] veinRel6,
+        long[] veinSeeds2,
+        int veinCount,
+        int regionMinX,
+        int regionMinZ,
+        int minBuildY,
+        int maxBuildY,
+        int[] outSlices2,
+        int[] outVoxels,
+        long @Nullable [] outTimingsNanos
+    );
+
+    private static native int nativeDispatchLightBatch(
+        long handle,
+        int[] meta4,
+        byte[] voxelInfo,
+        int batchCount,
+        int totalSections,
+        boolean readBlockLight,
+        byte[] outSkyNibbles,
+        byte @Nullable [] outBlkNibbles,
+        byte[] outSecFlags,
+        long @Nullable [] outTimingsNanos
+    );
+
     private static native void nativeReleaseProgram(long handle);
+
+    private static native long nativeAllocComputeVramBuffer(int deviceIndex, int sizeBytes);
+
+    private static native void nativeReleaseComputeVramBuffer(long bufferHandle);
+
+    private static native int nativeDispatchComputeKernel(
+        long handle,
+        @Nullable ByteBuffer inputDirectBuf,
+        int inputBytes,
+        long persistentVramHandle,
+        ByteBuffer outputDirectBuf,
+        int outputBytes,
+        int @Nullable [] scalarParams,
+        int globalWorkItems,
+        int localWorkItems,
+        boolean clearOutputBeforeDispatch,
+        long @Nullable [] outTimingsNanos
+    );
 }

@@ -1,5 +1,7 @@
 package dev.leafcraft.goldleaf.worldgen;
 
+import dev.leafcraft.goldleaf.config.GoldLeafConfig;
+import dev.leafcraft.goldleaf.storage.GoldLeafFlatBlockSectionBacking;
 import io.github.dailystruggle.bytecode.transpile.OpenClBackendEmitter;
 import java.util.Arrays;
 import java.util.List;
@@ -58,10 +60,25 @@ public final class CompactSurfaceWritebackApplier {
      * stratification directly into 4-bit {@code SimpleBitStorage(4, 4096)} {@code ulong} rows).
      */
     public static String buildFusedSurfaceKernelSource(final OpenClBackendEmitter.DensityVolumeProgram densityProgram) {
+        return buildFusedSurfaceKernelSource(densityProgram, null);
+    }
+
+    /**
+     * Wraps a {@link OpenClBackendEmitter.DensityVolumeProgram} with the fused column-parallel
+     * {@code fill_surface_palette_batch_u4} kernel, optionally using a {@link OpenClBackendEmitter.CoarseInterpSpec}
+     * to evaluate {@code InterpolatedFunction} subtrees on each section's coarse grid in
+     * {@code __local} memory ({@code 32x-80x} fewer density evaluations than dense per-voxel mode).
+     */
+    public static String buildFusedSurfaceKernelSource(
+        final OpenClBackendEmitter.DensityVolumeProgram densityProgram,
+        final OpenClBackendEmitter.@org.jspecify.annotations.Nullable CoarseInterpSpec coarseSpec
+    ) {
         Objects.requireNonNull(densityProgram, "densityProgram");
         final String baseSource = densityProgram.sourceCode();
         final String evalFn = detectDensityEvalFunctionName(baseSource);
-        final StringBuilder sb = new StringBuilder(baseSource.length() + 4096);
+        final boolean evalAcceptsSpill = functionAcceptsGlobalSpill(baseSource, evalFn);
+        final boolean evalReturnsQ32 = functionReturnsLongQ32(baseSource, evalFn);
+        final StringBuilder sb = new StringBuilder(baseSource.length() + 6144);
         sb.append(baseSource);
         sb.append("\n\n// GoldLeaf fused TERRAIN + SURFACE 4-bit column-parallel kernel (goldleaf-ADR-017)\n");
         sb.append("static inline uint gl_col_hash3(int x, int y, int z) {\n");
@@ -85,6 +102,7 @@ public final class CompactSurfaceWritebackApplier {
         sb.append("    if (chunk_idx >= batch_count) {\n");
         sb.append("        return;\n");
         sb.append("    }\n");
+        sb.append("    (void)gl_lut_spill;\n");
         sb.append("    const int lx = lid & 15;\n");
         sb.append("    const int lz = (lid >> 4) & 15;\n");
         sb.append("    const int4 origin = origins[chunk_idx];\n");
@@ -93,63 +111,120 @@ public final class CompactSurfaceWritebackApplier {
         sb.append("    const int surface_depth = 3 + (int)(gl_col_hash3(bx, 0, bz) & 3u);\n");
         sb.append("    int stone_above = 0;\n");
         sb.append("    int under_water = 0;\n");
-        sb.append("    __local uint l_non_empty[256];\n");
-        sb.append("    __local uint l_fluid[256];\n");
-        sb.append("    __local uint l_mask[256];\n");
-        sb.append("    __local ulong l_row_parts[16][16];\n");
+        sb.append("    __local ushort l_non_empty[256];\n");
+        sb.append("    __local ushort l_fluid[256];\n");
+        sb.append("    __local ushort l_mask[256];\n");
+        sb.append("    __local uchar l_codes[256];\n");
+        if (coarseSpec != null) {
+            final int coarseChannelCount = coarseSpec.coarseFunctionNames().size();
+            final int nCoarse = coarseSpec.pointsPerChannel();
+            final int totalCoarseTasks = coarseChannelCount * nCoarse;
+            final int cellXz = coarseSpec.cellSizeXz();
+            final float invCellXz = 1.0f / (float) cellXz;
+            sb.append("    __local float coarse_vals[").append(totalCoarseTasks).append("];\n");
+            sb.append("    const int col_cx = lx / ").append(cellXz).append(";\n");
+            sb.append("    const int col_cz = lz / ").append(cellXz).append(";\n");
+            sb.append("    const float col_fx = (float)(lx - col_cx * ").append(cellXz).append(") * ").append(invCellXz).append("f;\n");
+            sb.append("    const float col_fz = (float)(lz - col_cz * ").append(cellXz).append(") * ").append(invCellXz).append("f;\n");
+        }
         sb.append("    const int chunk_sec_base = chunk_idx * section_count;\n");
         sb.append("    for (int s = section_count - 1; s >= 0; s--) {\n");
         sb.append("        const int sec_min_y = min_block_y + (s << 4);\n");
-        sb.append("        uint col_non_empty = 0u;\n");
-        sb.append("        uint col_fluid = 0u;\n");
-        sb.append("        uint col_mask = 0u;\n");
+        sb.append("        ushort col_non_empty = 0;\n");
+        sb.append("        ushort col_fluid = 0;\n");
+        sb.append("        ushort col_mask = 0;\n");
         sb.append("        const int sec_word_base = (chunk_sec_base + s) << 8;\n");
-        sb.append("        for (int ly = 15; ly >= 0; ly--) {\n");
-        sb.append("            const int by = sec_min_y + ly;\n");
-        sb.append("            uint code = 0u;\n");
-        sb.append("            if (by <= min_block_y) {\n");
-        sb.append("                code = 4u;\n");
-        sb.append("            } else if (by < min_block_y + 5 && (int)(gl_col_hash3(bx, by, bz) % 5u) >= (by - min_block_y)) {\n");
-        sb.append("                code = 4u;\n");
-        sb.append("            } else {\n");
-        sb.append("                const float d = (float)").append(evalFn).append("(bx, by, bz, gl_lut_spill);\n");
-        sb.append("                if (d > 0.0f) {\n");
-        sb.append("                    stone_above++;\n");
-        sb.append("                    if (by <= 0) {\n");
-        sb.append("                        code = 5u;\n");
-        sb.append("                    } else if (by < 8 && (int)(gl_col_hash3(bx, by, bz) & 7u) >= by) {\n");
-        sb.append("                        code = 5u;\n");
-        sb.append("                    } else if (stone_above == 1 && !under_water && by >= sea_level) {\n");
-        sb.append("                        code = 6u;\n");
-        sb.append("                    } else if (stone_above <= surface_depth && by >= sea_level - 4) {\n");
-        sb.append("                        code = under_water ? 10u : 7u;\n");
-        sb.append("                    } else {\n");
-        sb.append("                        code = 1u;\n");
-        sb.append("                    }\n");
-        sb.append("                } else if (by < sea_level) {\n");
-        sb.append("                    stone_above = 0;\n");
-        sb.append("                    under_water = 1;\n");
-        sb.append("                    code = (by < deep_fluid_y) ? 3u : 2u;\n");
-        sb.append("                } else {\n");
-        sb.append("                    stone_above = 0;\n");
-        sb.append("                    under_water = 0;\n");
-        sb.append("                    code = 0u;\n");
-        sb.append("                }\n");
-        sb.append("            }\n");
-        sb.append("            col_mask |= (1u << code);\n");
-        sb.append("            if (code != 0u) col_non_empty++;\n");
-        sb.append("            if (code == 2u || code == 3u) col_fluid++;\n");
-        sb.append("            l_row_parts[lz][lx] = ((ulong)code) << (lx << 2);\n");
-        sb.append("            barrier(CLK_LOCAL_MEM_FENCE);\n");
-        sb.append("            if (lx == 0) {\n");
-        sb.append("                ulong row = 0ul;\n");
-        sb.append("                for (int ix = 0; ix < 16; ix++) {\n");
-        sb.append("                    row |= l_row_parts[lz][ix];\n");
-        sb.append("                }\n");
-        sb.append("                out_words[sec_word_base + (ly << 4) + lz] = row;\n");
-        sb.append("            }\n");
-        sb.append("            barrier(CLK_LOCAL_MEM_FENCE);\n");
-        sb.append("        }\n");
+        if (coarseSpec != null) {
+            final int coarseChannelCount = coarseSpec.coarseFunctionNames().size();
+            final int cellXz = coarseSpec.cellSizeXz();
+            final int cellY = coarseSpec.cellSizeY();
+            final int nx = coarseSpec.gridSizeXz();
+            final int nCoarse = coarseSpec.pointsPerChannel();
+            final int totalCoarseTasks = coarseChannelCount * nCoarse;
+            final int cellsY = 16 / cellY;
+            final float invCellY = 1.0f / (float) cellY;
+            final int strideZ = nx;
+            final int strideY = nx * nx;
+
+            sb.append("        for (int task = lid; task < ").append(totalCoarseTasks).append("; task += 256) {\n");
+            sb.append("            const int ch = task / ").append(nCoarse).append(";\n");
+            sb.append("            const int cidx = task - ch * ").append(nCoarse).append(";\n");
+            sb.append("            const int cx = cidx % ").append(nx).append(";\n");
+            sb.append("            const int ctmp = cidx / ").append(nx).append(";\n");
+            sb.append("            const int cz = ctmp % ").append(nx).append(";\n");
+            sb.append("            const int cy = ctmp / ").append(nx).append(";\n");
+            sb.append("            const int gx = origin.x + cx * ").append(cellXz).append(";\n");
+            sb.append("            const int gy = sec_min_y + cy * ").append(cellY).append(";\n");
+            sb.append("            const int gz = origin.z + cz * ").append(cellXz).append(";\n");
+            sb.append("            float cval = 0.0f;\n");
+            sb.append("            switch (ch) {\n");
+            for (int k = 0; k < coarseChannelCount; k++) {
+                final String fnName = coarseSpec.coarseFunctionNames().get(k);
+                final boolean chSpill = functionAcceptsGlobalSpill(baseSource, fnName);
+                final boolean chQ32 = functionReturnsLongQ32(baseSource, fnName);
+                final String call = chSpill
+                    ? fnName + "(gx, gy, gz, gl_lut_spill)"
+                    : fnName + "(gx, gy, gz)";
+                final String conv = chQ32 ? "q32_to_f32(" + call + ")" : "(float)(" + call + ")";
+                sb.append("                case ").append(k).append(": cval = ").append(conv).append("; break;\n");
+            }
+            sb.append("                default: break;\n");
+            sb.append("            }\n");
+            sb.append("            coarse_vals[task] = cval;\n");
+            sb.append("        }\n");
+            sb.append("        barrier(CLK_LOCAL_MEM_FENCE);\n");
+            sb.append("        for (int cy = ").append(cellsY - 1).append("; cy >= 0; cy--) {\n");
+            sb.append("            const int cell_base = (cy * ").append(nx).append(" + col_cz) * ").append(nx).append(" + col_cx;\n");
+            for (int k = 0; k < coarseChannelCount; k++) {
+                final int chOff = k * nCoarse;
+                sb.append("            const int cb_").append(k).append(" = ").append(chOff).append(" + cell_base;\n");
+                sb.append("            const float c000_").append(k).append(" = coarse_vals[cb_").append(k).append("];\n");
+                sb.append("            const float c100_").append(k).append(" = coarse_vals[cb_").append(k).append(" + 1];\n");
+                sb.append("            const float c001_").append(k).append(" = coarse_vals[cb_").append(k).append(" + ").append(strideZ).append("];\n");
+                sb.append("            const float c101_").append(k).append(" = coarse_vals[cb_").append(k).append(" + ").append(strideZ + 1).append("];\n");
+                sb.append("            const float c010_").append(k).append(" = coarse_vals[cb_").append(k).append(" + ").append(strideY).append("];\n");
+                sb.append("            const float c110_").append(k).append(" = coarse_vals[cb_").append(k).append(" + ").append(strideY + 1).append("];\n");
+                sb.append("            const float c011_").append(k).append(" = coarse_vals[cb_").append(k).append(" + ").append(strideY + strideZ).append("];\n");
+                sb.append("            const float c111_").append(k).append(" = coarse_vals[cb_").append(k).append(" + ").append(strideY + strideZ + 1).append("];\n");
+                sb.append("            const float cz00_").append(k).append(" = c000_").append(k).append(" + col_fz * (c001_").append(k).append(" - c000_").append(k).append(");\n");
+                sb.append("            const float cz01_").append(k).append(" = c010_").append(k).append(" + col_fz * (c011_").append(k).append(" - c010_").append(k).append(");\n");
+                sb.append("            const float cz10_").append(k).append(" = c100_").append(k).append(" + col_fz * (c101_").append(k).append(" - c100_").append(k).append(");\n");
+                sb.append("            const float cz11_").append(k).append(" = c110_").append(k).append(" + col_fz * (c111_").append(k).append(" - c110_").append(k).append(");\n");
+                sb.append("            const float cx0_").append(k).append(" = cz00_").append(k).append(" + col_fx * (cz10_").append(k).append(" - cz00_").append(k).append(");\n");
+                sb.append("            const float cx1_").append(k).append(" = cz01_").append(k).append(" + col_fx * (cz11_").append(k).append(" - cz01_").append(k).append(");\n");
+                sb.append("            const float step_").append(k).append(" = (cx1_").append(k).append(" - cx0_").append(k).append(") * ").append(invCellY).append("f;\n");
+            }
+            sb.append("            for (int sub_y = ").append(cellY - 1).append("; sub_y >= 0; sub_y--) {\n");
+            sb.append("                const int ly = cy * ").append(cellY).append(" + sub_y;\n");
+            sb.append("                const int by = sec_min_y + ly;\n");
+            final StringBuilder evalCall = new StringBuilder(evalFn).append("(bx, by, bz");
+            for (int k = 0; k < coarseChannelCount; k++) {
+                sb.append("                const float gl_ch_").append(k).append(" = cx0_").append(k)
+                    .append(" + step_").append(k).append(" * (float)sub_y;\n");
+                evalCall.append(", gl_ch_").append(k);
+            }
+            if (evalAcceptsSpill) {
+                evalCall.append(", gl_lut_spill");
+            }
+            evalCall.append(')');
+            final String evalExpr = evalReturnsQ32
+                ? "q32_to_f32(" + evalCall + ")"
+                : "(float)(" + evalCall + ")";
+            appendSurfaceVoxelBody(sb, "                ", evalExpr);
+            sb.append("            }\n");
+            sb.append("        }\n");
+        } else {
+            final String evalCall = evalAcceptsSpill
+                ? evalFn + "(bx, by, bz, gl_lut_spill)"
+                : evalFn + "(bx, by, bz)";
+            final String evalExpr = evalReturnsQ32
+                ? "q32_to_f32(" + evalCall + ")"
+                : "(float)(" + evalCall + ")";
+            sb.append("        for (int ly = 15; ly >= 0; ly--) {\n");
+            sb.append("            const int by = sec_min_y + ly;\n");
+            appendSurfaceVoxelBody(sb, "            ", evalExpr);
+            sb.append("        }\n");
+        }
         sb.append("        l_non_empty[lid] = col_non_empty;\n");
         sb.append("        l_fluid[lid] = col_fluid;\n");
         sb.append("        l_mask[lid] = col_mask;\n");
@@ -163,7 +238,7 @@ public final class CompactSurfaceWritebackApplier {
         sb.append("            barrier(CLK_LOCAL_MEM_FENCE);\n");
         sb.append("        }\n");
         sb.append("        if (lid == 0) {\n");
-        sb.append("            out_meta[chunk_sec_base + s] = (ushort4)((ushort)l_non_empty[0], (ushort)l_fluid[0], (ushort)l_mask[0], (ushort)0);\n");
+        sb.append("            out_meta[chunk_sec_base + s] = (ushort4)(l_non_empty[0], l_fluid[0], l_mask[0], (ushort)0);\n");
         sb.append("        }\n");
         sb.append("        barrier(CLK_LOCAL_MEM_FENCE);\n");
         sb.append("    }\n");
@@ -171,7 +246,79 @@ public final class CompactSurfaceWritebackApplier {
         return sb.toString();
     }
 
+    private static void appendSurfaceVoxelBody(final StringBuilder sb, final String ind, final String evalExpr) {
+        sb.append(ind).append("uint code = 0u;\n");
+        sb.append(ind).append("if (by <= min_block_y) {\n");
+        sb.append(ind).append("    code = 4u;\n");
+        sb.append(ind).append("} else if (by < min_block_y + 5 && (int)(gl_col_hash3(bx, by, bz) % 5u) >= (by - min_block_y)) {\n");
+        sb.append(ind).append("    code = 4u;\n");
+        sb.append(ind).append("} else {\n");
+        sb.append(ind).append("    const float d = ").append(evalExpr).append(";\n");
+        sb.append(ind).append("    if (d > 0.0f) {\n");
+        sb.append(ind).append("        stone_above++;\n");
+        sb.append(ind).append("        if (by <= 0) {\n");
+        sb.append(ind).append("            code = 5u;\n");
+        sb.append(ind).append("        } else if (by < 8 && (int)(gl_col_hash3(bx, by, bz) & 7u) >= by) {\n");
+        sb.append(ind).append("            code = 5u;\n");
+        sb.append(ind).append("        } else if (stone_above == 1 && !under_water && by >= sea_level) {\n");
+        sb.append(ind).append("            code = 6u;\n");
+        sb.append(ind).append("        } else if (stone_above <= surface_depth && by >= sea_level - 4) {\n");
+        sb.append(ind).append("            code = under_water ? 10u : 7u;\n");
+        sb.append(ind).append("        } else {\n");
+        sb.append(ind).append("            code = 1u;\n");
+        sb.append(ind).append("        }\n");
+        sb.append(ind).append("    } else if (by < sea_level) {\n");
+        sb.append(ind).append("        stone_above = 0;\n");
+        sb.append(ind).append("        under_water = 1;\n");
+        sb.append(ind).append("        code = (by < deep_fluid_y) ? 3u : 2u;\n");
+        sb.append(ind).append("    } else {\n");
+        sb.append(ind).append("        stone_above = 0;\n");
+        sb.append(ind).append("        under_water = 0;\n");
+        sb.append(ind).append("        code = 0u;\n");
+        sb.append(ind).append("    }\n");
+        sb.append(ind).append("}\n");
+        sb.append(ind).append("col_mask |= (ushort)(1u << code);\n");
+        sb.append(ind).append("if (code != 0u) col_non_empty++;\n");
+        sb.append(ind).append("if (code == 2u || code == 3u) col_fluid++;\n");
+        sb.append(ind).append("l_codes[lid] = (uchar)code;\n");
+        sb.append(ind).append("barrier(CLK_LOCAL_MEM_FENCE);\n");
+        sb.append(ind).append("if (lid < 16) {\n");
+        sb.append(ind).append("    const int row_base = lid << 4;\n");
+        sb.append(ind).append("    ulong row = 0ul;\n");
+        sb.append(ind).append("    for (int ix = 0; ix < 16; ix++) {\n");
+        sb.append(ind).append("        row |= ((ulong)l_codes[row_base + ix]) << (ix << 2);\n");
+        sb.append(ind).append("    }\n");
+        sb.append(ind).append("    out_words[sec_word_base + (ly << 4) + lid] = row;\n");
+        sb.append(ind).append("}\n");
+        sb.append(ind).append("barrier(CLK_LOCAL_MEM_FENCE);\n");
+    }
+
+    private static boolean functionAcceptsGlobalSpill(final String openClSource, final String fnName) {
+        final int fnIdx = openClSource.indexOf(fnName + "(");
+        if (fnIdx < 0) {
+            return false;
+        }
+        final int closeParen = openClSource.indexOf(')', fnIdx);
+        if (closeParen < 0) {
+            return false;
+        }
+        return openClSource.substring(fnIdx, closeParen).contains("gl_lut_spill");
+    }
+
+    private static boolean functionReturnsLongQ32(final String openClSource, final String fnName) {
+        final int fnIdx = openClSource.indexOf(fnName + "(");
+        if (fnIdx < 0) {
+            return false;
+        }
+        final int lineStart = Math.max(0, openClSource.lastIndexOf('\n', fnIdx));
+        final String header = openClSource.substring(lineStart, fnIdx);
+        return header.contains("long ");
+    }
+
     private static String detectDensityEvalFunctionName(final String openClSource) {
+        if (openClSource.contains("evalDensity(")) {
+            return "evalDensity";
+        }
         final int idx = openClSource.indexOf("static inline");
         if (idx >= 0) {
             final int entryIdx = openClSource.indexOf("_eval(", idx);
@@ -188,9 +335,30 @@ public final class CompactSurfaceWritebackApplier {
                 return openClSource.substring(start, entryIdx + 5);
             }
         }
-        // Fallback: match the helper called inside evaluate_density_volume_batch_f32
-        final int kernIdx = openClSource.indexOf("__kernel void evaluate_density_volume_batch_f32");
+        // Fallback: match the helper called inside fill_section_palette_batch_u2 or evaluate_density_volume_batch_f32
+        int kernIdx = openClSource.indexOf("__kernel void fill_section_palette_batch_u2");
+        if (kernIdx < 0) {
+            kernIdx = openClSource.indexOf("__kernel void evaluate_density_volume_batch_f32");
+        }
         if (kernIdx >= 0) {
+            final int dAssign = openClSource.indexOf("const float d = ", kernIdx);
+            if (dAssign > kernIdx) {
+                final int callStart = openClSource.indexOf("(bx, by, bz", dAssign);
+                if (callStart > dAssign) {
+                    int start = callStart;
+                    while (start > dAssign) {
+                        final char c = openClSource.charAt(start - 1);
+                        if (Character.isLetterOrDigit(c) || c == '_') {
+                            start--;
+                        } else {
+                            break;
+                        }
+                    }
+                    if (start < callStart) {
+                        return openClSource.substring(start, callStart);
+                    }
+                }
+            }
             final int spillArg = openClSource.indexOf(", gl_lut_spill)", kernIdx);
             if (spillArg > kernIdx) {
                 final int paren = openClSource.lastIndexOf('(', spillArg);
@@ -261,6 +429,7 @@ public final class CompactSurfaceWritebackApplier {
             oceanOpaque[c] = Heightmap.Types.OCEAN_FLOOR_WG.isOpaque().test(st);
         }
         final List<BlockState> nonTickingPaletteList = Arrays.asList(nonTickingPalette);
+        final boolean useDirectFlatColdBacking = isDirectFlatColdBackingEnabled();
 
         final int[] surfPendingRow = new int[16];
         final int[] oceanPendingRow = new int[16];
@@ -337,13 +506,27 @@ public final class CompactSurfaceWritebackApplier {
             final List<BlockState> installPalette = (mask & tickingBlockCodeMask) == 0
                 ? nonTickingPaletteList
                 : fullPaletteList;
-            final boolean installed = section.paper$installBulk4BitSection(
-                installPalette,
-                raw4BitLongs,
-                (short) nonEmptyCount,
-                (short) fluidCount,
-                (short) tickingFluidCount
-            );
+            final boolean installed;
+            if (useDirectFlatColdBacking) {
+                final BlockState[] flatPalette = installPalette.toArray(BlockState[]::new);
+                final GoldLeafFlatBlockSectionBacking flatBacking =
+                    GoldLeafFlatBlockSectionBacking.fromPacked4BitLongs(raw4BitLongs, flatPalette, null);
+                installed = section.paper$installBulkColdBacking(
+                    flatBacking,
+                    flatPalette,
+                    (short) nonEmptyCount,
+                    (short) fluidCount,
+                    (short) tickingFluidCount
+                );
+            } else {
+                installed = section.paper$installBulk4BitSection(
+                    installPalette,
+                    raw4BitLongs,
+                    (short) nonEmptyCount,
+                    (short) fluidCount,
+                    (short) tickingFluidCount
+                );
+            }
             if (!installed) {
                 for (int ly = 15; ly >= 0; ly--) {
                     for (int lz = 0; lz < 16; lz++) {
@@ -404,6 +587,16 @@ public final class CompactSurfaceWritebackApplier {
         }
 
         return new CompactSectionWritebackApplier.ApplyStats(skippedAir, uniformNonAir, mixed, writtenVoxels);
+    }
+
+    private static boolean isDirectFlatColdBackingEnabled() {
+        final GoldLeafConfig cfg = GoldLeafConfig.get();
+        if (cfg == null || cfg.storage == null || !cfg.storage.lcaNativeSectionBacking) {
+            return false;
+        }
+        return !("mode-b".equalsIgnoreCase(cfg.storage.lcaMode)
+            || "archival".equalsIgnoreCase(cfg.storage.lcaMode)
+            || cfg.storage.lcaModeBLcd2);
     }
 
     private static int resolveUniformHeightmap(

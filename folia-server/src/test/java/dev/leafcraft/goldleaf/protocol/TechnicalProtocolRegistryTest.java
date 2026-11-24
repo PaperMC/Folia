@@ -26,6 +26,11 @@ final class TechnicalProtocolRegistryTest {
     @AfterEach
     void cleanup() {
         TechnicalProtocolRegistry.global().clear();
+        BuiltInTechnicalProtocolHandlers.setPayloadSender(null);
+        BuiltInTechnicalProtocolHandlers.setPlayerStateProvider(null);
+        BuiltInTechnicalProtocolHandlers.setServuxResponder(null);
+        BuiltInTechnicalProtocolHandlers.setSyncmaticaResponder(null);
+        BuiltInTechnicalProtocolHandlers.setJadeResponder(null);
     }
 
     @Test
@@ -185,5 +190,130 @@ final class TechnicalProtocolRegistryTest {
             TechnicalProtocolCodecs.decodeSyncmaticaHeader(buf, 65536);
         }
         assertArrayEquals(new byte[0], new byte[0]);
+    }
+
+    @Test
+    void builtInRespondersEmitAppleSkinDeltasAndXaeroWorldIdOutbounds() {
+        final java.util.List<String> sentChannels = new java.util.ArrayList<>();
+        final java.util.List<byte[]> sentPayloads = new java.util.ArrayList<>();
+        final UUID playerId = UUID.randomUUID();
+        final UUID worldUuid = UUID.randomUUID();
+        final float[] sat = new float[] {5.0f};
+        final float[] exh = new float[] {0.25f};
+
+        BuiltInTechnicalProtocolHandlers.setPayloadSender((id, ch, payload) -> {
+            if (playerId.equals(id)) {
+                sentChannels.add(ch);
+                sentPayloads.add(payload);
+                return true;
+            }
+            return false;
+        });
+        BuiltInTechnicalProtocolHandlers.setPlayerStateProvider(id ->
+            playerId.equals(id)
+                ? new BuiltInTechnicalProtocolHandlers.PlayerProtocolState(worldUuid, sat[0], exh[0])
+                : null
+        );
+
+        final var apple = BuiltInTechnicalProtocolHandlers.appleskin();
+        apple.onPlayerQuit(playerId);
+        apple.onPlayerTick(playerId);
+        assertEquals(2, sentChannels.size(), "First tick must emit saturation + exhaustion deltas");
+        assertEquals(TechnicalProtocolCodecs.CHANNEL_APPLESKIN_SATURATION, sentChannels.get(0));
+        assertEquals(5.0f, TechnicalProtocolCodecs.decodeFloat(sentPayloads.get(0)));
+        assertEquals(TechnicalProtocolCodecs.CHANNEL_APPLESKIN_EXHAUSTION, sentChannels.get(1));
+        assertEquals(0.25f, TechnicalProtocolCodecs.decodeFloat(sentPayloads.get(1)));
+
+        // Unchanged tick must emit zero packets
+        apple.onPlayerTick(playerId);
+        assertEquals(2, sentChannels.size(), "Unchanged saturation/exhaustion must emit nothing");
+
+        // Changed saturation only -> 1 packet
+        sat[0] = 6.5f;
+        apple.onPlayerTick(playerId);
+        assertEquals(3, sentChannels.size());
+        assertEquals(6.5f, TechnicalProtocolCodecs.decodeFloat(sentPayloads.get(2)));
+        apple.onPlayerQuit(playerId);
+
+        // Map World-ID emission on join and forced re-emission on channel register
+        final var map = BuiltInTechnicalProtocolHandlers.mapWorldId();
+        map.onPlayerQuit(playerId);
+        map.onPlayerJoin(playerId);
+        assertEquals(4, sentChannels.size());
+        assertEquals(TechnicalProtocolCodecs.CHANNEL_XAERO_WORLD_ID, sentChannels.get(3));
+        assertEquals(
+            TechnicalProtocolCodecs.deterministicWorldId(worldUuid, null),
+            TechnicalProtocolCodecs.decodeXaeroWorldId(sentPayloads.get(3))
+        );
+        map.onChannelRegister(playerId, TechnicalProtocolCodecs.CHANNEL_XAERO_WORLD_ID);
+        assertEquals(5, sentChannels.size(), "Channel registration must emit Xaero world ID");
+        map.onPlayerQuit(playerId);
+    }
+
+    @Test
+    void servuxSyncmaticaAndJadeHandlersEmitConfiguredOutboundResponses() {
+        final java.util.List<String> sentChannels = new java.util.ArrayList<>();
+        final UUID playerId = UUID.randomUUID();
+        BuiltInTechnicalProtocolHandlers.setPayloadSender((id, ch, payload) -> {
+            if (playerId.equals(id) && payload.length > 0) {
+                sentChannels.add(ch);
+                return true;
+            }
+            return false;
+        });
+        BuiltInTechnicalProtocolHandlers.setServuxResponder((id, q) ->
+            TechnicalProtocolCodecs.encodeServuxStructureQuery(q)
+        );
+        BuiltInTechnicalProtocolHandlers.setSyncmaticaResponder((id, h) ->
+            TechnicalProtocolCodecs.encodeSyncmaticaHeader(h)
+        );
+        BuiltInTechnicalProtocolHandlers.setJadeResponder((id, r) ->
+            TechnicalProtocolCodecs.encodeJadeInspectRequest(r)
+        );
+
+        final var servux = BuiltInTechnicalProtocolHandlers.servux();
+        final long servuxBefore = servux.outboundPackets();
+        assertTrue(servux.onCustomPayload(
+            playerId,
+            TechnicalProtocolCodecs.CHANNEL_SERVUX_STRUCTURES,
+            TechnicalProtocolCodecs.encodeServuxStructureQuery(
+                new TechnicalProtocolCodecs.ServuxStructureQuery(1, 1, -2, 8)
+            )
+        ));
+        assertEquals(servuxBefore + 1L, servux.outboundPackets());
+
+        final var sync = BuiltInTechnicalProtocolHandlers.syncmatica();
+        final long syncBefore = sync.outboundPackets();
+        assertTrue(sync.onCustomPayload(
+            playerId,
+            TechnicalProtocolCodecs.CHANNEL_SYNCMATICA_MAIN,
+            TechnicalProtocolCodecs.encodeSyncmaticaHeader(
+                new TechnicalProtocolCodecs.SyncmaticaPlacementHeader(UUID.randomUUID(), "sorter.litematic", 4096)
+            )
+        ));
+        assertEquals(syncBefore + 1L, sync.outboundPackets());
+
+        final var jade = BuiltInTechnicalProtocolHandlers.jade();
+        final long jadeBefore = jade.outboundPackets();
+        assertTrue(jade.onCustomPayload(
+            playerId,
+            TechnicalProtocolCodecs.CHANNEL_JADE_REQUEST,
+            TechnicalProtocolCodecs.encodeJadeInspectRequest(
+                new TechnicalProtocolCodecs.JadeInspectRequest(10, 64, -5, -1)
+            )
+        ));
+        assertEquals(jadeBefore + 1L, jade.outboundPackets());
+
+        assertEquals(
+            java.util.List.of(
+                TechnicalProtocolCodecs.CHANNEL_SERVUX_STRUCTURES,
+                TechnicalProtocolCodecs.CHANNEL_SYNCMATICA_MAIN,
+                TechnicalProtocolCodecs.CHANNEL_JADE_REQUEST
+            ),
+            sentChannels
+        );
+        servux.onPlayerQuit(playerId);
+        sync.onPlayerQuit(playerId);
+        jade.onPlayerQuit(playerId);
     }
 }

@@ -296,4 +296,119 @@ final class AmdahlWorldgenTracksTest {
             }
         }
     }
+
+    @Test
+    void gpuSurfaceActivationGateAndSkipMarkerProtectVanillaExact(@TempDir final Path cacheDir) {
+        final dev.leafcraft.goldleaf.config.GoldLeafConfig defaultCfg =
+            dev.leafcraft.goldleaf.config.GoldLeafConfig.defaults();
+        assertFalse(
+            IrOpenClTerrainAccelerator.isGpuSurfaceActive(
+                TerrainGenerationAccelerator.ParityMode.VANILLA_EXACT, defaultCfg
+            ),
+            "VANILLA_EXACT with default config must preserve vanilla SurfaceRules"
+        );
+        assertFalse(
+            IrOpenClTerrainAccelerator.isGpuSurfaceActive(
+                TerrainGenerationAccelerator.ParityMode.FAST, defaultCfg
+            ),
+            "FAST parity mode must not auto-activate GPU surface when gpu-surface-enabled is false"
+        );
+        defaultCfg.worldgen.gpuSurfaceEnabled = true;
+        assertTrue(
+            IrOpenClTerrainAccelerator.isGpuSurfaceActive(
+                TerrainGenerationAccelerator.ParityMode.FAST, defaultCfg
+            ),
+            "FAST parity mode with gpu-surface-enabled=true must activate fused GPU surface stratification"
+        );
+        assertTrue(
+            IrOpenClTerrainAccelerator.isGpuSurfaceActive(
+                TerrainGenerationAccelerator.ParityMode.VANILLA_EXACT, defaultCfg
+            ),
+            "Explicit gpu-surface-enabled opt-in must activate fused GPU surface stratification"
+        );
+
+        final LevelHeightAccessor heightAccessor = LevelHeightAccessor.create(-64, 384);
+        final net.minecraft.world.level.chunk.Strategy<BlockState> blockStrategy =
+            net.minecraft.world.level.chunk.Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
+        final LevelChunkSection[] emptySections = new LevelChunkSection[24];
+        for (int i = 0; i < emptySections.length; i++) {
+            emptySections[i] = new LevelChunkSection(
+                new net.minecraft.world.level.chunk.PalettedContainer<>(Blocks.AIR.defaultBlockState(), blockStrategy),
+                null
+            );
+        }
+        final ProtoChunk chunk = new ProtoChunk(
+            new ChunkPos(0, 0),
+            UpgradeData.EMPTY,
+            emptySections,
+            new net.minecraft.world.ticks.ProtoChunkTicks<>(),
+            new net.minecraft.world.ticks.ProtoChunkTicks<>(),
+            heightAccessor,
+            null,
+            null
+        );
+        final DensityFunction terrainGradient = new GradientFunction(
+            net.minecraft.core.Direction.Axis.Y,
+            net.minecraft.world.level.levelgen.densityfunction.TilingMode.CLAMP_TO_EDGE,
+            -64,
+            200,
+            1.0f,
+            -1.0f
+        );
+        try (IrOpenClTerrainAccelerator acc = new IrOpenClTerrainAccelerator(cacheDir)) {
+            assertFalse(acc.isSurfaceAlreadyApplied(chunk));
+            acc.markSurfaceApplied(chunk);
+            assertTrue(acc.isSurfaceAlreadyApplied(chunk), "First check must report GPU surface already applied");
+            assertFalse(acc.isSurfaceAlreadyApplied(chunk), "Per-chunk marker must be consumed on read");
+
+            final OpenClBackendEmitter.DensityVolumeProgram surfProg = acc.lowerFusedSurfaceFillProgram(
+                terrainGradient,
+                null,
+                "live_surface_test",
+                TerrainGenerationAccelerator.ParityMode.FAST
+            );
+            assertTrue(surfProg != null);
+            assertEquals(CompactSurfaceWritebackApplier.SURFACE_KERNEL_NAME, surfProg.kernelName());
+            if (acc.isGpuReady()) {
+                final IrOpenClTerrainAccelerator.CompiledDensityKernel compiled = acc.compileProgramBlocking(
+                    surfProg, TerrainGenerationAccelerator.ParityMode.FAST
+                );
+                assertTrue(compiled.hasLiveGpuKernel());
+                final CompactSurfaceWritebackBuffer outBuf = new CompactSurfaceWritebackBuffer(24);
+                final int[] origins = {0, -64, 0, 0};
+                acc.executeSurfaceSectionFill4BitBatch(compiled, origins, 1, 24, 63, -54, -64, outBuf);
+                assertEquals(CompactSurfaceWritebackBuffer.CODE_BEDROCK, outBuf.voxelCode(0, 0, 0, 0));
+                assertEquals(CompactSurfaceWritebackBuffer.CODE_AIR, outBuf.voxelCode(15, 4, 8, 4));
+            }
+
+            // Coarse-grid InterpolatedFunction anti-regression guard: fused 4-bit surface kernel
+            // must reuse __local coarse_vals[] trilinear interpolation rather than dense per-voxel eval.
+            final DensityFunction interpolatedTerrain = new net.minecraft.world.level.levelgen.densityfunction.op.InterpolatedFunction(
+                terrainGradient, 4, 8
+            );
+            final OpenClBackendEmitter.DensityVolumeProgram coarseSurfProg = acc.lowerFusedSurfaceFillProgram(
+                interpolatedTerrain,
+                null,
+                "live_surface_coarse_test",
+                TerrainGenerationAccelerator.ParityMode.VANILLA_EXACT
+            );
+            assertTrue(coarseSurfProg != null, "InterpolatedFunction must lower into coarse fused surface program");
+            assertTrue(
+                coarseSurfProg.sourceCode().contains("__local float coarse_vals["),
+                "Fused surface kernel must emit __local coarse_vals[] trilinear grid instead of dense per-voxel eval"
+            );
+            if (acc.isGpuReady()) {
+                final IrOpenClTerrainAccelerator.CompiledDensityKernel compiledCoarse = acc.compileProgramBlocking(
+                    coarseSurfProg, TerrainGenerationAccelerator.ParityMode.VANILLA_EXACT
+                );
+                assertTrue(compiledCoarse.hasLiveGpuKernel());
+                final CompactSurfaceWritebackBuffer outBuf = new CompactSurfaceWritebackBuffer(24);
+                final int[] origins = {0, -64, 0, 0};
+                acc.executeSurfaceSectionFill4BitBatch(compiledCoarse, origins, 1, 24, 63, -54, -64, outBuf);
+                assertEquals(CompactSurfaceWritebackBuffer.CODE_BEDROCK, outBuf.voxelCode(0, 0, 0, 0));
+                assertEquals(CompactSurfaceWritebackBuffer.CODE_DEEPSLATE, outBuf.voxelCode(3, 4, 6, 4));
+                assertEquals(CompactSurfaceWritebackBuffer.CODE_AIR, outBuf.voxelCode(15, 4, 8, 4));
+            }
+        }
+    }
 }

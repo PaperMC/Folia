@@ -50,7 +50,34 @@ public final class DecodeTimePacketGuard {
         }
     }
 
+    private static final class BurstBucket {
+        private long lastRefillMillis;
+        private double tokens;
+
+        BurstBucket(final long nowMillis, final int capacity) {
+            this.lastRefillMillis = nowMillis;
+            this.tokens = capacity;
+        }
+
+        synchronized boolean tryConsume(final long nowMillis, final int capacity, final double refillPerSec) {
+            if (nowMillis > this.lastRefillMillis) {
+                final double elapsedSec = (nowMillis - this.lastRefillMillis) / 1000.0;
+                this.tokens = Math.min(capacity, this.tokens + elapsedSec * refillPerSec);
+                this.lastRefillMillis = nowMillis;
+            }
+            if (this.tokens >= 1.0) {
+                this.tokens -= 1.0;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    private static final int DEFAULT_BURST_CAPACITY = 100;
+    private static final double DEFAULT_BURST_REFILL_PER_SEC = 100.0;
+
     private final ConcurrentHashMap<UUID, MalformedTracker> malformedTrackers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, BurstBucket> burstBuckets = new ConcurrentHashMap<>();
     private final AtomicLong totalRejected = new AtomicLong();
 
     public static DecodeTimePacketGuard global() {
@@ -143,9 +170,58 @@ public final class DecodeTimePacketGuard {
         return new ValidationDecision(false, disconnect, violationDetail);
     }
 
+    /**
+     * Enforces a per-connection packet-burst token bucket ({@code goldleaf-ADR-012} §1.2).
+     * When tokens are exhausted, records a malformed/burst violation that escalates to
+     * {@code DisconnectionReason.INVALID_PAYLOAD} ({@code S-004}).
+     */
+    public ValidationDecision validatePacketBurst(
+        final UUID playerId,
+        final String packetType,
+        final long nowMillis
+    ) {
+        return this.validatePacketBurst(
+            playerId,
+            packetType,
+            nowMillis,
+            DEFAULT_BURST_CAPACITY,
+            DEFAULT_BURST_REFILL_PER_SEC
+        );
+    }
+
+    public ValidationDecision validatePacketBurst(
+        final UUID playerId,
+        final String packetType,
+        final long nowMillis,
+        final int capacity,
+        final double refillPerSec
+    ) {
+        Objects.requireNonNull(playerId, "playerId");
+        final GoldLeafConfig.AntiExploit cfg = GoldLeafConfig.get().antiExploit;
+        if (!cfg.packetHardeningEnabled) {
+            return ValidationDecision.OK;
+        }
+        final int safeCapacity = Math.max(1, capacity);
+        final double safeRefill = Math.max(1.0, refillPerSec);
+        final BurstBucket bucket = this.burstBuckets.computeIfAbsent(
+            playerId,
+            ignored -> new BurstBucket(nowMillis, safeCapacity)
+        );
+        if (bucket.tryConsume(nowMillis, safeCapacity, safeRefill)) {
+            return ValidationDecision.OK;
+        }
+        return this.recordMalformed(
+            playerId,
+            packetType,
+            "packet burst exceeded capacity " + safeCapacity,
+            Math.floorDiv(nowMillis, 1000L)
+        );
+    }
+
     public void onPlayerQuit(final UUID playerId) {
         if (playerId != null) {
             this.malformedTrackers.remove(playerId);
+            this.burstBuckets.remove(playerId);
         }
     }
 
@@ -154,10 +230,11 @@ public final class DecodeTimePacketGuard {
     }
 
     public int trackedConnections() {
-        return this.malformedTrackers.size();
+        return Math.max(this.malformedTrackers.size(), this.burstBuckets.size());
     }
 
     public void clear() {
         this.malformedTrackers.clear();
+        this.burstBuckets.clear();
     }
 }

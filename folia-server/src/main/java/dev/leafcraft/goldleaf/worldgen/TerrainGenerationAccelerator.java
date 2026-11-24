@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -38,6 +39,7 @@ public interface TerrainGenerationAccelerator {
 
     enum ParityMode {
         VANILLA_EXACT,
+        VANILLA_EXACT_FP64,
         FAST;
 
         public static ParityMode fromConfig(final @Nullable String value) {
@@ -46,9 +48,11 @@ public interface TerrainGenerationAccelerator {
             }
             return switch (value.trim().toLowerCase(Locale.ROOT)) {
                 case "vanilla-exact" -> VANILLA_EXACT;
+                case "vanilla-exact-fp64" -> VANILLA_EXACT_FP64;
                 case "fast" -> FAST;
                 default -> throw new IllegalArgumentException(
-                    "Unsupported worldgen parity mode '" + value + "' (expected 'vanilla-exact' or 'fast')"
+                    "Unsupported worldgen parity mode '" + value
+                        + "' (expected 'vanilla-exact', 'vanilla-exact-fp64', or 'fast')"
                 );
             };
         }
@@ -81,8 +85,23 @@ public interface TerrainGenerationAccelerator {
         RandomState randomState,
         @Nullable Beardifier beardifier,
         Blender blender,
-        ChunkAccess chunk
+        ChunkAccess chunk,
+        net.minecraft.world.level.@Nullable LevelAccessor region
     ) {
+        public TerrainTask(
+            final ServerLevel level,
+            final NoiseBasedChunkGenerator generator,
+            final DensityVolume volume,
+            final NoiseRouter noiseRouter,
+            final NoiseGeneratorSettings settings,
+            final RandomState randomState,
+            final @Nullable Beardifier beardifier,
+            final Blender blender,
+            final ChunkAccess chunk
+        ) {
+            this(level, generator, volume, noiseRouter, settings, randomState, beardifier, blender, chunk, null);
+        }
+
         public TerrainTask {
             Objects.requireNonNull(level, "level");
             Objects.requireNonNull(generator, "generator");
@@ -166,8 +185,66 @@ public interface TerrainGenerationAccelerator {
 
     WaveResult accelerateTerrain(@Nullable WorldGenContext context, List<TerrainTask> tasks);
 
+    /**
+     * Submits a single {@code BIOMES} task asynchronously without blocking the calling Moonrise
+     * generation worker thread. Returns {@code null} when the implementation prefers synchronous
+     * dispatch, or a future resolving to {@code true} if accelerated ({@code false} for CPU fallback).
+     */
+    default @Nullable CompletableFuture<Boolean> submitBiomeAsync(
+        final WorldGenContext context,
+        final BiomeTask task
+    ) {
+        return null;
+    }
+
+    /**
+     * Submits a single {@code TERRAIN} task asynchronously without blocking the calling Moonrise
+     * generation worker thread. Returns {@code null} when the implementation prefers synchronous
+     * dispatch, or a future resolving to {@code true} if accelerated ({@code false} for CPU fallback).
+     */
+    default @Nullable CompletableFuture<Boolean> submitTerrainAsync(
+        final @Nullable WorldGenContext context,
+        final TerrainTask task
+    ) {
+        return null;
+    }
+
     default boolean isNoOp() {
         return false;
+    }
+
+    /**
+     * Returns {@code true} if the accelerator already applied fused GPU surface stratification to
+     * {@code chunk} during {@code TERRAIN}, allowing {@code NoiseBasedChunkGenerator} to skip
+     * duplicate CPU {@code buildSurface}. Consumes the per-chunk marker on read.
+     */
+    default boolean isSurfaceAlreadyApplied(final ChunkAccess chunk) {
+        return false;
+    }
+
+    /**
+     * Returns {@code true} if the GPU terrain wave already executed vanilla-exact carver aquifer
+     * carving for {@code chunk}, allowing {@code NoiseBasedChunkGenerator} to skip duplicate CPU
+     * {@code generateCarversLazy}. Consumes the per-chunk marker on read.
+     */
+    default boolean isCarverAlreadyApplied(final ChunkAccess chunk) {
+        return false;
+    }
+
+    default io.papermc.paper.spi.PaperWorldgenSpi.@Nullable PrecomputedChunkLight tryComputeChunkLight(
+        final ChunkAccess chunk,
+        final Boolean[] emptySections,
+        final boolean hasSkyLight
+    ) {
+        return null;
+    }
+
+    default @Nullable CompletableFuture<io.papermc.paper.spi.PaperWorldgenSpi.@Nullable PrecomputedChunkLight> tryComputeChunkLightAsync(
+        final ChunkAccess chunk,
+        final Boolean[] emptySections,
+        final boolean hasSkyLight
+    ) {
+        return null;
     }
 
     default ParityMode parityMode() {
@@ -298,6 +375,104 @@ public interface TerrainGenerationAccelerator {
             );
         }
         return handled;
+    }
+
+    /**
+     * Submits a single {@code BIOMES} task asynchronously without parking the caller thread.
+     * Returns {@code null} when no async accelerator is active (caller should fall back to sync),
+     * or a future resolving to {@code task.chunk()} when accelerated ({@code null} on CPU fallback).
+     */
+    static @Nullable CompletableFuture<@Nullable ChunkAccess> dispatchSingleBiomeAsync(
+        final WorldGenContext context,
+        final BiomeTask task,
+        final boolean requireAccelerator,
+        final WorldgenWaveTelemetry telemetry
+    ) {
+        final TerrainGenerationAccelerator accelerator = get();
+        if (accelerator.isNoOp()) {
+            if (requireAccelerator) {
+                throw new IllegalStateException(
+                    "GoldLeaf worldgen.require-accelerator is true, but no TerrainGenerationAccelerator is registered for BIOMES"
+                );
+            }
+            return null;
+        }
+        final CompletableFuture<Boolean> rawFuture = accelerator.submitBiomeAsync(context, task);
+        if (rawFuture == null) {
+            return null;
+        }
+        return rawFuture.handle((handledObj, ex) -> {
+            if (ex != null) {
+                LOGGER.warn("GoldLeaf async BIOMES accelerator failed for chunk {}", task.chunk().getPos(), ex);
+                telemetry.recordBiomeWave(1, 0, 0L, 0L, 0L);
+                if (requireAccelerator) {
+                    throw new IllegalStateException(
+                        "GoldLeaf BIOMES accelerator failed under strict require-accelerator mode for chunk "
+                            + task.chunk().getPos(),
+                        ex
+                    );
+                }
+                return null;
+            }
+            final boolean handled = Boolean.TRUE.equals(handledObj);
+            telemetry.recordBiomeWave(1, handled ? 1 : 0, 0L, 0L, 0L);
+            if (!handled && requireAccelerator) {
+                throw new IllegalStateException(
+                    "GoldLeaf BIOMES accelerator declined chunk " + task.chunk().getPos()
+                        + " under strict require-accelerator mode"
+                );
+            }
+            return handled ? task.chunk() : null;
+        });
+    }
+
+    /**
+     * Submits a single {@code TERRAIN} task asynchronously without parking the caller thread.
+     * Returns {@code null} when no async accelerator is active (caller should fall back to sync),
+     * or a future resolving to {@code task.chunk()} when accelerated ({@code null} on CPU fallback).
+     */
+    static @Nullable CompletableFuture<@Nullable ChunkAccess> dispatchSingleTerrainAsync(
+        final @Nullable WorldGenContext context,
+        final TerrainTask task,
+        final boolean requireAccelerator,
+        final WorldgenWaveTelemetry telemetry
+    ) {
+        final TerrainGenerationAccelerator accelerator = get();
+        if (accelerator.isNoOp()) {
+            if (requireAccelerator) {
+                throw new IllegalStateException(
+                    "GoldLeaf worldgen.require-accelerator is true, but no TerrainGenerationAccelerator is registered for TERRAIN"
+                );
+            }
+            return null;
+        }
+        final CompletableFuture<Boolean> rawFuture = accelerator.submitTerrainAsync(context, task);
+        if (rawFuture == null) {
+            return null;
+        }
+        return rawFuture.handle((handledObj, ex) -> {
+            if (ex != null) {
+                LOGGER.warn("GoldLeaf async TERRAIN accelerator failed for chunk {}", task.chunk().getPos(), ex);
+                telemetry.recordTerrainWave(1, 0, 0L, 0L, 0L);
+                if (requireAccelerator) {
+                    throw new IllegalStateException(
+                        "GoldLeaf TERRAIN accelerator failed under strict require-accelerator mode for chunk "
+                            + task.chunk().getPos(),
+                        ex
+                    );
+                }
+                return null;
+            }
+            final boolean handled = Boolean.TRUE.equals(handledObj);
+            telemetry.recordTerrainWave(1, handled ? 1 : 0, 0L, 0L, 0L);
+            if (!handled && requireAccelerator) {
+                throw new IllegalStateException(
+                    "GoldLeaf TERRAIN accelerator declined chunk " + task.chunk().getPos()
+                        + " under strict require-accelerator mode"
+                );
+            }
+            return handled ? task.chunk() : null;
+        });
     }
 
     final class Holder {

@@ -120,6 +120,17 @@ public final class LcaMigrationCli {
         public boolean isSuccess() {
             return this.exitCode == 0;
         }
+
+        /**
+         * Conservative projected conversion wall-time in milliseconds for {@code --dry-run}
+         * planning ({@code goldleaf-ADR-014} §1).
+         */
+        public long estimatedWallTimeMs() {
+            if (this.chunksConverted <= 0 && this.sourceBytes <= 0L) {
+                return 0L;
+            }
+            return Math.max(1L, Math.round(this.chunksConverted * 0.45d + this.sourceBytes / (64.0d * 1024.0d)));
+        }
     }
 
     private LcaMigrationCli() {
@@ -129,7 +140,7 @@ public final class LcaMigrationCli {
         final Options options = parseArgs(args);
         final Report report = run(options);
         System.out.printf(
-            "LcaMigrationCli: exit=%d regions=%d converted=%d verified=%d corrupt=%d mismatches=%d sourceBytes=%d targetBytes=%d%n",
+            "LcaMigrationCli: exit=%d regions=%d converted=%d verified=%d corrupt=%d mismatches=%d sourceBytes=%d targetBytes=%d estWallTimeMs=%d%n",
             report.exitCode(),
             report.regionsScanned(),
             report.chunksConverted(),
@@ -137,7 +148,8 @@ public final class LcaMigrationCli {
             report.corruptChunks(),
             report.verifyMismatches(),
             report.sourceBytes(),
-            report.targetBytes()
+            report.targetBytes(),
+            report.estimatedWallTimeMs()
         );
         for (final String err : report.errors()) {
             System.err.println("  ERROR: " + err);
@@ -154,7 +166,7 @@ public final class LcaMigrationCli {
         Path outputDir = null;
         boolean dryRun = false;
         boolean verify = false;
-        boolean modeBLcd2 = true;
+        boolean modeBLcd2 = false;
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -164,6 +176,7 @@ public final class LcaMigrationCli {
                 case "--output" -> outputDir = Path.of(requireArg(args, ++i, "--output"));
                 case "--dry-run" -> dryRun = true;
                 case "--verify" -> verify = true;
+                case "--mode-b" -> modeBLcd2 = true;
                 case "--no-lcd2" -> modeBLcd2 = false;
                 default -> throw new IllegalArgumentException("Unknown argument: " + args[i]);
             }

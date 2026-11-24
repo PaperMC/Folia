@@ -188,4 +188,51 @@ class OffTickAntiXrayTest {
         assertFalse(controller.dispatchPreparedPacket(connection, chunk, plan, packet));
         assertEquals(2L, controller.staleFallbackCount());
     }
+
+    @Test
+    void prepareAndDispatchAsyncOffloadsToWorkerPoolAndFallsBackOnStaleOrWorkerError() throws Exception {
+        final DefaultOffTickChunkPacketController controller = new DefaultOffTickChunkPacketController();
+        final ServerGamePacketListenerImpl connection = Mockito.mock(ServerGamePacketListenerImpl.class);
+        final LevelChunk chunk = Mockito.mock(LevelChunk.class);
+        final LevelChunkSection section = Mockito.mock(LevelChunkSection.class);
+        final ClientboundLevelChunkWithLightPacket packet = Mockito.mock(ClientboundLevelChunkWithLightPacket.class);
+
+        Mockito.when(connection.isAcceptingMessages()).thenReturn(true);
+        Mockito.when(chunk.getSections()).thenReturn(new LevelChunkSection[] {section});
+        Mockito.when(section.paper$getSectionEpoch()).thenReturn(12);
+
+        final OffTickChunkPacketController.ChunkPacketPlan plan =
+            new OffTickChunkPacketController.ChunkPacketPlan(
+                4,
+                -2,
+                true,
+                new OffTickChunkPacketController.SectionSnapshot[] {
+                    new OffTickChunkPacketController.SectionSnapshot(0, 12, false, 3, ~0L)
+                }
+            );
+
+        final java.util.concurrent.atomic.AtomicReference<String> workerThread = new java.util.concurrent.atomic.AtomicReference<>();
+        final boolean sent = controller.prepareAndDispatchAsync(connection, chunk, plan, p -> {
+            workerThread.set(Thread.currentThread().getName());
+            return packet;
+        }).get(5, TimeUnit.SECONDS);
+
+        assertTrue(sent);
+        assertTrue(workerThread.get() != null && workerThread.get().startsWith("GoldLeaf-ChunkEncode-"));
+        assertEquals(1L, controller.offTickSentCount());
+
+        // Worker exception must fail closed (false + staleFallbackCount++)
+        final boolean failed = controller.prepareAndDispatchAsync(connection, chunk, plan, p -> {
+            throw new IllegalStateException("simulated encoder error");
+        }).get(5, TimeUnit.SECONDS);
+        assertFalse(failed);
+        assertEquals(1L, controller.staleFallbackCount());
+
+        // Stale epoch detected after async preparation
+        Mockito.when(section.paper$getSectionEpoch()).thenReturn(13);
+        final boolean stale = controller.prepareAndDispatchAsync(connection, chunk, plan, p -> packet)
+            .get(5, TimeUnit.SECONDS);
+        assertFalse(stale);
+        assertEquals(2L, controller.staleFallbackCount());
+    }
 }

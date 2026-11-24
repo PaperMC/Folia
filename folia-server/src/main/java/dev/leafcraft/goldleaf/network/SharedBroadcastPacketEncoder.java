@@ -86,6 +86,73 @@ public final class SharedBroadcastPacketEncoder implements BroadcastPacketEncode
         this(SharedBroadcastPacketEncoder::defaultHasPerPlayerInterceptor, null, null);
     }
 
+    /**
+     * Creates the production Layer 2 encoder wired to Minecraft's {@code PLAY} clientbound codec
+     * and Netty's {@code encoder} pipeline context ({@code goldleaf-ADR-009} §1.2).
+     *
+     * <p>Fails closed to per-player fallback whenever the server registry is unavailable, a viewer
+     * has a custom Netty interceptor, or the {@code encoder} handler is absent ({@code S-002},
+     * {@code S-004}).</p>
+     */
+    public static SharedBroadcastPacketEncoder createDefault() {
+        final java.util.concurrent.atomic.AtomicReference<net.minecraft.network.ProtocolInfo<ClientGamePacketListener>> cachedProtocol =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        return new SharedBroadcastPacketEncoder(
+            SharedBroadcastPacketEncoder::defaultHasPerPlayerInterceptor,
+            packet -> serializePlayPacket(cachedProtocol, packet),
+            SharedBroadcastPacketEncoder::writeSliceBeforeEncoder
+        );
+    }
+
+    private static @Nullable ByteBuf serializePlayPacket(
+        final java.util.concurrent.atomic.AtomicReference<net.minecraft.network.ProtocolInfo<ClientGamePacketListener>> cachedProtocol,
+        final Packet<? super ClientGamePacketListener> packet
+    ) {
+        net.minecraft.network.ProtocolInfo<ClientGamePacketListener> protocol = cachedProtocol.get();
+        if (protocol == null) {
+            final net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
+            if (server == null) {
+                return null;
+            }
+            protocol = net.minecraft.network.protocol.game.GameProtocols.CLIENTBOUND_TEMPLATE.bind(
+                net.minecraft.network.RegistryFriendlyByteBuf.decorator(server.registryAccess())
+            );
+            cachedProtocol.compareAndSet(null, protocol);
+        }
+        final ByteBuf buf = ByteBufAllocator.DEFAULT.ioBuffer();
+        try {
+            protocol.codec().encode(buf, packet);
+            return buf;
+        } catch (final Throwable t) {
+            ReferenceCountUtil.safeRelease(buf);
+            LOGGER.warn("SharedBroadcastPacketEncoder failed to serialize {}; falling back per-player", packet.getClass().getSimpleName(), t);
+            return null;
+        }
+    }
+
+    private static void writeSliceBeforeEncoder(
+        final ServerPlayerConnection connection,
+        final ByteBuf retainedSlice
+    ) {
+        try {
+            final var player = connection.getPlayer();
+            final var channel = player != null && player.connection != null && player.connection.connection != null
+                ? player.connection.connection.channel
+                : null;
+            final var encoderCtx = channel != null && channel.isActive()
+                ? channel.pipeline().context(net.minecraft.network.HandlerNames.ENCODER)
+                : null;
+            if (encoderCtx == null) {
+                ReferenceCountUtil.safeRelease(retainedSlice);
+                return;
+            }
+            encoderCtx.write(retainedSlice);
+        } catch (final Throwable t) {
+            ReferenceCountUtil.safeRelease(retainedSlice);
+            LOGGER.warn("SharedBroadcastPacketEncoder failed to write retained slice; released buffer", t);
+        }
+    }
+
     public SharedBroadcastPacketEncoder(
         final ConnectionInterceptorGuard<ServerPlayerConnection> interceptorGuard,
         final @Nullable Function<Packet<? super ClientGamePacketListener>, @Nullable ByteBuf> packetSerializer,
@@ -123,7 +190,8 @@ public final class SharedBroadcastPacketEncoder implements BroadcastPacketEncode
                 return true;
             }
             final var channel = player.connection.connection.channel;
-            if (channel == null || !channel.isActive()) {
+            if (channel == null || !channel.isActive()
+                || channel.pipeline().context(net.minecraft.network.HandlerNames.ENCODER) == null) {
                 return true;
             }
             for (final String handlerName : channel.pipeline().names()) {

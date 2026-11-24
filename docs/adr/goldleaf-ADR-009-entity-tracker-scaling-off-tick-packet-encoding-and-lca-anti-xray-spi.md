@@ -1,6 +1,6 @@
 # goldleaf-ADR-009 — Entity Tracker Scaling, Off-Tick Packet Encoding, and `.lca`-Aware Anti-Xray SPI
 
-**Status:** In Progress
+**Status:** Accepted (v0.1 Scope Implemented)
 **Date:** 2026-11-21
 
 ## Context

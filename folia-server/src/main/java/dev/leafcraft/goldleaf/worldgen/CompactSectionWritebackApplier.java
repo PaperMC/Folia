@@ -1,5 +1,7 @@
 package dev.leafcraft.goldleaf.worldgen;
 
+import dev.leafcraft.goldleaf.config.GoldLeafConfig;
+import dev.leafcraft.goldleaf.storage.GoldLeafFlatBlockSectionBacking;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -183,6 +185,7 @@ public final class CompactSectionWritebackApplier {
         final boolean gpuCountsExact = !nonAirFlags[0] && nonAirFlags[1] && nonAirFlags[2] && nonAirFlags[3]
             && !fluidFlags[0] && !fluidFlags[1] && fluidFlags[2] && fluidFlags[3];
         final int[] remapLut = identityMap ? null : buildRemapByteLut(codeMap);
+        final boolean useDirectFlatColdBacking = identityMap && isDirectFlatColdBackingEnabled();
 
         final int[] surfPendingRow = new int[16];
         final int[] oceanPendingRow = new int[16];
@@ -237,8 +240,11 @@ public final class CompactSectionWritebackApplier {
             mixed++;
             final int sectionCodeMask = buffer.codeMask(globalSecIdx);
             final int needTickingFluidMask = sectionCodeMask & tickingFluidCodeMask;
-            final long[] raw4BitLongs = new long[CompactSectionWritebackBuffer.WORDS_PER_SECTION];
-            final int[] sectionWords = (surfRemaining > 0 || oceanRemaining > 0)
+
+            final long[] raw4BitLongs = useDirectFlatColdBacking
+                ? null
+                : new long[CompactSectionWritebackBuffer.WORDS_PER_SECTION];
+            final int[] sectionWords = (useDirectFlatColdBacking || surfRemaining > 0 || oceanRemaining > 0)
                 ? new int[CompactSectionWritebackBuffer.WORDS_PER_SECTION]
                 : null;
 
@@ -261,7 +267,9 @@ public final class CompactSectionWritebackApplier {
                     sectionWords[w] = word;
                 }
                 if (word != 0) {
-                    raw4BitLongs[w] = identityMap ? spread2To4(word) : remapAndSpread2To4(word, remapLut);
+                    if (raw4BitLongs != null) {
+                        raw4BitLongs[w] = identityMap ? spread2To4(word) : remapAndSpread2To4(word, remapLut);
+                    }
                     if (!gpuCountsExact) {
                         for (int c = 0; c < 4; c++) {
                             if (nonAirFlags[c] || fluidFlags[c]) {
@@ -280,7 +288,7 @@ public final class CompactSectionWritebackApplier {
                             tickingFluidCount += countCodeInWord(word, Integer.numberOfTrailingZeros(m));
                         }
                     }
-                } else if (!identityMap && codeMap[0] != 0) {
+                } else if (raw4BitLongs != null && !identityMap && codeMap[0] != 0) {
                     raw4BitLongs[w] = remapAndSpread2To4(0, remapLut);
                 }
             }
@@ -288,14 +296,29 @@ public final class CompactSectionWritebackApplier {
             final List<BlockState> sectionPalette = (sectionCodeMask & (1 << CompactSectionWritebackBuffer.CODE_DEEP_FLUID)) == 0
                 ? uniquePaletteNoDeep
                 : uniquePalette;
-            final boolean installed = sectionPalette.size() >= 2
-                && section.paper$installBulk4BitSection(
-                    sectionPalette,
-                    raw4BitLongs,
+            final boolean installed;
+            if (useDirectFlatColdBacking && sectionPalette.size() >= 2 && sectionWords != null) {
+                final BlockState[] flatPalette = sectionPalette.toArray(BlockState[]::new);
+                final GoldLeafFlatBlockSectionBacking flatBacking =
+                    GoldLeafFlatBlockSectionBacking.fromPacked2BitWords(sectionWords, flatPalette, null);
+                installed = section.paper$installBulkColdBacking(
+                    flatBacking,
+                    flatPalette,
                     (short) nonEmptyCount,
                     (short) fluidCount,
                     (short) tickingFluidCount
                 );
+            } else {
+                installed = sectionPalette.size() >= 2
+                    && raw4BitLongs != null
+                    && section.paper$installBulk4BitSection(
+                        sectionPalette,
+                        raw4BitLongs,
+                        (short) nonEmptyCount,
+                        (short) fluidCount,
+                        (short) tickingFluidCount
+                    );
+            }
             if (!installed) {
                 for (int ly = 15; ly >= 0; ly--) {
                     for (int lz = 0; lz < 16; lz++) {
@@ -357,6 +380,16 @@ public final class CompactSectionWritebackApplier {
         }
 
         return new ApplyStats(skippedAir, uniformNonAir, mixed, writtenVoxels);
+    }
+
+    private static boolean isDirectFlatColdBackingEnabled() {
+        final GoldLeafConfig cfg = GoldLeafConfig.get();
+        if (cfg == null || cfg.storage == null || !cfg.storage.lcaNativeSectionBacking) {
+            return false;
+        }
+        return !("mode-b".equalsIgnoreCase(cfg.storage.lcaMode)
+            || "archival".equalsIgnoreCase(cfg.storage.lcaMode)
+            || cfg.storage.lcaModeBLcd2);
     }
 
     private static int resolveUniformHeightmap(

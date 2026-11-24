@@ -38,7 +38,8 @@ final class WatchdogAndErgonomicsTest {
             new StackTraceElement("io.papermc.paper.threadedregions.TickRegionScheduler", "runTick", "TickRegionScheduler.java", 100)
         };
         final var ctx = new WatchdogContextContributor.StalledTickContext(
-            "world", 10, -20, 6.25, "Region Scheduler Thread #1", false, stack
+            "world", 10, -20, 6.25, "Region Scheduler Thread #1", false, stack,
+            6, 14, -24, -16, 48
         );
 
         final ChunkActivityCounters hot = new ChunkActivityCounters();
@@ -64,6 +65,7 @@ final class WatchdogAndErgonomicsTest {
         final String joined = String.join("\n", lines);
         assertTrue(joined.contains("world='world'"), "Must emit world name");
         assertTrue(joined.contains("center=(10,-20)"), "Must emit center chunk");
+        assertTrue(joined.contains("bounds=[(6,-24)..(14,-16)] loadedChunks=48"), "Must emit region bounds and loaded chunk count");
         assertTrue(joined.contains("Alice@(160,64,-320)"), "Must emit player snapshot");
         assertTrue(joined.contains("(10,-20)[ent=50"), "Must rank hottest ADR-006 chunk first");
         assertTrue(joined.contains("LagPlugin[UNSAFE_SYNC_IO]"), "Must attribute ADR-007 preflight plugin on stack");
@@ -121,5 +123,50 @@ final class WatchdogAndErgonomicsTest {
         assertTrue(summary.contains("reversible MIT .lca <-> .mca CLI converter"));
         assertTrue(summary.contains("SAFE=14 WARN=2 HAZARD=1"));
         assertEquals(4, summary.split("\n").length);
+    }
+
+    @Test
+    void goldLeafAdminCommandSupportsStatusHudAndRegionSafeAsyncTeleport() {
+        final org.bukkit.command.Command cmd = GoldLeafCommands.createGoldLeafCommand();
+        final org.bukkit.entity.Player player = org.mockito.Mockito.mock(org.bukkit.entity.Player.class);
+        final org.bukkit.World world = org.mockito.Mockito.mock(org.bukkit.World.class);
+        final UUID playerId = UUID.randomUUID();
+        org.mockito.Mockito.when(player.hasPermission(GoldLeafCommands.PERM_HUD)).thenReturn(true);
+        org.mockito.Mockito.when(player.getUniqueId()).thenReturn(playerId);
+        org.mockito.Mockito.when(player.getWorld()).thenReturn(world);
+        org.mockito.Mockito.when(player.teleportAsync(org.mockito.ArgumentMatchers.any(org.bukkit.Location.class)))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(Boolean.TRUE));
+
+        final java.util.List<String> messages = new java.util.ArrayList<>();
+        org.mockito.Mockito.doAnswer(inv -> {
+            messages.add(inv.getArgument(0, String.class));
+            return null;
+        }).when(player).sendMessage(org.mockito.ArgumentMatchers.anyString());
+
+        // /goldleaf status (lock-free summary)
+        assertTrue(cmd.execute(player, "goldleaf", new String[]{"status"}));
+        assertTrue(messages.stream().anyMatch(m -> m.contains("GoldLeaf Status | cores=")));
+
+        // /goldleaf tp valid coords uses teleportAsync (F-001..F-003, S-005)
+        messages.clear();
+        assertTrue(cmd.execute(player, "goldleaf", new String[]{"tp", "128.5", "70", "-64.25"}));
+        org.mockito.Mockito.verify(player).teleportAsync(org.mockito.ArgumentMatchers.argThat(loc ->
+            loc.getWorld() == world && loc.getX() == 128.5 && loc.getY() == 70.0 && loc.getZ() == -64.25
+        ));
+        assertTrue(messages.stream().anyMatch(m -> m.contains("Teleported asynchronously")));
+
+        // /goldleaf tp rejects non-numeric and non-finite coordinates fail-closed (S-004)
+        messages.clear();
+        assertTrue(cmd.execute(player, "goldleaf", new String[]{"tp", "NaN", "64", "0"}));
+        assertTrue(messages.stream().anyMatch(m -> m.contains("non-finite value rejected")));
+
+        messages.clear();
+        assertTrue(cmd.execute(player, "goldleaf", new String[]{"tp", "not-a-number", "64", "0"}));
+        assertTrue(messages.stream().anyMatch(m -> m.contains("expected finite numbers")));
+
+        // /goldleaf tp rejects unknown world fail-closed
+        messages.clear();
+        assertTrue(cmd.execute(player, "goldleaf", new String[]{"tp", "0", "64", "0", "nonexistent_world"}));
+        assertTrue(messages.stream().anyMatch(m -> m.contains("Unknown world 'nonexistent_world'")));
     }
 }

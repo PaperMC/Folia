@@ -134,6 +134,8 @@ Every subsystem in GoldLeaf is documented in a numbered Architecture Decision Re
 - [`goldleaf-ADR-015`](adr/goldleaf-ADR-015-region-safe-fake-player-and-bot-spi.md) — Region-safe fake player / bot SPI
 - [`goldleaf-ADR-016`](adr/goldleaf-ADR-016-boot-shutdown-telemetry-leyden-aot-and-plugin-warmup.md) — Boot/shutdown telemetry, Leyden AOT launch, and plugin warmup
 - [`goldleaf-ADR-017`](adr/goldleaf-ADR-017-typed-ast-ir-opencl-worldgen-pipeline-and-throughput-envelope.md) — Typed-AST-to-IR OpenCL worldgen pipeline and throughput envelope
+- [`goldleaf-ADR-018`](adr/goldleaf-ADR-018-opt-in-chat-signing-disable-secure-seed-and-offline-plugin-audit-cli.md) — Zero-boot plugin audit CLI, opt-in chat signing disable, and 1024-bit secure seed seams
+- [`goldleaf-ADR-019`](adr/goldleaf-ADR-019-reproducible-multi-fork-benchmark-harness-and-vanilla-parity-gate.md) — Reproducible multi-fork benchmark harness and automated vanilla-parity gate
 
 ---
 

@@ -5,8 +5,308 @@ Subject: [PATCH] Paper Layer 1 storage residency and direct section SPI seams
 
 Co-authored-by: Junie <junie@jetbrains.com>
 
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java
+index 0fa2babf1d726285f7dfa7e5750cc5762fbd0fb4..acd72e770c588fd21566263d1aa09bc3ca0f55c4 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/NewChunkHolder.java
+@@ -1185,7 +1185,94 @@ public final class NewChunkHolder {
+     }
+ 
+     private void changeEntityChunkStatus(final FullChunkStatus toStatus) {
++        boolean hydratedDeferred = false;
++        if (this.entityChunk == null) {
++            if (toStatus != FullChunkStatus.ENTITY_TICKING
++                && ca.spottedleaf.moonrise.spi.LazyEntityHydrationSpi.shouldDeferEntityHydration(this.world, this.chunkX, this.chunkZ)) {
++                return;
++            }
++            if (this.isEntityChunkNBTLoaded()) {
++                this.loadInEntityChunk(false);
++            } else {
++                this.scheduler.chunkHolderManager.getOrCreateEntityChunk(this.chunkX, this.chunkZ, false);
++            }
++            hydratedDeferred = true;
++        } else if (toStatus == FullChunkStatus.ENTITY_TICKING && this.entityChunk.isTransient()) {
++            if (this.isEntityChunkNBTLoaded()) {
++                this.loadInEntityChunk(false);
++            } else {
++                this.scheduler.chunkHolderManager.getOrCreateEntityChunk(this.chunkX, this.chunkZ, false);
++            }
++            hydratedDeferred = true;
++        }
+         ((ChunkSystemServerLevel)this.world).moonrise$getEntityLookup().chunkStatusChange(this.chunkX, this.chunkZ, toStatus);
++        if (hydratedDeferred && this.entityChunk != null) {
++            org.bukkit.craftbukkit.event.CraftEventFactory.callEntitiesLoadEvent(
++                this.world, new ChunkPos(this.chunkX, this.chunkZ), this.entityChunk.getAllEntities()
++            );
++        }
++    }
++
++    /**
++     * Hysteresis entity re-freeze for downgraded outer-ring exploration chunks ({@code goldleaf-ADR-005} Stage 4).
++     * Persists dirty entity state asynchronously via {@link #saveEntities}, unloads eligible passive
++     * entities from {@code EntityLookup}, and parks the serialized snapshot in {@code pendingEntityChunk}
++     * so future {@code ENTITY_TICKING} promotion or {@code Chunk#getEntities()} re-hydrates transparently.
++     */
++    public boolean paper$tryRefreezeEntityChunk() {
++        TickThread.ensureTickThread(this.world, this.chunkX, this.chunkZ, "Cannot refreeze entity chunk off-main");
++        if (this.unloaded || this.processingFullStatus) {
++            return false;
++        }
++        if (this.currentFullChunkStatus == FullChunkStatus.ENTITY_TICKING
++            || this.pendingFullChunkStatus == FullChunkStatus.ENTITY_TICKING
++            || this.currentFullChunkStatus == FullChunkStatus.INACCESSIBLE) {
++            return false;
++        }
++        final ChunkEntitySlices slices = this.entityChunk;
++        if (slices == null || slices.isTransient() || slices.isPreventingStatusUpdates()) {
++            return false;
++        }
++        final List<net.minecraft.world.entity.Entity> entities = slices.getAllEntities();
++        for (int i = 0, len = entities.size(); i < len; ++i) {
++            final net.minecraft.world.entity.Entity entity = entities.get(i);
++            if (entity.isRemoved()) {
++                continue;
++            }
++            if (!entity.shouldBeSaved()
++                || entity instanceof net.minecraft.world.entity.player.Player
++                || entity.isVehicle()
++                || entity.isPassenger()
++                || (entity instanceof net.minecraft.world.entity.Leashable leashable && leashable.isLeashed())
++                || entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon
++                || entity instanceof net.minecraft.world.entity.boss.wither.WitherBoss) {
++                return false;
++            }
++        }
++
++        // Persist any mutations asynchronously before unloading live NMS Entity objects (S-004, S-005)
++        this.saveEntities(slices, false, null);
++        final CompoundTag frozen = slices.save();
++        final boolean hasTransient = slices.unload();
++        if (!hasTransient) {
++            ((ChunkSystemServerLevel)this.world).moonrise$getEntityLookup().entitySectionUnload(this.chunkX, this.chunkZ);
++        }
++        final ReentrantAreaLock.Node schedulingLock = this.scheduler.schedulingLockArea.lock(this.chunkX, this.chunkZ);
++        try {
++            if (this.unloaded) {
++                return false;
++            }
++            if (hasTransient) {
++                slices.setTransient(true);
++                this.entityChunk = slices;
++            } else {
++                this.entityChunk = null;
++            }
++            this.pendingEntityChunk = frozen == null ? EMPTY_ENTITY_CHUNK : frozen;
++        } finally {
++            this.scheduler.schedulingLockArea.unlock(schedulingLock);
++        }
++        return true;
+     }
+ 
+     private boolean processingFullStatus = false;
+@@ -1277,6 +1364,7 @@ public final class NewChunkHolder {
+                         this.changeEntityChunkStatus(FullChunkStatus.BLOCK_TICKING);
+                         PlatformHooks.get().onChunkNotEntityTicking(chunk, this.vanillaChunkHolder);
+                         this.updateCurrentState(FullChunkStatus.BLOCK_TICKING);
++                        ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.notifyChunkDowngraded(this.world, chunk);
+                     }
+ 
+                     if (current.isOrAfter(FullChunkStatus.BLOCK_TICKING) && !pending.isOrAfter(FullChunkStatus.BLOCK_TICKING)) {
+@@ -1284,6 +1372,7 @@ public final class NewChunkHolder {
+                         this.changeEntityChunkStatus(FullChunkStatus.FULL);
+                         PlatformHooks.get().onChunkNotTicking(chunk, this.vanillaChunkHolder);
+                         this.updateCurrentState(FullChunkStatus.FULL);
++                        ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.notifyChunkDowngraded(this.world, chunk);
+                     }
+ 
+                     if (current.isOrAfter(FullChunkStatus.FULL) && !pending.isOrAfter(FullChunkStatus.FULL)) {
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java
+index 0af56927bff48d3ee9f403fb7a4e24c18dbd6223..25ecfeca20271dabca21b70973108793bbdaacb3 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/task/ChunkFullTask.java
+@@ -108,13 +108,22 @@ public final class ChunkFullTask extends ChunkProgressionTask implements Runnabl
+                 // Unlike Vanilla, we load the entity chunk here, as we load the NBT in empty status (unlike Vanilla)
+                 // This brings entity addition back in line with older versions of the game
+                 // Since we load the NBT in the empty status, this will never block for I/O
+-                ((ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager.fullTaskLoadEntityChunk(this.chunkX, this.chunkZ);
++                // GoldLeaf: defer entity hydration for disk-loaded outer-ring exploration chunks until ENTITY_TICKING
++                if (!(this.fromChunk instanceof ImposterProtoChunk)
++                    || !ca.spottedleaf.moonrise.spi.LazyEntityHydrationSpi.shouldDeferEntityHydration(this.world, this.chunkX, this.chunkZ)) {
++                    ((ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager.fullTaskLoadEntityChunk(this.chunkX, this.chunkZ);
++                }
+                 chunk.runPostLoad();
+                 chunk.setLoaded(true);
+                 chunk.registerAllBlockEntitiesAfterLevelLoad();
+                 chunk.registerTickContainerInLevel(this.world);
+                 chunk.setUnsavedListener(this.world.getChunkSource().chunkMap.worldGenContext.unsavedListener());
+                 platformHooks.chunkFullStatusComplete(chunk, (ProtoChunk)this.fromChunk);
++                if (this.fromChunk instanceof ImposterProtoChunk) {
++                    ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.notifyLoadedChunkFull(this.world, chunk);
++                } else {
++                    ca.spottedleaf.moonrise.spi.SectionLifecycleSpi.notifyGeneratedChunkFull(this.world, chunk);
++                }
+             } finally {
+                 platformHooks.setCurrentlyLoading(this.chunkHolder.vanillaChunkHolder, null);
+             }
+diff --git a/ca/spottedleaf/moonrise/patches/starlight/light/SWMRNibbleArray.java b/ca/spottedleaf/moonrise/patches/starlight/light/SWMRNibbleArray.java
+index 240416aba0ad4649e1db401aff2565f972f5ca11..ff18c9ad37e67c8f50c008d2e3c6e04fd381ba27 100644
+--- a/ca/spottedleaf/moonrise/patches/starlight/light/SWMRNibbleArray.java
++++ b/ca/spottedleaf/moonrise/patches/starlight/light/SWMRNibbleArray.java
+@@ -26,6 +26,15 @@ public final class SWMRNibbleArray {
+     private static final int INIT_STATE_HIDDEN = 3; // initialised, but conversion to Vanilla data should be treated as if NULL
+ 
+     public static final int ARRAY_SIZE = 16 * 16 * 16 / (8/4); // blocks / bytes per block
++    // GoldLeaf - shared immutable 0xFF nibble array for uniform full-skylight sections (ADR-005 Stage 4)
++    private static final byte[] SHARED_FULL_BYTES = createSharedFullBytes();
++
++    private static byte[] createSharedFullBytes() {
++        final byte[] full = new byte[ARRAY_SIZE];
++        Arrays.fill(full, (byte)0xFF);
++        return full;
++    }
++
+     // this allows us to maintain only 1 byte array when we're not updating
+     private static final ThreadLocal<ArrayDeque<byte[]>> WORKING_BYTES_POOL = ThreadLocal.withInitial(ArrayDeque::new);
+ 
+@@ -39,9 +48,46 @@ public final class SWMRNibbleArray {
+     }
+ 
+     private static void freeBytes(final byte[] bytes) {
++        if (bytes == null || bytes == SHARED_FULL_BYTES) {
++            return;
++        }
+         WORKING_BYTES_POOL.get().addFirst(bytes);
+     }
+ 
++    /**
++     * Constructs a {@link SWMRNibbleArray} from loaded NBT light bytes, sharing a single immutable
++     * {@code 0xFF} singleton when all 4,096 nibbles are full (15) to avoid duplicate {@code byte[2048]}
++     * heap allocations across sunlit air sections.
++     */
++    public static SWMRNibbleArray fromLoadedBytes(final byte[] bytes, final int state) {
++        if (bytes == null) {
++            return new SWMRNibbleArray(null, state);
++        }
++        if (bytes == SHARED_FULL_BYTES) {
++            return new SWMRNibbleArray(SHARED_FULL_BYTES, state);
++        }
++        if (bytes.length != ARRAY_SIZE) {
++            throw new IllegalArgumentException("Data of wrong length: " + bytes.length);
++        }
++        if (isAllFull(bytes)) {
++            return new SWMRNibbleArray(SHARED_FULL_BYTES, state);
++        }
++        return new SWMRNibbleArray(bytes.clone(), state);
++    }
++
++    /**
++     * Returns a lightweight {@link DataLayer} wrapping the immutable {@code 0xFF} singleton for
++     * zero-allocation direct `.lca` full-skylight loading. Callers must never mutate the returned
++     * {@code DataLayer}; {@link #fromLoadedBytes} recognizes {@code SHARED_FULL_BYTES} by identity.
++     */
++    public static net.minecraft.world.level.chunk.DataLayer createSharedFullDataLayer() {
++        return new net.minecraft.world.level.chunk.DataLayer(SHARED_FULL_BYTES);
++    }
++
++    public static boolean isSharedFullBacking(final SWMRNibbleArray array) {
++        return array != null && array.storageVisible == SHARED_FULL_BYTES;
++    }
++
+     public static SWMRNibbleArray fromVanilla(final DataLayer nibble) {
+         if (nibble == null) {
+             return new SWMRNibbleArray(null, true);
+@@ -168,6 +214,18 @@ public final class SWMRNibbleArray {
+         return true;
+     }
+ 
++    private static boolean isAllFull(final byte[] data) {
++        final int len = data.length / Long.BYTES; // assume divisible
++
++        for (int i = 0; i < len; ++i) {
++            if (-1L != (long)LONG_VIEW.get(data, i << 3)) {
++                return false;
++            }
++        }
++
++        return true;
++    }
++
+     // operation type: updating on src, updating on other
+     public void extrudeLower(final SWMRNibbleArray other) {
+         if (other.stateUpdating == INIT_STATE_NULL) {
+@@ -208,7 +266,7 @@ public final class SWMRNibbleArray {
+         if (this.stateUpdating != INIT_STATE_HIDDEN) {
+             this.stateUpdating = INIT_STATE_INIT;
+         }
+-        Arrays.fill(this.storageUpdating == null || !this.updatingDirty ? this.storageUpdating = allocateBytes() : this.storageUpdating, (byte)-1);
++        Arrays.fill(this.storageUpdating == null || this.storageUpdating == SHARED_FULL_BYTES || !this.updatingDirty ? this.storageUpdating = allocateBytes() : this.storageUpdating, (byte)-1);
+         this.updatingDirty = true;
+     }
+ 
+@@ -217,7 +275,7 @@ public final class SWMRNibbleArray {
+         if (this.stateUpdating != INIT_STATE_HIDDEN) {
+             this.stateUpdating = INIT_STATE_INIT;
+         }
+-        Arrays.fill(this.storageUpdating == null || !this.updatingDirty ? this.storageUpdating = allocateBytes() : this.storageUpdating, (byte)0);
++        Arrays.fill(this.storageUpdating == null || this.storageUpdating == SHARED_FULL_BYTES || !this.updatingDirty ? this.storageUpdating = allocateBytes() : this.storageUpdating, (byte)0);
+         this.updatingDirty = true;
+     }
+ 
+@@ -339,7 +397,7 @@ public final class SWMRNibbleArray {
+             if (this.stateUpdating == INIT_STATE_NULL || this.stateUpdating == INIT_STATE_UNINIT) {
+                 this.storageVisible = null;
+             } else {
+-                if (this.storageVisible == null) {
++                if (this.storageVisible == null || this.storageVisible == SHARED_FULL_BYTES) {
+                     this.storageVisible = this.storageUpdating.clone();
+                 } else {
+                     if (this.storageUpdating != this.storageVisible) {
+diff --git a/ca/spottedleaf/moonrise/patches/starlight/util/SaveUtil.java b/ca/spottedleaf/moonrise/patches/starlight/util/SaveUtil.java
+index 95154636727366adfb4fb67e7db8b09f3684f853..2809a4ad220ba8a96a13043b04e0113e1d3e3035 100644
+--- a/ca/spottedleaf/moonrise/patches/starlight/util/SaveUtil.java
++++ b/ca/spottedleaf/moonrise/patches/starlight/util/SaveUtil.java
+@@ -166,7 +166,7 @@ public final class SaveUtil {
+                 final byte[] blockLight = sectionData.getByteArray("BlockLight").orElse(null);
+                 if (blockLight != null) {
+                     // this is where our diff is
+-                    blockNibbles[y - minSection] = new SWMRNibbleArray(blockLight.clone(), sectionData.getIntOr(BLOCKLIGHT_STATE_TAG, 0)); // clone for data safety
++                    blockNibbles[y - minSection] = SWMRNibbleArray.fromLoadedBytes(blockLight, sectionData.getIntOr(BLOCKLIGHT_STATE_TAG, 0));
+                 } else {
+                     blockNibbles[y - minSection] = new SWMRNibbleArray(null, sectionData.getIntOr(BLOCKLIGHT_STATE_TAG, 0));
+                 }
+@@ -179,7 +179,7 @@ public final class SaveUtil {
+                         // however, for compatibility we store chunks as unlit so vanilla
+                         // is forced to re-light them if it encounters our data. It's too much of a burden
+                         // to try and maintain compatibility with a broken and inferior skylight management system.
+-                        skyNibbles[y - minSection] = new SWMRNibbleArray(skyLight.clone(), sectionData.getIntOr(SKYLIGHT_STATE_TAG, 0)); // clone for data safety
++                        skyNibbles[y - minSection] = SWMRNibbleArray.fromLoadedBytes(skyLight, sectionData.getIntOr(SKYLIGHT_STATE_TAG, 0));
+                     } else {
+                         skyNibbles[y - minSection] = new SWMRNibbleArray(null, sectionData.getIntOr(SKYLIGHT_STATE_TAG, 0));
+                     }
+diff --git a/net/minecraft/nbt/CompoundTag.java b/net/minecraft/nbt/CompoundTag.java
+index f9eb0c985fe67df8acb5a933ed7a66f3af40b5f2..8ff554fb234c36d9e284f1adb4a78fd5640fb55d 100644
+--- a/net/minecraft/nbt/CompoundTag.java
++++ b/net/minecraft/nbt/CompoundTag.java
+@@ -186,6 +186,17 @@ public final class CompoundTag implements Tag {
+         }
+     };
+     private final Map<String, Tag> tags;
++    // GoldLeaf start - ADR-005 Stage 4 transient zero-NBT direct-load payload attachment
++    private transient @Nullable Object paper$directLoadAttachment;
++
++    public @Nullable Object paper$getDirectLoadAttachment() {
++        return this.paper$directLoadAttachment;
++    }
++
++    public void paper$setDirectLoadAttachment(final @Nullable Object attachment) {
++        this.paper$directLoadAttachment = attachment;
++    }
++    // GoldLeaf end - ADR-005 Stage 4 transient zero-NBT direct-load payload attachment
+ 
+     public CompoundTag(final Map<String, Tag> tags) { // Paper - Optimize NBT reading/writing
+         this.tags = tags;
 diff --git a/net/minecraft/world/level/chunk/LevelChunk.java b/net/minecraft/world/level/chunk/LevelChunk.java
-index b5508c0488ba395ad9eb03baeee01922e2ec3364..fd869e4a0c649fe20f243429ecdf9dd6f10b6b3f 100644
+index b5508c0488ba395ad9eb03baeee01922e2ec3364..b99b788555c35b2fef145c5995090405fdee9287 100644
 --- a/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -108,6 +108,53 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
@@ -97,7 +397,31 @@ index b5508c0488ba395ad9eb03baeee01922e2ec3364..fd869e4a0c649fe20f243429ecdf9dd6
  
          Block newBlock = state.getBlock();
          this.heightmaps.get(Heightmap.Types.MOTION_BLOCKING).update(localX, y, localZ, state);
-@@ -690,6 +764,15 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+@@ -651,7 +725,10 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+              */
+             org.bukkit.Chunk bukkitChunk = new org.bukkit.craftbukkit.CraftChunk(this);
+             server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkLoadEvent(bukkitChunk, this.needsDecoration));
+-            org.bukkit.craftbukkit.event.CraftEventFactory.callEntitiesLoadEvent(this.level, this.chunkPos, ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().chunkHolderManager.getChunkHolder(this.locX, this.locZ).getEntityChunk().getAllEntities()); // Paper - rewrite chunk system
++            final ca.spottedleaf.moonrise.patches.chunk_system.level.entity.ChunkEntitySlices loadEntitySlices = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().chunkHolderManager.getChunkHolder(this.locX, this.locZ).getEntityChunk();
++            if (loadEntitySlices != null) {
++                org.bukkit.craftbukkit.event.CraftEventFactory.callEntitiesLoadEvent(this.level, this.chunkPos, loadEntitySlices.getAllEntities()); // Paper - rewrite chunk system
++            }
+ 
+             if (this.needsDecoration) {
+                 this.needsDecoration = false;
+@@ -680,7 +757,10 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+     public void unloadCallback() {
+         if (!this.loadedTicketLevel) { LOGGER.error("Double calling chunk unload!", new Throwable()); } // Paper
+         org.bukkit.Server server = this.level.getCraftServer();
+-        org.bukkit.craftbukkit.event.CraftEventFactory.callEntitiesUnloadEvent(this.level, this.chunkPos, ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().chunkHolderManager.getChunkHolder(this.locX, this.locZ).getEntityChunk().getAllEntities()); // Paper - rewrite chunk system
++        final ca.spottedleaf.moonrise.patches.chunk_system.level.entity.ChunkEntitySlices unloadEntitySlices = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().chunkHolderManager.getChunkHolder(this.locX, this.locZ).getEntityChunk();
++        if (unloadEntitySlices != null) {
++            org.bukkit.craftbukkit.event.CraftEventFactory.callEntitiesUnloadEvent(this.level, this.chunkPos, unloadEntitySlices.getAllEntities()); // Paper - rewrite chunk system
++        }
+         org.bukkit.Chunk bukkitChunk = new org.bukkit.craftbukkit.CraftChunk(this);
+         org.bukkit.event.world.ChunkUnloadEvent unloadEvent = new org.bukkit.event.world.ChunkUnloadEvent(bukkitChunk, true); // Paper - rewrite chunk system - force save to true so that mustNotSave is correctly set below
+         server.getPluginManager().callEvent(unloadEvent);
+@@ -690,6 +770,15 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
          // Paper start
          this.loadedTicketLevel = false;
          // Paper end
@@ -230,7 +554,7 @@ index 4e1359f85d66185c57a27302fd4672cd7e265874..d38f32cf69f7c417e1be55fd93a0bd46
              final PalettedContainer.Data<BlockState> data = this.states.data;
              final Palette<BlockState> palette = data.palette();
 diff --git a/net/minecraft/world/level/chunk/PalettedContainer.java b/net/minecraft/world/level/chunk/PalettedContainer.java
-index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca9e44c4da 100644
+index d564338ddc3dc13f0d11a18e26ea36e1f9343745..bbab4aa20859b33dfb5dd4a90d63cfc783bdcb84 100644
 --- a/net/minecraft/world/level/chunk/PalettedContainer.java
 +++ b/net/minecraft/world/level/chunk/PalettedContainer.java
 @@ -27,6 +27,7 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
@@ -241,7 +565,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
      //private final ThreadingDetector threadingDetector = new ThreadingDetector("PalettedContainer"); // Paper - unused
  
      public void acquire() {
-@@ -164,6 +165,45 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -164,6 +165,97 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      }
      // Paper end - Anti-Xray
  
@@ -265,6 +589,23 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
 +        this.paper$coldBacking = null;
 +    }
 +
++    /**
++     * Promotes a cold-backed section to native mutable {@code SimpleBitStorage} ({@code HOT_MUTABLE})
++     * by materializing the complete post-write state into a fresh {@code Data<T>} and publishing it
++     * before clearing {@code paper$coldBacking} so concurrent lock-free readers never observe a torn state.
++     */
++    public synchronized boolean paper$promoteColdBackingToMutable() {
++        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
++        if (backing == null) {
++            return false;
++        }
++        final PalettedContainer<T> materialized = new PalettedContainer<>(backing.uniformFallback(), this.strategy, this.presetValues);
++        backing.copyInto(materialized);
++        this.data = materialized.data;
++        this.paper$coldBacking = null;
++        return true;
++    }
++
 +    public void paper$installUniform(final T value) {
 +        this.paper$coldBacking = null;
 +        final Configuration cfg = this.strategy.getConfigurationForBitCount(0);
@@ -282,52 +623,101 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
 +        this.data = new PalettedContainer.Data<>(cfg, storage, palette);
 +        this.addPresetValues();
 +    }
++
++    /**
++     * Installs a decoded biome palette and packed 64-cell {@code long[]} directly without DFU
++     * {@code Codec.parse} overhead. Uniform ({@code size == 1}) and linear ({@code 2..8}) palettes
++     * install in $O(1)$ without repacking; {@code > 8} palettes delegate to {@link #unpack} so
++     * {@code Configuration.Global} registry-ID repacking matches vanilla exactly.
++     */
++    public void paper$installPackedBiomes(final List<T> paletteValues, final long @Nullable [] packedLongs) {
++        this.paper$coldBacking = null;
++        if (paletteValues == null || paletteValues.isEmpty()) {
++            return;
++        }
++        if (paletteValues.size() == 1) {
++            this.paper$installUniform(paletteValues.get(0));
++            return;
++        }
++        if (packedLongs == null) {
++            throw new IllegalArgumentException("Non-uniform biome palette (size=" + paletteValues.size() + ") requires packedLongs");
++        }
++        final int bits = net.minecraft.util.Mth.ceillog2(paletteValues.size());
++        final Configuration cfg = this.strategy.getConfigurationForBitCount(bits);
++        if (!(cfg instanceof Configuration.Global) && cfg.bitsInMemory() == bits) {
++            final Palette<T> palette = cfg.createPalette(this.strategy, paletteValues);
++            final BitStorage storage = new SimpleBitStorage(bits, this.strategy.entryCount(), packedLongs);
++            this.data = new PalettedContainer.Data<>(cfg, storage, palette);
++            return;
++        }
++        final PalettedContainer<T> unpacked = PalettedContainer.unpack(
++            this.strategy,
++            new PalettedContainerRO.PackedData<>(paletteValues, Optional.of(java.util.stream.LongStream.of(packedLongs))),
++            paletteValues.get(0),
++            this.presetValues
++        ).getOrThrow();
++        this.data = unpacked.data;
++    }
 +    // GoldLeaf end - ADR-005/ADR-017 zero-per-voxel bulk section install & Stage 4 cold backing
 +
      @Override
      public synchronized int onResize(int bits, final T lastAddedValue) { // Paper - synchronize // Paper start - Anti-Xray - remove final
          PalettedContainer.Data<T> oldData = this.data;
-@@ -188,6 +228,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -188,6 +280,14 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      // Paper end - Anti-Xray
  
      public synchronized T getAndSet(final int x, final int y, final int z, final T value) { // Paper - synchronize
 +        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
 +        if (backing != null) {
-+            return backing.getAndSet(x, y, z, value);
++            final T prev = backing.getAndSet(x, y, z, value);
++            if (backing.shouldPromoteToHotMutable()) {
++                this.paper$promoteColdBackingToMutable();
++            }
++            return prev;
 +        }
          this.acquire();
  
          try {
-@@ -198,6 +242,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -198,6 +298,14 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      }
  
      public T getAndSetUnchecked(final int x, final int y, final int z, final T value) {
 +        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
 +        if (backing != null) {
-+            return backing.getAndSet(x, y, z, value);
++            final T prev = backing.getAndSet(x, y, z, value);
++            if (backing.shouldPromoteToHotMutable()) {
++                this.paper$promoteColdBackingToMutable();
++            }
++            return prev;
 +        }
          return this.getAndSet(this.strategy.getIndex(x, y, z), value);
      }
  
-@@ -211,6 +259,11 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -211,6 +319,14 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      }
  
      public synchronized void set(final int x, final int y, final int z, final T value) { // Paper - synchronize
 +        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
 +        if (backing != null) {
 +            backing.set(x, y, z, value);
++            if (backing.shouldPromoteToHotMutable()) {
++                this.paper$promoteColdBackingToMutable();
++            }
 +            return;
 +        }
          this.acquire();
  
          try {
-@@ -221,16 +274,29 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -221,16 +337,32 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      }
  
      public void set(final int index, final T value) { // Paper - optimise chunk generation - public
 +        final ca.spottedleaf.moonrise.spi.ColdSectionBackingSpi<T> backing = this.paper$coldBacking;
 +        if (backing != null) {
 +            backing.setByIndex(index, value);
++            if (backing.shouldPromoteToHotMutable()) {
++                this.paper$promoteColdBackingToMutable();
++            }
 +            return;
 +        }
          int id = this.data.palette.idFor(value, this);
@@ -351,7 +741,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          // Paper start - optimise palette reads
          final PalettedContainer.Data<T> data = this.data;
          return readPalette(data, data.storage.get(index));
-@@ -239,6 +305,11 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -239,6 +371,11 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
  
      @Override
      public void getAll(final Consumer<T> consumer) {
@@ -363,7 +753,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          Palette<T> palette = this.data.palette();
          IntSet allExistingEntries = new IntArraySet();
          this.data.storage.getAll(allExistingEntries::add);
-@@ -246,6 +317,7 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -246,6 +383,7 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      }
  
      public synchronized void read(final FriendlyByteBuf buffer) { // Paper - synchronize
@@ -371,7 +761,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          this.acquire();
  
          try {
-@@ -270,6 +342,15 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -270,6 +408,15 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
      public synchronized void write(final FriendlyByteBuf buffer, final io.papermc.paper.antixray.@Nullable ChunkPacketInfo<T> chunkPacketInfo,
                                     final int chunkSectionIndex) { // Paper - synchronize
          // Paper end - Anti-Xray - add parameters
@@ -387,7 +777,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          this.acquire();
  
          try {
-@@ -350,6 +431,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -350,6 +497,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
  
      @Override
      public synchronized PalettedContainerRO.PackedData<T> pack(final Strategy<T> strategy) { // Paper - synchronize
@@ -398,7 +788,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          // Paper start - optimise PalettedContainer packing
          this.acquire();
  
-@@ -449,6 +534,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -449,6 +600,10 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
  
      @Override
      public int getSerializedSize() {
@@ -409,7 +799,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          return this.data.getSerializedSize(this.strategy.globalMap());
      }
  
-@@ -459,11 +548,20 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -459,11 +614,20 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
  
      @Override
      public boolean maybeHas(final Predicate<T> predicate) {
@@ -430,7 +820,7 @@ index d564338ddc3dc13f0d11a18e26ea36e1f9343745..c72474a8711c4d5f4b7e2d09799169ca
          for (int i = 0; i < this.data.palette.getSize(); i++) {
              consumer.accept(this.data.palette.valueFor(i));
          }
-@@ -471,16 +569,31 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
+@@ -471,16 +635,31 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
  
      @Override
      public PalettedContainer<T> copy() {
