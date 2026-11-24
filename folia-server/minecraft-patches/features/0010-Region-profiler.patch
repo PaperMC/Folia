@@ -594,13 +594,14 @@ index f34a3cd7290971438ad1217a6f6eca49bd3691ac..17b2e796e7bd423e923a218e76ce4ba5
          @Override
 diff --git a/io/papermc/paper/threadedregions/commands/CommandProfiler.java b/io/papermc/paper/threadedregions/commands/CommandProfiler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8f940ca39da8b3fe4ca925698adb520ae389cd47
+index 0000000000000000000000000000000000000000..b7822d25aef137c4d33d8971cc7defb41919522d
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/commands/CommandProfiler.java
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,234 @@
 +package io.papermc.paper.threadedregions.commands;
 +
 +import ca.spottedleaf.common.time.TickData;
++import ca.spottedleaf.common.util.DecimalFormats;
 +import ca.spottedleaf.leafprofiler.RegionizedProfiler;
 +import com.mojang.logging.LogUtils;
 +import io.papermc.paper.threadedregions.ThreadedRegionizer;
@@ -624,7 +625,6 @@ index 0000000000000000000000000000000000000000..8f940ca39da8b3fe4ca925698adb520a
 +import java.nio.charset.StandardCharsets;
 +import java.nio.file.Files;
 +import java.nio.file.StandardOpenOption;
-+import java.text.DecimalFormat;
 +import java.util.ArrayList;
 +import java.util.List;
 +import java.util.Objects;
@@ -635,18 +635,6 @@ index 0000000000000000000000000000000000000000..8f940ca39da8b3fe4ca925698adb520a
 +
 +    private static final Logger LOGGER = LogUtils.getLogger();
 +
-+    private static final ThreadLocal<DecimalFormat> THREE_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0.000");
-+    });
-+    private static final ThreadLocal<DecimalFormat> TWO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0.00");
-+    });
-+    private static final ThreadLocal<DecimalFormat> ONE_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0.0");
-+    });
-+    private static final ThreadLocal<DecimalFormat> NO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0");
-+    });
 +    private static final TextColor ORANGE = TextColor.color(255, 165, 0);
 +
 +    public CommandProfiler() {
@@ -796,19 +784,19 @@ index 0000000000000000000000000000000000000000..8f940ca39da8b3fe4ca925698adb520a
 +            final TickData.TickReportData tickReport = regionTimings.tickData().generateTickReport(null, regionTimings.endTime(), TickRegionScheduler.TIME_BETWEEN_TICKS);
 +
 +            final List<String> out = new ArrayList<>();
-+            out.add("Total time: " + THREE_DECIMAL_PLACES.get().format(1.0E-9 * (regionTimings.endTime() - regionTimings.startTime())) + "s");
-+            out.add("Total Ticks: " + NO_DECIMAL_PLACES.get().format(tickReport == null ? 0 : tickReport.collectedTicks()));
-+            out.add("Utilisation: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 100.0 * tickReport.utilisation()) + "%");
++            out.add("Total time: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(1.0E-9 * (regionTimings.endTime() - regionTimings.startTime())) + "s");
++            out.add("Total Ticks: " + DecimalFormats.NO_DECIMAL_PLACES.get().format(tickReport == null ? 0 : tickReport.collectedTicks()));
++            out.add("Utilisation: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 100.0 * tickReport.utilisation()) + "%");
 +            out.add("");
-+            out.add("Min TPS: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().least()));
-+            out.add("Median TPS: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().median()));
-+            out.add("Average TPS: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().average()));
-+            out.add("Max TPS: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().greatest()));
++            out.add("Min TPS: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().least()));
++            out.add("Median TPS: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().median()));
++            out.add("Average TPS: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().average()));
++            out.add("Max TPS: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 20.0 : tickReport.tpsData().segmentAll().greatest()));
 +            out.add("");
-+            out.add("Min MSPT: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 * tickReport.timePerTickData().segmentAll().least()));
-+            out.add("Median MSPT: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 *tickReport.timePerTickData().segmentAll().median()));
-+            out.add("Average MSPT: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 *tickReport.timePerTickData().segmentAll().average()));
-+            out.add("Max MSPT: " + THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 *tickReport.timePerTickData().segmentAll().greatest()));
++            out.add("Min MSPT: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 * tickReport.timePerTickData().segmentAll().least()));
++            out.add("Median MSPT: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 *tickReport.timePerTickData().segmentAll().median()));
++            out.add("Average MSPT: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 *tickReport.timePerTickData().segmentAll().average()));
++            out.add("Max MSPT: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(tickReport == null ? 0.0 : 1.0E-6 *tickReport.timePerTickData().segmentAll().greatest()));
 +            out.add("");
 +
 +            out.addAll(regionTimings.profiler().copyAccumulated().dumpToString());
@@ -823,12 +811,12 @@ index 0000000000000000000000000000000000000000..8f940ca39da8b3fe4ca925698adb520a
 +            final String indent = "    ";
 +            journalLines.add("Recorded Operation:");
 +            journalLines.add(indent + "Type: " + operation.type());
-+            journalLines.add(indent + "Time: " + THREE_DECIMAL_PLACES.get().format(1.0E-9 * (operation.time() - results.startTime())) + "s");
++            journalLines.add(indent + "Time: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(1.0E-9 * (operation.time() - results.startTime())) + "s");
 +            journalLines.add(indent + "From Region: " + operation.regionOfInterest());
 +            journalLines.add(indent + "Target Other Regions: " + operation.targetRegions().toString());
 +        }
 +
-+        journalLines.add("Total time: " + THREE_DECIMAL_PLACES.get().format(1.0E-9 * (results.endTime() - results.startTime())) + "s");
++        journalLines.add("Total time: " + DecimalFormats.THREE_DECIMAL_PLACES.get().format(1.0E-9 * (results.endTime() - results.startTime())) + "s");
 +        writeLines(journal, journalLines);
 +
 +    }

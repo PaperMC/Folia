@@ -6228,13 +6228,14 @@ index 8424cf9d4617b4732d44cc460d25b04481068989..f34a3cd7290971438ad1217a6f6eca49
  }
 diff --git a/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f8b9066d3aba58ea93d9bdab2aea4c1ef10d06ba
+index 0000000000000000000000000000000000000000..5db9c52d4c2b3a97578d0b2224b51b4dade7a230
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,345 @@
 +package io.papermc.paper.threadedregions.commands;
 +
 +import ca.spottedleaf.common.time.TickData;
++import ca.spottedleaf.common.util.DecimalFormats;
 +import io.papermc.paper.threadedregions.RegionizedServer;
 +import io.papermc.paper.threadedregions.ThreadedRegionizer;
 +import io.papermc.paper.threadedregions.TickRegionScheduler;
@@ -6258,23 +6259,12 @@ index 0000000000000000000000000000000000000000..f8b9066d3aba58ea93d9bdab2aea4c1e
 +import org.bukkit.craftbukkit.CraftWorld;
 +import org.bukkit.entity.Entity;
 +import org.bukkit.entity.Player;
-+import java.text.DecimalFormat;
 +import java.util.ArrayList;
 +import java.util.Arrays;
 +import java.util.List;
 +import java.util.Locale;
 +
 +public final class CommandServerHealth extends Command {
-+
-+    private static final ThreadLocal<DecimalFormat> TWO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0.00");
-+    });
-+    private static final ThreadLocal<DecimalFormat> ONE_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0.0");
-+    });
-+    private static final ThreadLocal<DecimalFormat> NO_DECIMAL_PLACES = ThreadLocal.withInitial(() -> {
-+        return new DecimalFormat("#,##0");
-+    });
 +
 +    private static final TextColor HEADER = TextColor.color(79, 164, 240);
 +    private static final TextColor PRIMARY = TextColor.color(48, 145, 237);
@@ -6293,11 +6283,11 @@ index 0000000000000000000000000000000000000000..f8b9066d3aba58ea93d9bdab2aea4c1e
 +                                              final boolean newline) {
 +        return Component.text()
 +            .append(Component.text(prefix, PRIMARY, TextDecoration.BOLD))
-+            .append(Component.text(ONE_DECIMAL_PLACES.get().format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
++            .append(Component.text(DecimalFormats.ONE_DECIMAL_PLACES.get().format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
 +            .append(Component.text("% util at ", PRIMARY))
-+            .append(Component.text(TWO_DECIMAL_PLACES.get().format(mspt), CommandUtil.getColourForMSPT(mspt)))
++            .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(mspt), CommandUtil.getColourForMSPT(mspt)))
 +            .append(Component.text(" MSPT at ", PRIMARY))
-+            .append(Component.text(TWO_DECIMAL_PLACES.get().format(tps), CommandUtil.getColourForTPS(tps)))
++            .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(tps), CommandUtil.getColourForTPS(tps)))
 +            .append(Component.text(" TPS" + (newline ? "\n" : ""), PRIMARY))
 +            .build();
 +    }
@@ -6305,11 +6295,11 @@ index 0000000000000000000000000000000000000000..f8b9066d3aba58ea93d9bdab2aea4c1e
 +    private static Component formatRegionStats(final TickRegions.RegionStats stats, final boolean newline) {
 +        return Component.text()
 +            .append(Component.text("Chunks: ", PRIMARY))
-+            .append(Component.text(NO_DECIMAL_PLACES.get().format((long)stats.getChunkCount()), INFORMATION))
++            .append(Component.text(DecimalFormats.NO_DECIMAL_PLACES.get().format((long)stats.getChunkCount()), INFORMATION))
 +            .append(Component.text(" Players: ", PRIMARY))
-+            .append(Component.text(NO_DECIMAL_PLACES.get().format((long)stats.getPlayerCount()), INFORMATION))
++            .append(Component.text(DecimalFormats.NO_DECIMAL_PLACES.get().format((long)stats.getPlayerCount()), INFORMATION))
 +            .append(Component.text(" Entities: ", PRIMARY))
-+            .append(Component.text(NO_DECIMAL_PLACES.get().format((long)stats.getEntityCount()) + (newline ? "\n" : ""), INFORMATION))
++            .append(Component.text(DecimalFormats.NO_DECIMAL_PLACES.get().format((long)stats.getEntityCount()) + (newline ? "\n" : ""), INFORMATION))
 +            .build();
 +    }
 +
@@ -6482,11 +6472,11 @@ index 0000000000000000000000000000000000000000..f8b9066d3aba58ea93d9bdab2aea4c1e
 +                .append(Component.text(":\n", PRIMARY))
 +
 +                .append(Component.text("    ", PRIMARY))
-+                .append(Component.text(ONE_DECIMAL_PLACES.get().format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
++                .append(Component.text(DecimalFormats.ONE_DECIMAL_PLACES.get().format(util * 100.0), CommandUtil.getUtilisationColourRegion(util)))
 +                .append(Component.text("% util at ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.get().format(mspt), CommandUtil.getColourForMSPT(mspt)))
++                .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(mspt), CommandUtil.getColourForMSPT(mspt)))
 +                .append(Component.text(" MSPT at ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.get().format(tps), CommandUtil.getColourForTPS(tps)))
++                .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(tps), CommandUtil.getColourForTPS(tps)))
 +                .append(Component.text(" TPS\n", PRIMARY))
 +
 +                .append(Component.text("    ", PRIMARY))
@@ -6513,23 +6503,23 @@ index 0000000000000000000000000000000000000000..f8b9066d3aba58ea93d9bdab2aea4c1e
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Utilisation: ", PRIMARY))
-+                .append(Component.text(ONE_DECIMAL_PLACES.get().format(totalUtil * 100.0), CommandUtil.getUtilisationColourRegion(totalUtil / (double)maxThreadCount)))
++                .append(Component.text(DecimalFormats.ONE_DECIMAL_PLACES.get().format(totalUtil * 100.0), CommandUtil.getUtilisationColourRegion(totalUtil / (double)maxThreadCount)))
 +                .append(Component.text("% / ", PRIMARY))
-+                .append(Component.text(ONE_DECIMAL_PLACES.get().format(maxThreadCount * 100.0), INFORMATION))
++                .append(Component.text(DecimalFormats.ONE_DECIMAL_PLACES.get().format(maxThreadCount * 100.0), INFORMATION))
 +                .append(Component.text("%\n", PRIMARY))
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Lowest Region TPS: ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.get().format(minTps) + "\n", CommandUtil.getColourForTPS(minTps)))
++                .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(minTps) + "\n", CommandUtil.getColourForTPS(minTps)))
 +
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Median Region TPS: ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.get().format(medianTps) + "\n", CommandUtil.getColourForTPS(medianTps)))
++                .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(medianTps) + "\n", CommandUtil.getColourForTPS(medianTps)))
 +
 +                .append(Component.text(" - ", LIST, TextDecoration.BOLD))
 +                .append(Component.text("Highest Region TPS: ", PRIMARY))
-+                .append(Component.text(TWO_DECIMAL_PLACES.get().format(maxTps) + "\n", CommandUtil.getColourForTPS(maxTps)))
++                .append(Component.text(DecimalFormats.TWO_DECIMAL_PLACES.get().format(maxTps) + "\n", CommandUtil.getColourForTPS(maxTps)))
 +
 +                .append(Component.text("Highest ", HEADER, TextDecoration.BOLD))
 +                .append(Component.text(Integer.toString(lowestRegionsCount), INFORMATION, TextDecoration.BOLD))
