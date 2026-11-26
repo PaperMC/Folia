@@ -3664,10 +3664,10 @@ index 0000000000000000000000000000000000000000..b579875434672b16806af27c3389fc1e
 \ No newline at end of file
 diff --git a/io/papermc/paper/threadedregions/TeleportUtils.java b/io/papermc/paper/threadedregions/TeleportUtils.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2a64a5b2cf049661fe3f5a22ddfa39979624f5ec
+index 0000000000000000000000000000000000000000..872fbcf20eadeb7797e8f4c477a6f60b1e495f28
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/TeleportUtils.java
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,83 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.concurrentutil.completable.CallbackCompletable;
@@ -3680,12 +3680,12 @@ index 0000000000000000000000000000000000000000..2a64a5b2cf049661fe3f5a22ddfa3997
 +
 +public final class TeleportUtils {
 +
-+    public static <T extends Entity> void teleport(final T from, final boolean useFromRootVehicle, final Entity to, final Float yaw, final Float pitch,
++    public static <T extends Entity> void teleport(final T from, final boolean useFromRootVehicle, final Entity to, final boolean copyRotation,
 +                                                   final long teleportFlags, final PlayerTeleportEvent.TeleportCause cause, final Consumer<Entity> onComplete) {
-+        teleport(from, useFromRootVehicle, to, yaw, pitch, teleportFlags, cause, onComplete, null);
++        teleport(from, useFromRootVehicle, to, copyRotation, teleportFlags, cause, onComplete, null);
 +    }
 +
-+    public static <T extends Entity> void teleport(final T from, final boolean useFromRootVehicle, final Entity to, final Float yaw, final Float pitch,
++    public static <T extends Entity> void teleport(final T from, final boolean useFromRootVehicle, final Entity to, final boolean copyRotation,
 +                                                   final long teleportFlags, final PlayerTeleportEvent.TeleportCause cause, final Consumer<Entity> onComplete,
 +                                                   final java.util.function.Predicate<T> preTeleport) {
 +        // retrieve coordinates
@@ -3711,7 +3711,8 @@ index 0000000000000000000000000000000000000000..2a64a5b2cf049661fe3f5a22ddfa3997
 +                            return;
 +                        }
 +                        (useFromRootVehicle ? realFrom.getRootVehicle() : realFrom).teleportAsync(
-+                            ((CraftWorld)loc.getWorld()).getHandle(), pos, null, null, null,
++                            ((CraftWorld)loc.getWorld()).getHandle(), pos,
++                            copyRotation ? Float.valueOf(loc.getYaw()) : null, copyRotation ? Float.valueOf(loc.getPitch()) : null, null,
 +                            cause, teleportFlags, onComplete
 +                        );
 +                    },
@@ -10051,7 +10052,7 @@ index 33b93d753e1dc1854be6825b4d686cc5a000bc63..10cf3158cc6991b070bd288f4f0656a7
              }
          }
 diff --git a/net/minecraft/server/commands/TeleportCommand.java b/net/minecraft/server/commands/TeleportCommand.java
-index 97acb0c6ff95a04405eeebc9835ddb84f818128d..a3257b552c7e76269a00cc7416f630e41cf2b3c5 100644
+index 97acb0c6ff95a04405eeebc9835ddb84f818128d..5a7f9e532d65d4e974923c3e111fbfefe61a3cc9 100644
 --- a/net/minecraft/server/commands/TeleportCommand.java
 +++ b/net/minecraft/server/commands/TeleportCommand.java
 @@ -164,18 +164,7 @@ public class TeleportCommand {
@@ -10070,7 +10071,7 @@ index 97acb0c6ff95a04405eeebc9835ddb84f818128d..a3257b552c7e76269a00cc7416f630e4
 -                destination.getXRot(),
 -                null
 -            );
-+            io.papermc.paper.threadedregions.TeleportUtils.teleport(entity, false, destination, Float.valueOf(destination.getYRot()), Float.valueOf(destination.getXRot()), Entity.TELEPORT_FLAG_LOAD_CHUNK, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.COMMAND, null); // Folia - region threading
++            io.papermc.paper.threadedregions.TeleportUtils.teleport(entity, false, destination, true, Entity.TELEPORT_FLAG_LOAD_CHUNK, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.COMMAND, null); // Folia - region threading
              tracker.track(entity);
          }
  
@@ -12371,7 +12372,7 @@ index 05bb47c0f62c241210dd3d7aa28b1cf4384c108d..603e2937eb1634466d2d91792dc7ed3c
  
      private static long currentLagCompensationTick() {
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 3858cc2c5a6af580696525b0d4d57afbd7c31daf..90abffb1a137ad1438fb0cb461e5bf5d8e6b7043 100644
+index 3858cc2c5a6af580696525b0d4d57afbd7c31daf..1e348d2971629100c9f26b5c7a01d070e7ae405a 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -212,7 +212,7 @@ import org.slf4j.Logger;
@@ -12942,7 +12943,7 @@ index 3858cc2c5a6af580696525b0d4d57afbd7c31daf..90abffb1a137ad1438fb0cb461e5bf5d
 +        if (this != cameraFinal) {
 +            this.getBukkitEntity().taskScheduler.schedule((final ServerPlayer newPlayer) -> {
 +                io.papermc.paper.threadedregions.TeleportUtils.teleport(
-+                        newPlayer, false, cameraFinal, null, null, 0L,
++                        newPlayer, false, cameraFinal, false, 0L,
 +                        org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE, null,
 +                        (final ServerPlayer newerPlayer) -> {
 +                            return newerPlayer.camera == cameraFinal;
@@ -13289,7 +13290,7 @@ index 42408dede2808447281b49f4006c1d8b03c10bf4..4fb5d1e8cf244226b37b70fa004ad0cd
              }
              // Spigot end
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index b6a39f8cfd9b215bf77a36951a8e42508e2ab2c4..b8e72fb7996e8cdc61e3e75aa003795d7975be4d 100644
+index b6a39f8cfd9b215bf77a36951a8e42508e2ab2c4..2c9a984c42d0e2824030bdb36a41ee2b2c192c51 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -305,10 +305,10 @@ public class ServerGamePacketListenerImpl
@@ -13511,7 +13512,7 @@ index b6a39f8cfd9b215bf77a36951a8e42508e2ab2c4..b8e72fb7996e8cdc61e3e75aa003795d
                  Entity entity = packet.getEntity(level);
                  if (entity != null) {
 -                    this.player.teleportTo(level, entity.getX(), entity.getY(), entity.getZ(), Set.of(), entity.getYRot(), entity.getXRot(), true, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE); // CraftBukkit
-+                    io.papermc.paper.threadedregions.TeleportUtils.teleport(this.player, false, entity, null, null, Entity.TELEPORT_FLAG_LOAD_CHUNK, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE, null); // Folia - region threading
++                    io.papermc.paper.threadedregions.TeleportUtils.teleport(this.player, false, entity, false, Entity.TELEPORT_FLAG_LOAD_CHUNK, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE, null); // Folia - region threading
                      return;
                  }
              }
